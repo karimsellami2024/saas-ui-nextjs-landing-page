@@ -1,9 +1,14 @@
-import { ColorModeScript, theme } from '@chakra-ui/react'
+import { ReactNode } from "react";
+import { ColorModeScript, theme } from '@chakra-ui/react';
+import { Provider } from './provider';
 
-import { Provider } from './provider'
+export const metadata = {
+  title: "Your App",
+  description: "App with Chakra Sidebar",
+};
 
-export default function Layout(props: { children: React.ReactNode }) {
-  const colorMode = theme.config.initialColorMode
+export default function RootLayout({ children }: { children: ReactNode }) {
+  const colorMode = theme.config.initialColorMode;
 
   return (
     <html lang="en" data-theme={colorMode} style={{ colorScheme: colorMode }}>
@@ -29,8 +34,10 @@ export default function Layout(props: { children: React.ReactNode }) {
       </head>
       <body className={`chakra-ui-${colorMode}`}>
         <ColorModeScript initialColorMode={colorMode} />
-        <Provider>{props.children}</Provider>
+        <Provider>
+          {children}
+        </Provider>
       </body>
     </html>
-  )
+  );
 }
