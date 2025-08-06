@@ -69,10 +69,10 @@ import {  FiFileText,  FiUsers } from "react-icons/fi";
 import {  FiBarChart2, FiMap } from 'react-icons/fi';
 import { FaGlobe } from "react-icons/fa";
 import BillUploader from "#components/postes/dropzone"
-export const meta: Metadata = {
-  title: 'Saas UI Landingspage',
-  description: 'Free SaaS landingspage starter kit',
-}
+// export const meta: Metadata = {
+//   title: 'Saas UI Landingspage',
+//   description: 'Free SaaS landingspage starter kit',
+// }
 const COLORS = {
   tealBlue: "#265966",
   blueGray: "#8A9992",
