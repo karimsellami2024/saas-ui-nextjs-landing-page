@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from 'react';
 import {
   Box, Heading, Text, Table, Thead, Tbody, Tr, Th, Td,
@@ -6,26 +5,40 @@ import {
 } from '@chakra-ui/react';
 import { supabase } from '../../../lib/supabaseClient';
 
+// --- Types ---
 type GesResults = {
   total_co2_gco2e: number | string;
   total_ges_tco2e: number | string;
   energie_equivalente_kwh: number | string;
 };
 
-type CompteurDetailRow = { date: string; consumption: string; reference: string; };
-type CompteurGroup = { number: string; address: string; province: string; details: CompteurDetailRow[]; };
+type CompteurDetailRow = {
+  date: string;
+  site: string;
+  product: string;
+  consumption: string;
+  carbonIntensity: string;
+  reference: string;
+};
+
+type CompteurGroup = {
+  number: string;
+  address: string;
+  province: string; // Réseaux électrique
+  details: CompteurDetailRow[];
+};
 
 const resultFields = [
   { key: "total_co2_gco2e", label: "CO₂ [gCO2e]" },
   { key: "total_ges_tco2e", label: "Total GES [tCO2e]" },
-  { key: "energie_equivalente_kwh", label: "Énergie équivalente [kWh]" }
+  { key: "energie_equivalente_kwh", label: "Énergie équivalente [kWh]" },
 ];
 
-export function SourceAForm({
+export function Source6B1Form({
   posteId: initialPosteId,
   posteNum = 6,
-  posteLabel = "6A1 - Électricité provenant du réseau électrique (Location based)",
-  userId: propUserId
+  posteLabel = "6B1 – Électricité provenant du réseau électrique (Market based)",
+  userId: propUserId,
 }: {
   posteId: string | null,
   posteNum?: number,
@@ -34,7 +47,12 @@ export function SourceAForm({
 }) {
   const [provinceOptions, setProvinceOptions] = useState<string[]>([]);
   const [compteurs, setCompteurs] = useState<CompteurGroup[]>([
-    { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] }
+    {
+      number: '', address: '', province: '',
+      details: [{
+        date: '', site: '', product: '', consumption: '', carbonIntensity: '', reference: ''
+      }]
+    }
   ]);
   const [gesResults, setGesResults] = useState<GesResults[]>([]);
   const [posteId, setPosteId] = useState<string | null>(initialPosteId || null);
@@ -43,29 +61,30 @@ export function SourceAForm({
   const [loading, setLoading] = useState(true);
 
   const olive = '#708238';
+  const oliveBg = useColorModeValue('#f6f8f3', '#202616');
 
+  // Province (Réseaux électrique) options
   useEffect(() => {
     fetch("/api/provinces")
       .then((res) => res.json())
       .then((data) => setProvinceOptions(data.provinces || []));
   }, []);
 
+  // Load user, existing data
   useEffect(() => {
     (async () => {
       setLoading(true);
       let activeUserId = propUserId;
       if (!activeUserId) {
         const { data: { user } } = await supabase.auth.getUser();
-        if (!user) {
-          setLoading(false);
-          return;
-        }
+        if (!user) { setLoading(false); return; }
         activeUserId = user.id;
         setUserId(user.id);
       }
+
       let filter = { user_id: activeUserId } as any;
       if (posteId) filter = { ...filter, "postes.id": posteId };
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('submissions')
         .select(`
           id,
@@ -103,16 +122,25 @@ export function SourceAForm({
               }
               byNumber[inv.number].details.push({
                 date: inv.date || '',
+                site: inv.site || '',
+                product: inv.product || '',
                 consumption: inv.consumption || '',
+                carbonIntensity: inv.carbonIntensity || '',
                 reference: inv.reference || '',
               });
             });
             setCompteurs(Object.values(byNumber).length > 0 ? Object.values(byNumber) : [
-              { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] }
+              {
+                number: '', address: '', province: '',
+                details: [{ date: '', site: '', product: '', consumption: '', carbonIntensity: '', reference: '' }]
+              }
             ]);
           } else {
             setCompteurs([
-              { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] }
+              {
+                number: '', address: '', province: '',
+                details: [{ date: '', site: '', product: '', consumption: '', carbonIntensity: '', reference: '' }]
+              }
             ]);
           }
           setGesResults(poste.results || []);
@@ -123,10 +151,13 @@ export function SourceAForm({
     // eslint-disable-next-line
   }, [propUserId, initialPosteId, posteNum]);
 
-  // --- Group logic ---
+  // --- Table logic ---
   const addCompteur = () => setCompteurs(prev => [
     ...prev,
-    { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] },
+    {
+      number: '', address: '', province: '',
+      details: [{ date: '', site: '', product: '', consumption: '', carbonIntensity: '', reference: '' }]
+    }
   ]);
   const removeCompteur = (gIdx: number) => setCompteurs(prev => prev.filter((_, idx) => idx !== gIdx));
   type CompteurFieldKey = 'number' | 'address' | 'province';
@@ -137,7 +168,7 @@ export function SourceAForm({
   };
   const addDetailRow = (gIdx: number) => {
     const newList = [...compteurs];
-    newList[gIdx].details.push({ date: '', consumption: '', reference: '' });
+    newList[gIdx].details.push({ date: '', site: '', product: '', consumption: '', carbonIntensity: '', reference: '' });
     setCompteurs(newList);
   };
   const removeDetailRow = (gIdx: number, dIdx: number) => {
@@ -152,10 +183,11 @@ export function SourceAForm({
     setCompteurs(newList);
   };
 
+  // --- Submit Handler ---
   const validateData = (compteurs: CompteurGroup[]) =>
     compteurs.length > 0 && compteurs.every(group =>
       group.number && group.address && group.province &&
-      group.details.every(detail => detail.date && detail.consumption)
+      group.details.every(detail => detail.date && detail.consumption && detail.carbonIntensity)
     );
 
   const handleSubmit = async () => {
@@ -170,7 +202,7 @@ export function SourceAForm({
     setGesResults([]);
     setLoading(true);
 
-    // 1. Sanitize/mapping for backend
+    // Mapping for backend
     const counters = compteurs.map(group => ({
       number: group.number,
       address: group.address,
@@ -182,14 +214,17 @@ export function SourceAForm({
         address: group.address,
         province: group.province,
         date: detail.date,
+        site: detail.site,
+        product: detail.product,
         consumption: detail.consumption,
+        carbonIntensity: detail.carbonIntensity,
         reference: detail.reference,
       }))
     );
     const payload = {
       user_id: userId,
       poste_source_id: posteId,
-      source_code: '6A1',
+      source_code: '6B1',
       poste_num: 6,
       data: { counters, invoices },
     };
@@ -197,9 +232,9 @@ export function SourceAForm({
     let results: GesResults[] = [];
     let webhookOk = false;
 
-    // 2. Call webhook first for calculation
+    // 1. Cloud Run webhook for calculation
     try {
-      const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/6A1', {
+      const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/6B1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -215,7 +250,7 @@ export function SourceAForm({
       alert('Erreur réseau lors du calcul Cloud Run.');
     }
 
-    // 3. Save to your database with the GENERAL 4submit endpoint!
+    // 2. Save to database
     try {
       const dbPayload = { ...payload, results };
       const dbResponse = await fetch('/api/4submit', {
@@ -229,8 +264,8 @@ export function SourceAForm({
       } else {
         setGesResults(results);
         alert(webhookOk
-          ? 'Données 6A1 calculées et sauvegardées avec succès!'
-          : 'Données 6A1 sauvegardées sans résultat de calcul GES.');
+          ? 'Données 6B1 calculées et sauvegardées avec succès!'
+          : 'Données 6B1 sauvegardées sans résultat de calcul GES.');
       }
     } catch (error) {
       alert('Erreur inattendue lors de la sauvegarde en base.');
@@ -238,6 +273,7 @@ export function SourceAForm({
     setLoading(false);
   };
 
+  // Only show result columns with at least one value
   const displayColumns = resultFields.filter(f =>
     gesResults.some(res => res && res[f.key] !== undefined && res[f.key] !== "" && res[f.key] !== "#N/A")
   );
@@ -249,7 +285,7 @@ export function SourceAForm({
       </Box>
     );
 
-  // --- CONTENT BLOCK (no outer full page spacing) ---
+  // --- CONTENT BLOCK, not full page ---
   return (
     <Box bg="white" rounded="2xl" boxShadow="xl" p={6} mb={4}>
       <Heading as="h3" size="md" color={olive} mb={4}>
@@ -260,9 +296,12 @@ export function SourceAForm({
           <Tr>
             <Th>NUMÉRO</Th>
             <Th>ADRESSE</Th>
-            <Th>PROVINCE/PAYS</Th>
+            <Th>RÉSEAU ÉLECTRIQUE</Th>
             <Th>DATE</Th>
+            <Th>SITE</Th>
+            <Th>PRODUIT</Th>
             <Th>CONSOMMATION (kWh)</Th>
+            <Th>INTENSITÉ CARBONE (kgCO2e/MWh)</Th>
             <Th>RÉFÉRENCES</Th>
             <Th></Th>
           </Tr>
@@ -304,9 +343,28 @@ export function SourceAForm({
                 </Td>
                 <Td>
                   <Input
+                    value={row.site}
+                    onChange={e => updateDetailField(gIdx, dIdx, "site", e.target.value)}
+                  />
+                </Td>
+                <Td>
+                  <Input
+                    value={row.product}
+                    onChange={e => updateDetailField(gIdx, dIdx, "product", e.target.value)}
+                  />
+                </Td>
+                <Td>
+                  <Input
                     type="number"
                     value={row.consumption}
                     onChange={e => updateDetailField(gIdx, dIdx, "consumption", e.target.value)}
+                  />
+                </Td>
+                <Td>
+                  <Input
+                    type="number"
+                    value={row.carbonIntensity}
+                    onChange={e => updateDetailField(gIdx, dIdx, "carbonIntensity", e.target.value)}
                   />
                 </Td>
                 <Td>
@@ -386,6 +444,7 @@ export function SourceAForm({
   );
 }
 
+
 // import { useEffect, useState } from 'react';
 // import {
 //   Box, Stack, Heading, Text, Table, Thead, Tbody, Tr, Th, Td,
@@ -393,28 +452,40 @@ export function SourceAForm({
 // } from '@chakra-ui/react';
 // import { supabase } from '../../../lib/supabaseClient';
 
+// // --- Types ---
 // type GesResults = {
 //   total_co2_gco2e: number | string;
 //   total_ges_tco2e: number | string;
-//   total_energie_kwh: number | string;
+//   energie_equivalente_kwh: number | string;
 // };
 
-// type CompteurDetailRow = { date: string; consumption: string; reference: string; };
-// type CompteurGroup = { number: string; address: string; province: string; details: CompteurDetailRow[]; };
+// type CompteurDetailRow = {
+//   date: string;
+//   site: string;
+//   product: string;
+//   consumption: string;
+//   carbonIntensity: string;
+//   reference: string;
+// };
 
-// // === Result columns for display (optional: hide columns with no data) ===
+// type CompteurGroup = {
+//   number: string;
+//   address: string;
+//   province: string; // Réseaux électrique
+//   details: CompteurDetailRow[];
+// };
+
 // const resultFields = [
 //   { key: "total_co2_gco2e", label: "CO₂ [gCO2e]" },
 //   { key: "total_ges_tco2e", label: "Total GES [tCO2e]" },
-//   { key: "energie_equivalente_kwh", label: "Énergie équivalente [kWh]" }, // ← updated
+//   { key: "energie_equivalente_kwh", label: "Énergie équivalente [kWh]" },
 // ];
 
-
-// export function SourceAForm({
+// export function Source6B1Form({
 //   posteId: initialPosteId,
 //   posteNum = 6,
-//   posteLabel = "Saisie des compteurs d'électricité",
-//   userId: propUserId
+//   posteLabel = "6B1 – Électricité provenant du réseau électrique (Market based)",
+//   userId: propUserId,
 // }: {
 //   posteId: string | null,
 //   posteNum?: number,
@@ -423,7 +494,12 @@ export function SourceAForm({
 // }) {
 //   const [provinceOptions, setProvinceOptions] = useState<string[]>([]);
 //   const [compteurs, setCompteurs] = useState<CompteurGroup[]>([
-//     { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] },
+//     {
+//       number: '', address: '', province: '',
+//       details: [{
+//         date: '', site: '', product: '', consumption: '', carbonIntensity: '', reference: ''
+//       }]
+//     }
 //   ]);
 //   const [gesResults, setGesResults] = useState<GesResults[]>([]);
 //   const [posteId, setPosteId] = useState<string | null>(initialPosteId || null);
@@ -434,30 +510,25 @@ export function SourceAForm({
 //   const olive = '#708238';
 //   const oliveBg = useColorModeValue('#f6f8f3', '#202616');
 
-//   // Province options load
+//   // Province (Réseaux électrique) options
 //   useEffect(() => {
 //     fetch("/api/provinces")
 //       .then((res) => res.json())
 //       .then((data) => setProvinceOptions(data.provinces || []));
 //   }, []);
 
-//   // User & Data load
+//   // Load user, existing data
 //   useEffect(() => {
 //     (async () => {
 //       setLoading(true);
-//       // Get user if not already passed as prop
 //       let activeUserId = propUserId;
 //       if (!activeUserId) {
 //         const { data: { user } } = await supabase.auth.getUser();
-//         if (!user) {
-//           setLoading(false);
-//           return;
-//         }
+//         if (!user) { setLoading(false); return; }
 //         activeUserId = user.id;
 //         setUserId(user.id);
 //       }
 
-//       // Get latest submission with this poste
 //       let filter = { user_id: activeUserId } as any;
 //       if (posteId) filter = { ...filter, "postes.id": posteId };
 //       const { data, error } = await supabase
@@ -484,7 +555,6 @@ export function SourceAForm({
 //           if (typeof parsedData === 'string') {
 //             try { parsedData = JSON.parse(parsedData); } catch { parsedData = {}; }
 //           }
-//           // Parse and group
 //           if (parsedData.counters && parsedData.invoices) {
 //             const byNumber: { [num: string]: CompteurGroup } = {};
 //             parsedData.invoices.forEach((inv: any) => {
@@ -499,16 +569,25 @@ export function SourceAForm({
 //               }
 //               byNumber[inv.number].details.push({
 //                 date: inv.date || '',
+//                 site: inv.site || '',
+//                 product: inv.product || '',
 //                 consumption: inv.consumption || '',
+//                 carbonIntensity: inv.carbonIntensity || '',
 //                 reference: inv.reference || '',
 //               });
 //             });
 //             setCompteurs(Object.values(byNumber).length > 0 ? Object.values(byNumber) : [
-//               { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] }
+//               {
+//                 number: '', address: '', province: '',
+//                 details: [{ date: '', site: '', product: '', consumption: '', carbonIntensity: '', reference: '' }]
+//               }
 //             ]);
 //           } else {
 //             setCompteurs([
-//               { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] }
+//               {
+//                 number: '', address: '', province: '',
+//                 details: [{ date: '', site: '', product: '', consumption: '', carbonIntensity: '', reference: '' }]
+//               }
 //             ]);
 //           }
 //           setGesResults(poste.results || []);
@@ -519,10 +598,13 @@ export function SourceAForm({
 //     // eslint-disable-next-line
 //   }, [propUserId, initialPosteId, posteNum]);
 
-//   // --- Group logic ---
+//   // --- Table logic ---
 //   const addCompteur = () => setCompteurs(prev => [
 //     ...prev,
-//     { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] },
+//     {
+//       number: '', address: '', province: '',
+//       details: [{ date: '', site: '', product: '', consumption: '', carbonIntensity: '', reference: '' }]
+//     }
 //   ]);
 //   const removeCompteur = (gIdx: number) => setCompteurs(prev => prev.filter((_, idx) => idx !== gIdx));
 //   type CompteurFieldKey = 'number' | 'address' | 'province';
@@ -533,7 +615,7 @@ export function SourceAForm({
 //   };
 //   const addDetailRow = (gIdx: number) => {
 //     const newList = [...compteurs];
-//     newList[gIdx].details.push({ date: '', consumption: '', reference: '' });
+//     newList[gIdx].details.push({ date: '', site: '', product: '', consumption: '', carbonIntensity: '', reference: '' });
 //     setCompteurs(newList);
 //   };
 //   const removeDetailRow = (gIdx: number, dIdx: number) => {
@@ -548,95 +630,97 @@ export function SourceAForm({
 //     setCompteurs(newList);
 //   };
 
-//   // === New 6A1 style handleSubmit! ===
+//   // --- Submit Handler ---
 //   const validateData = (compteurs: CompteurGroup[]) =>
 //     compteurs.length > 0 && compteurs.every(group =>
 //       group.number && group.address && group.province &&
-//       group.details.every(detail => detail.date && detail.consumption)
+//       group.details.every(detail => detail.date && detail.consumption && detail.carbonIntensity)
 //     );
 
-// const handleSubmit = async () => {
-//   if (!userId || !posteId) {
-//     alert("Champs obligatoires manquants (posteId ou userId)");
-//     return;
-//   }
-//   if (!validateData(compteurs)) {
-//     alert("Veuillez remplir tous les champs requis (compteurs et détails).");
-//     return;
-//   }
-//   setGesResults([]);
-//   setLoading(true);
+//   const handleSubmit = async () => {
+//     if (!userId || !posteId) {
+//       alert("Champs obligatoires manquants (posteId ou userId)");
+//       return;
+//     }
+//     if (!validateData(compteurs)) {
+//       alert("Veuillez remplir tous les champs requis (compteurs et détails).");
+//       return;
+//     }
+//     setGesResults([]);
+//     setLoading(true);
 
-//   // 1. Sanitize/mapping for backend
-//   const counters = compteurs.map(group => ({
-//     number: group.number,
-//     address: group.address,
-//     province: group.province,
-//   }));
-//   const invoices = compteurs.flatMap(group =>
-//     group.details.map(detail => ({
+//     // Mapping for backend
+//     const counters = compteurs.map(group => ({
 //       number: group.number,
 //       address: group.address,
 //       province: group.province,
-//       date: detail.date,
-//       consumption: detail.consumption,
-//       reference: detail.reference,
-//     }))
-//   );
-//   const payload = {
-//     user_id: userId,
-//     poste_source_id: posteId,
-//     source_code: '6A1',
-//     poste_num: 6,
-//     data: { counters, invoices },
+//     }));
+//     const invoices = compteurs.flatMap(group =>
+//       group.details.map(detail => ({
+//         number: group.number,
+//         address: group.address,
+//         province: group.province,
+//         date: detail.date,
+//         site: detail.site,
+//         product: detail.product,
+//         consumption: detail.consumption,
+//         carbonIntensity: detail.carbonIntensity,
+//         reference: detail.reference,
+//       }))
+//     );
+//     const payload = {
+//       user_id: userId,
+//       poste_source_id: posteId,
+//       source_code: '6B1',
+//       poste_num: 6,
+//       data: { counters, invoices },
+//     };
+
+//     let results: GesResults[] = [];
+//     let webhookOk = false;
+
+//     // 1. Cloud Run webhook for calculation
+//     try {
+//       const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/6B1', {
+//         method: 'POST',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify(payload),
+//       });
+//       const result = await response.json();
+//       if (!response.ok) {
+//         alert('Erreur calcul GES (Cloud Run): ' + (result.error || ''));
+//       } else {
+//         results = Array.isArray(result.results) ? result.results : [];
+//         webhookOk = true;
+//       }
+//     } catch (error) {
+//       alert('Erreur réseau lors du calcul Cloud Run.');
+//     }
+
+//     // 2. Save to database
+//     try {
+//       const dbPayload = { ...payload, results };
+//       const dbResponse = await fetch('/api/4submit', {
+//         method: 'POST',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify(dbPayload),
+//       });
+//       const dbResult = await dbResponse.json();
+//       if (!dbResponse.ok) {
+//         alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
+//       } else {
+//         setGesResults(results);
+//         alert(webhookOk
+//           ? 'Données 6B1 calculées et sauvegardées avec succès!'
+//           : 'Données 6B1 sauvegardées sans résultat de calcul GES.');
+//       }
+//     } catch (error) {
+//       alert('Erreur inattendue lors de la sauvegarde en base.');
+//     }
+//     setLoading(false);
 //   };
 
-//   let results: GesResults[] = [];
-//   let webhookOk = false;
-
-//   // 2. Call webhook first for calculation
-//   try {
-//     const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/6A1', {
-//       method: 'POST',
-//       headers: { 'Content-Type': 'application/json' },
-//       body: JSON.stringify(payload),
-//     });
-//     const result = await response.json();
-//     if (!response.ok) {
-//       alert('Erreur calcul GES (Cloud Run): ' + (result.error || ''));
-//     } else {
-//       results = Array.isArray(result.results) ? result.results : [];
-//       webhookOk = true;
-//     }
-//   } catch (error) {
-//     alert('Erreur réseau lors du calcul Cloud Run.');
-//   }
-
-//   // 3. Save to your database with the GENERAL 4submit endpoint!
-//   try {
-//     const dbPayload = { ...payload, results };
-//     const dbResponse = await fetch('/api/4submit', {      // <--- use 4submit
-//       method: 'POST',
-//       headers: { 'Content-Type': 'application/json' },
-//       body: JSON.stringify(dbPayload),
-//     });
-//     const dbResult = await dbResponse.json();
-//     if (!dbResponse.ok) {
-//       alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
-//     } else {
-//       setGesResults(results);
-//       alert(webhookOk
-//         ? 'Données 6A1 calculées et sauvegardées avec succès!'
-//         : 'Données 6A1 sauvegardées sans résultat de calcul GES.');
-//     }
-//   } catch (error) {
-//     alert('Erreur inattendue lors de la sauvegarde en base.');
-//   }
-//   setLoading(false);
-// };
-
-
-//   // === Only show columns with at least one value ===
+//   // Only show result columns with at least one value
 //   const displayColumns = resultFields.filter(f =>
 //     gesResults.some(res => res && res[f.key] !== undefined && res[f.key] !== "" && res[f.key] !== "#N/A")
 //   );
@@ -661,9 +745,12 @@ export function SourceAForm({
 //                 <Tr>
 //                   <Th>NUMÉRO</Th>
 //                   <Th>ADRESSE</Th>
-//                   <Th>PROVINCE/PAYS</Th>
+//                   <Th>RÉSEAU ÉLECTRIQUE</Th>
 //                   <Th>DATE</Th>
+//                   <Th>SITE</Th>
+//                   <Th>PRODUIT</Th>
 //                   <Th>CONSOMMATION (kWh)</Th>
+//                   <Th>INTENSITÉ CARBONE (kgCO2e/MWh)</Th>
 //                   <Th>RÉFÉRENCES</Th>
 //                   <Th></Th>
 //                 </Tr>
@@ -705,9 +792,28 @@ export function SourceAForm({
 //                       </Td>
 //                       <Td>
 //                         <Input
+//                           value={row.site}
+//                           onChange={e => updateDetailField(gIdx, dIdx, "site", e.target.value)}
+//                         />
+//                       </Td>
+//                       <Td>
+//                         <Input
+//                           value={row.product}
+//                           onChange={e => updateDetailField(gIdx, dIdx, "product", e.target.value)}
+//                         />
+//                       </Td>
+//                       <Td>
+//                         <Input
 //                           type="number"
 //                           value={row.consumption}
 //                           onChange={e => updateDetailField(gIdx, dIdx, "consumption", e.target.value)}
+//                         />
+//                       </Td>
+//                       <Td>
+//                         <Input
+//                           type="number"
+//                           value={row.carbonIntensity}
+//                           onChange={e => updateDetailField(gIdx, dIdx, "carbonIntensity", e.target.value)}
 //                         />
 //                       </Td>
 //                       <Td>
