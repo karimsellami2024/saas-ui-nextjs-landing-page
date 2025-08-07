@@ -9,10 +9,10 @@ export default async function handler(req, res) {
     const {
       user_id: userId,
       data,
-      poste_num,           // required: 4 for 4A1/4B1, etc.
+      poste_num,           // required: e.g., 4
       source_code,         // required: '4A1', '4B1', etc.
       poste_source_id,
-      results: resultData = [],
+      results              // <-- Accept results from frontend (should be GES totals or array)
     } = req.body;
 
     if (!userId) {
@@ -49,14 +49,14 @@ export default async function handler(req, res) {
     }
     const posteId = poste.id;
 
-    // --- 3. Upsert poste_sources ---
+    // --- 3. Upsert poste_sources (save results from frontend) ---
     const { data: updated, error: updateErr } = await supabase
       .from('poste_sources')
       .upsert([{
         poste_id: posteId,
         source_code,
         data,
-        results: resultData,
+        results, // <--- Use results from frontend!
       }], {
         onConflict: ['poste_id', 'source_code']
       })
@@ -80,7 +80,7 @@ export default async function handler(req, res) {
       success: true,
       posteSourceId: posteSourceIdFromDB,
       poste_source: updated && updated.length > 0 ? updated[0] : null,
-      results: resultData,
+      results: results,
     });
 
   } catch (err) {
@@ -100,15 +100,17 @@ export default async function handler(req, res) {
 //     const {
 //       user_id: userId,
 //       data,
-//       poste_num = 4,
-//       source_code = '4A1',
+//       poste_num,           // required: 4 for 4A1/4B1, etc.
+//       source_code,         // required: '4A1', '4B1', etc.
 //       poste_source_id,
 //       results: resultData = [],
 //     } = req.body;
 
-//     // --- Validate required fields ---
 //     if (!userId) {
 //       return res.status(400).json({ error: "Missing required field: user_id" });
+//     }
+//     if (!poste_num || !source_code) {
+//       return res.status(400).json({ error: "Missing poste_num or source_code" });
 //     }
 //     if (!data || typeof data !== 'object' || (Array.isArray(data) && data.length === 0)) {
 //       return res.status(400).json({ error: "Missing or invalid data" });
@@ -143,8 +145,8 @@ export default async function handler(req, res) {
 //       .from('poste_sources')
 //       .upsert([{
 //         poste_id: posteId,
-//         source_code: source_code,
-//         data: data,
+//         source_code,
+//         data,
 //         results: resultData,
 //       }], {
 //         onConflict: ['poste_id', 'source_code']
@@ -156,7 +158,6 @@ export default async function handler(req, res) {
 //       return res.status(500).json({ error: updateErr.message });
 //     }
 
-//     // Extract posteSourceId from DB
 //     const posteSourceIdFromDB =
 //       updated && updated.length > 0
 //         ? (updated[0].id || updated[0].posteSourceId)

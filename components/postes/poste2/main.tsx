@@ -339,7 +339,7 @@ function updateA3Row(idx: number, key: keyof A3Row, value: string) {
     const posteSourceId = source?.id;
     console.log('🟩 [getFormForSource] Rendering for source:', { code, posteSourceId, source });
 
-    if (code === "A1" && userId && posteSourceId) {
+    if (code === "2A1" && userId && posteSourceId) {
       return (
       <SourceA1Form
   key={code}
@@ -377,7 +377,7 @@ function updateA3Row(idx: number, key: keyof A3Row, value: string) {
         // />
       );
     }
-    if (code === "A3")
+    if (code === "2A3")
       return (
         <Source2A3Form
   key={code}
@@ -397,7 +397,7 @@ function updateA3Row(idx: number, key: keyof A3Row, value: string) {
 
 
       );
-    if (code === "B1")
+    if (code === "2B1")
       return (
         <SourceB1Form
           key={code}

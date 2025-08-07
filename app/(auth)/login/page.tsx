@@ -22,7 +22,7 @@ export default function Login() {
         if (role === 'admin') {
           router.replace('/admin')
         } else {
-          router.replace('/submissions') // <---- redirect here
+          router.replace('/') // <---- redirect here
         }
       }
     })

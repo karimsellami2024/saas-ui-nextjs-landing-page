@@ -67,77 +67,80 @@ export function SourceA1Form({
     );
   };
 
-  const handleA1Submit = async () => {
-    if (!posteSourceId || !userId) {
-      alert("Missing required fields (posteSourceId or userId)");
-      return;
-    }
-    if (!validateData(carburantGroups)) {
-      alert("Veuillez remplir tous les champs des groupes de carburant, y compris au moins une ligne par groupe.");
-      return;
-    }
-    setLoading(true);
+const handleA1Submit = async () => {
+  if (!posteSourceId || !userId) {
+    alert("Missing required fields (posteSourceId or userId)");
+    return;
+  }
+  if (!validateData(carburantGroups)) {
+    alert("Veuillez remplir tous les champs des groupes de carburant, y compris au moins une ligne par groupe.");
+    return;
+  }
+  setLoading(true);
 
-    // Sanitize and nest the data structure
-    const sanitizedGroups = carburantGroups.map(group => ({
-      ...group,
-      rows: group.rows.map(row => ({
-        ...row,
-        qty: parseFloat(row.qty) || 0, // Convert qty to number
-      })),
-    }));
+  // Sanitize and nest the data structure
+  const sanitizedGroups = carburantGroups.map(group => ({
+    ...group,
+    rows: group.rows.map(row => ({
+      ...row,
+      qty: parseFloat(row.qty) || 0, // Convert qty to number
+    })),
+  }));
 
-    const payload = {
-      user_id: userId,
-      poste_source_id: posteSourceId,
-      source_code: 'A1',
-      data: { groups: sanitizedGroups }
-    };
-
-    let results: GesResult[] = [];
-    let webhookOk = false;
-
-    // 1. Call Cloud Run webhook
-    try {
-      const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/2A1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        alert('Erreur calcul GES (Cloud Run): ' + (result.error || ''));
-      } else {
-        results = Array.isArray(result.results) ? result.results : [];
-        webhookOk = true;
-      }
-    } catch (error) {
-      alert('Erreur réseau lors du calcul Cloud Run.');
-    }
-
-    // 2. Save to your database (Supabase/Postgres)
-    try {
-      const dbPayload = { ...payload, results };
-      const dbResponse = await fetch('/api/2submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dbPayload),
-      });
-      const dbResult = await dbResponse.json();
-      if (!dbResponse.ok) {
-        alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
-      } else {
-        setGesResults(results);
-        alert(webhookOk
-          ? 'Données A1 calculées et sauvegardées avec succès!'
-          : 'Données A1 sauvegardées sans résultat de calcul GES.');
-      }
-    } catch (error) {
-      alert('Erreur inattendue lors de la sauvegarde en base.');
-    }
-
-    setLoading(false);
+  const payload = {
+    user_id: userId,
+    poste_source_id: posteSourceId,
+    source_code: '2A1',
+    data: { groups: sanitizedGroups }
   };
+
+  let results = [];
+  let webhookOk = false;
+
+  // 1. Call Cloud Run webhook
+  try {
+    const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/2A1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      alert('Erreur calcul GES (Cloud Run): ' + (result.error || ''));
+    } else {
+      // 👇 results is the array/object expected by the backend and the dashboard!
+      results = Array.isArray(result.results) ? result.results : result.results || [];
+      webhookOk = true;
+    }
+  } catch (error) {
+    alert('Erreur réseau lors du calcul Cloud Run.');
+  }
+
+  // 2. Save to your database (Supabase/Postgres)
+  try {
+    // 🚨 INCLUDE THE 'results' key in your POST body!
+    const dbPayload = { ...payload, results };
+    const dbResponse = await fetch('/api/2submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dbPayload),
+    });
+    const dbResult = await dbResponse.json();
+    if (!dbResponse.ok) {
+      alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
+    } else {
+      setGesResults(results);
+      alert(webhookOk
+        ? 'Données A1 calculées et sauvegardées avec succès!'
+        : 'Données A1 sauvegardées sans résultat de calcul GES.');
+    }
+  } catch (error) {
+    alert('Erreur inattendue lors de la sauvegarde en base.');
+  }
+
+  setLoading(false);
+};
+
 
   return (
     <Box bg="white" rounded="2xl" boxShadow="xl" p={6} mb={4}>

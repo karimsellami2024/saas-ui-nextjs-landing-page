@@ -59,76 +59,78 @@ export function Source2A3Form({
   };
 
   // Handles form submission, including API calls and results display
-  const handle2A3Submit = async () => {
-    if (!posteSourceId || !userId) {
-      alert("Missing required fields (posteSourceId or userId)");
-      return;
-    }
-    if (!validateData(a3Rows)) {
-      alert("Veuillez remplir tous les champs requis.");
-      return;
-    }
-    setLoading(true);
+ const handle2A3Submit = async () => {
+  if (!posteSourceId || !userId) {
+    alert("Missing required fields (posteSourceId or userId)");
+    return;
+  }
+  if (!validateData(a3Rows)) {
+    alert("Veuillez remplir tous les champs requis.");
+    return;
+  }
+  setLoading(true);
 
-    // Sanitize and prepare data for submission
-    const sanitizedRows = a3Rows.map(row => ({
-      ...row,
-      cost: parseFloat(row.cost) || 0,
-      avgPrice: parseFloat(row.avgPrice) || 0,
-      estimateQty: parseFloat(row.estimateQty) || 0,
-    }));
+  // Sanitize and prepare data for submission
+  const sanitizedRows = a3Rows.map(row => ({
+    ...row,
+    cost: parseFloat(row.cost) || 0,
+    avgPrice: parseFloat(row.avgPrice) || 0,
+    estimateQty: parseFloat(row.estimateQty) || 0,
+  }));
 
-    const payload = {
-      user_id: userId,
-      poste_source_id: posteSourceId,
-      source_code: '2A3',
-      data: { rows: sanitizedRows }
-    };
-
-    let results: GesResult[] = [];
-    let webhookOk = false;
-
-    // 1. Call Cloud Run webhook to get GES results
-    try {
-      const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/2A3', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        alert('Erreur calcul GES (Cloud Run): ' + (result.error || ''));
-      } else {
-        results = Array.isArray(result.results) ? result.results : [];
-        webhookOk = true;
-      }
-    } catch (error) {
-      alert('Erreur réseau lors du calcul Cloud Run.');
-    }
-
-    // 2. Save to your database (Supabase/Postgres)
-    try {
-      const dbPayload = { ...payload, results };
-      const dbResponse = await fetch('/api/2submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dbPayload),
-      });
-      const dbResult = await dbResponse.json();
-      if (!dbResponse.ok) {
-        alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
-      } else {
-        setGesResults(results);
-        alert(webhookOk
-          ? 'Données 2A3 calculées et sauvegardées avec succès!'
-          : 'Données 2A3 sauvegardées sans résultat de calcul GES.');
-      }
-    } catch (error) {
-      alert('Erreur inattendue lors de la sauvegarde en base.');
-    }
-
-    setLoading(false);
+  const payload = {
+    user_id: userId,
+    poste_source_id: posteSourceId,
+    poste_num: 2,           // <--- Always include poste_num for clarity
+    source_code: '2A3',
+    data: { rows: sanitizedRows }
   };
+
+  let results = [];
+  let webhookOk = false;
+
+  // 1. Call Cloud Run webhook to get GES results
+  try {
+    const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/2A3', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      alert('Erreur calcul GES (Cloud Run): ' + (result.error || ''));
+    } else {
+      results = Array.isArray(result.results) ? result.results : result.results || [];
+      webhookOk = true;
+    }
+  } catch (error) {
+    alert('Erreur réseau lors du calcul Cloud Run.');
+  }
+
+  // 2. Save to your database (Supabase/Postgres)
+  try {
+    const dbPayload = { ...payload, results };
+    const dbResponse = await fetch('/api/2submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dbPayload),
+    });
+    const dbResult = await dbResponse.json();
+    if (!dbResponse.ok) {
+      alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
+    } else {
+      setGesResults(results);
+      alert(webhookOk
+        ? 'Données 2A3 calculées et sauvegardées avec succès!'
+        : 'Données 2A3 sauvegardées sans résultat de calcul GES.');
+    }
+  } catch (error) {
+    alert('Erreur inattendue lors de la sauvegarde en base.');
+  }
+
+  setLoading(false);
+};
+
 
   return (
     <Box bg="white" rounded="2xl" boxShadow="xl" p={6} mb={4}>

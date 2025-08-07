@@ -70,73 +70,75 @@ export function Source1AForm({
   };
 
   // --- THE NEW HANDLESUBMIT ---
-  const handleSubmit = async () => {
-    if (!posteSourceId || !userId) {
-      alert("Champs obligatoires manquants (posteSourceId ou userId)");
-      return;
-    }
-    if (!validateData(rows)) {
-      alert("Veuillez remplir tous les champs requis.");
-      return;
-    }
-    setLoading(true);
+const handleSubmit = async () => {
+  if (!posteSourceId || !userId) {
+    alert("Champs obligatoires manquants (posteSourceId ou userId)");
+    return;
+  }
+  if (!validateData(rows)) {
+    alert("Veuillez remplir tous les champs requis.");
+    return;
+  }
+  setLoading(true);
 
-    // 1. Sanitize and prepare data
-    const sanitizedRows = rows.map(row => ({
-      ...row,
-      qty: parseFloat(row.qty) || 0, // convert qty to number
-    }));
-    const payload = {
-      user_id: userId,
-      poste_source_id: posteSourceId,
-      source_code: '1A1',
-      data: { rows: sanitizedRows },
-    };
-
-    let results: GesResult[] = [];
-    let webhookOk = false;
-
-    // 2. Cloud Run webhook call
-    try {
-      const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/1A1', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const result = await response.json();
-      if (!response.ok) {
-        alert('Erreur calcul GES (Cloud Run): ' + (result.error || ''));
-      } else {
-        results = Array.isArray(result.results) ? result.results : [];
-        webhookOk = true;
-      }
-    } catch (error) {
-      alert('Erreur réseau lors du calcul Cloud Run.');
-    }
-
-    // 3. Save to database (Supabase/Postgres)
-    try {
-      const dbPayload = { ...payload, results };
-      const dbResponse = await fetch('/api/2submit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dbPayload),
-      });
-      const dbResult = await dbResponse.json();
-      if (!dbResponse.ok) {
-        alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
-      } else {
-        setGesResults(results);
-        alert(webhookOk
-          ? 'Données 1A1 calculées et sauvegardées avec succès!'
-          : 'Données 1A1 sauvegardées sans résultat de calcul GES.');
-      }
-    } catch (error) {
-      alert('Erreur inattendue lors de la sauvegarde en base.');
-    }
-
-    setLoading(false);
+  // 1. Sanitize and prepare data
+  const sanitizedRows = rows.map(row => ({
+    ...row,
+    qty: parseFloat(row.qty) || 0, // convert qty to number
+  }));
+  const payload = {
+    user_id: userId,
+    poste_source_id: posteSourceId,
+    poste_num: 1, // <-- important for 1A1!
+    source_code: '1A1',
+    data: { rows: sanitizedRows },
   };
+
+  let results = [];
+  let webhookOk = false;
+
+  // 2. Cloud Run webhook call
+  try {
+    const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/1A1', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      alert('Erreur calcul GES (Cloud Run): ' + (result.error || ''));
+    } else {
+      results = Array.isArray(result.results) ? result.results : result.results || [];
+      webhookOk = true;
+    }
+  } catch (error) {
+    alert('Erreur réseau lors du calcul Cloud Run.');
+  }
+
+  // 3. Save to database using the 4submit API!
+  try {
+    const dbPayload = { ...payload, results };
+    const dbResponse = await fetch('/api/4submit', { // <--- Use /api/4submit!
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dbPayload),
+    });
+    const dbResult = await dbResponse.json();
+    if (!dbResponse.ok) {
+      alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
+    } else {
+      setGesResults(results);
+      alert(webhookOk
+        ? 'Données 1A1 calculées et sauvegardées avec succès!'
+        : 'Données 1A1 sauvegardées sans résultat de calcul GES.');
+    }
+  } catch (error) {
+    alert('Erreur inattendue lors de la sauvegarde en base.');
+  }
+
+  setLoading(false);
+};
+
 
   // Handlers
   const addRow = () =>
