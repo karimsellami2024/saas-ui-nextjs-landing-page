@@ -92,7 +92,7 @@ const Home: NextPage = () => {
       <FeaturesSection />
 
       <TestimonialsSection />
-      <BillUploader />
+      {/* <BillUploader /> */}
 
       <Section/>
 

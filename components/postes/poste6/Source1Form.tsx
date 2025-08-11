@@ -1,9 +1,9 @@
-
 import { useEffect, useState } from 'react';
 import {
   Box, Heading, Text, Table, Thead, Tbody, Tr, Th, Td,
-  Input, Button, Spinner, Stack, useColorModeValue
+  Input, Button, Spinner, Stack, useColorModeValue, useToast
 } from '@chakra-ui/react';
+import { useDropzone } from 'react-dropzone';
 import { supabase } from '../../../lib/supabaseClient';
 
 type GesResults = {
@@ -41,8 +41,95 @@ export function SourceAForm({
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
   const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
 
+  const toast = useToast();
   const olive = '#708238';
+
+  // Drag & drop file upload logic
+  const onDrop = async (acceptedFiles: File[]) => {
+    if (!acceptedFiles.length) return;
+    setUploading(true);
+    const formData = new FormData();
+    acceptedFiles.forEach(file => formData.append('file', file));
+    try {
+      const res = await fetch('/api/upload-bill', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Erreur lors de l\'extraction');
+      if (Array.isArray(data) && data.length > 0) {
+        // Map backend response to form structure
+        const extracted = data.map(item => {
+          const r = item.result || {};
+          // French date → yyyy-mm-dd
+          let dateVal = r.date || '';
+          const months = {
+            janvier: '01', février: '02', mars: '03', avril: '04', mai: '05',
+            juin: '06', juillet: '07', août: '08', septembre: '09',
+            octobre: '10', novembre: '11', décembre: '12'
+          };
+          const frDateMatch = dateVal.match(/^(\d{1,2}) (\w+) (\d{4})$/i);
+          if (frDateMatch) {
+            const [, day, month, year] = frDateMatch;
+            const mm = months[month.toLowerCase()] || '01';
+            dateVal = `${year}-${mm}-${day.padStart(2, '0')}`;
+          }
+          // Combine secondary info into references
+          const references = [
+            item.filename,
+            r.period ? `Période: ${r.period}` : '',
+            r.amount ? `Montant: ${r.amount}` : '',
+            r.client_name ? `Client: ${r.client_name}` : ''
+          ].filter(Boolean).join(' | ');
+          return {
+            number: '', // Not in result, let user fill if needed
+            address: r.address || '',
+            province: '', // User can pick manually
+            details: [{
+              date: dateVal,
+              consumption: r.kwh ? r.kwh.replace(/\s/g, '') : '',
+              reference: references
+            }]
+          };
+        });
+        setCompteurs(extracted);
+        toast({
+          title: 'Factures importées!',
+          description: 'Champs auto-remplis à partir des fichiers.',
+          status: 'success',
+          duration: 3000,
+          isClosable: true,
+        });
+      } else {
+        toast({
+          title: 'Aucune donnée détectée.',
+          description: 'Impossible de lire les fichiers.',
+          status: 'warning',
+          duration: 3000,
+          isClosable: true,
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: 'Erreur à l\'import.',
+        description: err.message,
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop,
+    accept: {
+      'application/pdf': ['.pdf'],
+      'image/*': ['.png', '.jpg', '.jpeg'],
+    },
+    multiple: true,
+    disabled: uploading,
+  });
 
   useEffect(() => {
     fetch("/api/provinces")
@@ -249,12 +336,35 @@ export function SourceAForm({
       </Box>
     );
 
-  // --- CONTENT BLOCK (no outer full page spacing) ---
   return (
     <Box bg="white" rounded="2xl" boxShadow="xl" p={6} mb={4}>
       <Heading as="h3" size="md" color={olive} mb={4}>
         {posteLabel}
       </Heading>
+
+      {/* Drag & Drop Bill Upload */}
+      <Box
+        mt={2}
+        mb={2}
+        p={4}
+        borderWidth={2}
+        borderStyle="dashed"
+        borderRadius="md"
+        bg="#f9fafb"
+        textAlign="center"
+        style={{ cursor: 'pointer', opacity: uploading ? 0.6 : 1 }}
+        {...getRootProps()}
+      >
+        <input {...getInputProps()} />
+        <Text>
+          {uploading
+            ? 'Extraction en cours...'
+            : isDragActive
+              ? "Déposez les fichiers ici..."
+              : 'Glissez-déposez une ou plusieurs factures PDF ou images ici, ou cliquez pour sélectionner'}
+        </Text>
+      </Box>
+
       <Table size="sm" variant="simple">
         <Thead>
           <Tr>
@@ -386,34 +496,33 @@ export function SourceAForm({
   );
 }
 
+
 // import { useEffect, useState } from 'react';
 // import {
-//   Box, Stack, Heading, Text, Table, Thead, Tbody, Tr, Th, Td,
-//   Input, Button, useColorModeValue, Spinner,
+//   Box, Heading, Text, Table, Thead, Tbody, Tr, Th, Td,
+//   Input, Button, Spinner, Stack, useColorModeValue
 // } from '@chakra-ui/react';
 // import { supabase } from '../../../lib/supabaseClient';
 
 // type GesResults = {
 //   total_co2_gco2e: number | string;
 //   total_ges_tco2e: number | string;
-//   total_energie_kwh: number | string;
+//   energie_equivalente_kwh: number | string;
 // };
 
 // type CompteurDetailRow = { date: string; consumption: string; reference: string; };
 // type CompteurGroup = { number: string; address: string; province: string; details: CompteurDetailRow[]; };
 
-// // === Result columns for display (optional: hide columns with no data) ===
 // const resultFields = [
 //   { key: "total_co2_gco2e", label: "CO₂ [gCO2e]" },
 //   { key: "total_ges_tco2e", label: "Total GES [tCO2e]" },
-//   { key: "energie_equivalente_kwh", label: "Énergie équivalente [kWh]" }, // ← updated
+//   { key: "energie_equivalente_kwh", label: "Énergie équivalente [kWh]" }
 // ];
-
 
 // export function SourceAForm({
 //   posteId: initialPosteId,
 //   posteNum = 6,
-//   posteLabel = "Saisie des compteurs d'électricité",
+//   posteLabel = "6A1 - Électricité provenant du réseau électrique (Location based)",
 //   userId: propUserId
 // }: {
 //   posteId: string | null,
@@ -423,7 +532,7 @@ export function SourceAForm({
 // }) {
 //   const [provinceOptions, setProvinceOptions] = useState<string[]>([]);
 //   const [compteurs, setCompteurs] = useState<CompteurGroup[]>([
-//     { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] },
+//     { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] }
 //   ]);
 //   const [gesResults, setGesResults] = useState<GesResults[]>([]);
 //   const [posteId, setPosteId] = useState<string | null>(initialPosteId || null);
@@ -432,20 +541,16 @@ export function SourceAForm({
 //   const [loading, setLoading] = useState(true);
 
 //   const olive = '#708238';
-//   const oliveBg = useColorModeValue('#f6f8f3', '#202616');
 
-//   // Province options load
 //   useEffect(() => {
 //     fetch("/api/provinces")
 //       .then((res) => res.json())
 //       .then((data) => setProvinceOptions(data.provinces || []));
 //   }, []);
 
-//   // User & Data load
 //   useEffect(() => {
 //     (async () => {
 //       setLoading(true);
-//       // Get user if not already passed as prop
 //       let activeUserId = propUserId;
 //       if (!activeUserId) {
 //         const { data: { user } } = await supabase.auth.getUser();
@@ -456,11 +561,9 @@ export function SourceAForm({
 //         activeUserId = user.id;
 //         setUserId(user.id);
 //       }
-
-//       // Get latest submission with this poste
 //       let filter = { user_id: activeUserId } as any;
 //       if (posteId) filter = { ...filter, "postes.id": posteId };
-//       const { data, error } = await supabase
+//       const { data } = await supabase
 //         .from('submissions')
 //         .select(`
 //           id,
@@ -484,7 +587,6 @@ export function SourceAForm({
 //           if (typeof parsedData === 'string') {
 //             try { parsedData = JSON.parse(parsedData); } catch { parsedData = {}; }
 //           }
-//           // Parse and group
 //           if (parsedData.counters && parsedData.invoices) {
 //             const byNumber: { [num: string]: CompteurGroup } = {};
 //             parsedData.invoices.forEach((inv: any) => {
@@ -548,243 +650,235 @@ export function SourceAForm({
 //     setCompteurs(newList);
 //   };
 
-//   // === New 6A1 style handleSubmit! ===
 //   const validateData = (compteurs: CompteurGroup[]) =>
 //     compteurs.length > 0 && compteurs.every(group =>
 //       group.number && group.address && group.province &&
 //       group.details.every(detail => detail.date && detail.consumption)
 //     );
 
-// const handleSubmit = async () => {
-//   if (!userId || !posteId) {
-//     alert("Champs obligatoires manquants (posteId ou userId)");
-//     return;
-//   }
-//   if (!validateData(compteurs)) {
-//     alert("Veuillez remplir tous les champs requis (compteurs et détails).");
-//     return;
-//   }
-//   setGesResults([]);
-//   setLoading(true);
+//   const handleSubmit = async () => {
+//     if (!userId || !posteId) {
+//       alert("Champs obligatoires manquants (posteId ou userId)");
+//       return;
+//     }
+//     if (!validateData(compteurs)) {
+//       alert("Veuillez remplir tous les champs requis (compteurs et détails).");
+//       return;
+//     }
+//     setGesResults([]);
+//     setLoading(true);
 
-//   // 1. Sanitize/mapping for backend
-//   const counters = compteurs.map(group => ({
-//     number: group.number,
-//     address: group.address,
-//     province: group.province,
-//   }));
-//   const invoices = compteurs.flatMap(group =>
-//     group.details.map(detail => ({
+//     // 1. Sanitize/mapping for backend
+//     const counters = compteurs.map(group => ({
 //       number: group.number,
 //       address: group.address,
 //       province: group.province,
-//       date: detail.date,
-//       consumption: detail.consumption,
-//       reference: detail.reference,
-//     }))
-//   );
-//   const payload = {
-//     user_id: userId,
-//     poste_source_id: posteId,
-//     source_code: '6A1',
-//     poste_num: 6,
-//     data: { counters, invoices },
+//     }));
+//     const invoices = compteurs.flatMap(group =>
+//       group.details.map(detail => ({
+//         number: group.number,
+//         address: group.address,
+//         province: group.province,
+//         date: detail.date,
+//         consumption: detail.consumption,
+//         reference: detail.reference,
+//       }))
+//     );
+//     const payload = {
+//       user_id: userId,
+//       poste_source_id: posteId,
+//       source_code: '6A1',
+//       poste_num: 6,
+//       data: { counters, invoices },
+//     };
+
+//     let results: GesResults[] = [];
+//     let webhookOk = false;
+
+//     // 2. Call webhook first for calculation
+//     try {
+//       const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/6A1', {
+//         method: 'POST',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify(payload),
+//       });
+//       const result = await response.json();
+//       if (!response.ok) {
+//         alert('Erreur calcul GES (Cloud Run): ' + (result.error || ''));
+//       } else {
+//         results = Array.isArray(result.results) ? result.results : [];
+//         webhookOk = true;
+//       }
+//     } catch (error) {
+//       alert('Erreur réseau lors du calcul Cloud Run.');
+//     }
+
+//     // 3. Save to your database with the GENERAL 4submit endpoint!
+//     try {
+//       const dbPayload = { ...payload, results };
+//       const dbResponse = await fetch('/api/4submit', {
+//         method: 'POST',
+//         headers: { 'Content-Type': 'application/json' },
+//         body: JSON.stringify(dbPayload),
+//       });
+//       const dbResult = await dbResponse.json();
+//       if (!dbResponse.ok) {
+//         alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
+//       } else {
+//         setGesResults(results);
+//         alert(webhookOk
+//           ? 'Données 6A1 calculées et sauvegardées avec succès!'
+//           : 'Données 6A1 sauvegardées sans résultat de calcul GES.');
+//       }
+//     } catch (error) {
+//       alert('Erreur inattendue lors de la sauvegarde en base.');
+//     }
+//     setLoading(false);
 //   };
 
-//   let results: GesResults[] = [];
-//   let webhookOk = false;
-
-//   // 2. Call webhook first for calculation
-//   try {
-//     const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/6A1', {
-//       method: 'POST',
-//       headers: { 'Content-Type': 'application/json' },
-//       body: JSON.stringify(payload),
-//     });
-//     const result = await response.json();
-//     if (!response.ok) {
-//       alert('Erreur calcul GES (Cloud Run): ' + (result.error || ''));
-//     } else {
-//       results = Array.isArray(result.results) ? result.results : [];
-//       webhookOk = true;
-//     }
-//   } catch (error) {
-//     alert('Erreur réseau lors du calcul Cloud Run.');
-//   }
-
-//   // 3. Save to your database with the GENERAL 4submit endpoint!
-//   try {
-//     const dbPayload = { ...payload, results };
-//     const dbResponse = await fetch('/api/4submit', {      // <--- use 4submit
-//       method: 'POST',
-//       headers: { 'Content-Type': 'application/json' },
-//       body: JSON.stringify(dbPayload),
-//     });
-//     const dbResult = await dbResponse.json();
-//     if (!dbResponse.ok) {
-//       alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
-//     } else {
-//       setGesResults(results);
-//       alert(webhookOk
-//         ? 'Données 6A1 calculées et sauvegardées avec succès!'
-//         : 'Données 6A1 sauvegardées sans résultat de calcul GES.');
-//     }
-//   } catch (error) {
-//     alert('Erreur inattendue lors de la sauvegarde en base.');
-//   }
-//   setLoading(false);
-// };
-
-
-//   // === Only show columns with at least one value ===
 //   const displayColumns = resultFields.filter(f =>
 //     gesResults.some(res => res && res[f.key] !== undefined && res[f.key] !== "" && res[f.key] !== "#N/A")
 //   );
 
 //   if (loading)
 //     return (
-//       <Box minH="100vh" bg={oliveBg} display="flex" alignItems="center" justifyContent="center">
+//       <Box display="flex" alignItems="center" justifyContent="center" minH="300px">
 //         <Spinner color={olive} size="xl" />
 //       </Box>
 //     );
 
+//   // --- CONTENT BLOCK (no outer full page spacing) ---
 //   return (
-//     <Box minH="100vh" bg={oliveBg} py={10} px={{ base: 2, md: 10 }}>
-//       <Box maxW="7xl" mx="auto">
-//         <Stack spacing={2}>
-//           <Box bg="white" rounded="2xl" boxShadow="xl" p={6} mb={4}>
-//             <Heading as="h3" size="md" color={olive} mb={4}>
-//               {posteLabel}
-//             </Heading>
-//             <Table size="sm" variant="simple">
-//               <Thead>
-//                 <Tr>
-//                   <Th>NUMÉRO</Th>
-//                   <Th>ADRESSE</Th>
-//                   <Th>PROVINCE/PAYS</Th>
-//                   <Th>DATE</Th>
-//                   <Th>CONSOMMATION (kWh)</Th>
-//                   <Th>RÉFÉRENCES</Th>
-//                   <Th></Th>
-//                 </Tr>
-//               </Thead>
-//               <Tbody>
-//                 {compteurs.map((group, gIdx) =>
-//                   group.details.map((row, dIdx) => (
-//                     <Tr key={gIdx + '-' + dIdx}>
-//                       {dIdx === 0 && (
-//                         <>
-//                           <Td rowSpan={group.details.length}>
-//                             <Input value={group.number}
-//                               onChange={e => updateCompteurField(gIdx, "number", e.target.value)} />
-//                           </Td>
-//                           <Td rowSpan={group.details.length}>
-//                             <Input value={group.address}
-//                               onChange={e => updateCompteurField(gIdx, "address", e.target.value)} />
-//                           </Td>
-//                           <Td rowSpan={group.details.length}>
-//                             <select
-//                               value={group.province}
-//                               onChange={e => updateCompteurField(gIdx, "province", e.target.value)}
-//                               style={{ width: "100%", padding: "8px", borderRadius: "8px" }}
-//                             >
-//                               <option value="">Sélectionner...</option>
-//                               {provinceOptions.map((p) =>
-//                                 <option key={p} value={p}>{p}</option>
-//                               )}
-//                             </select>
-//                           </Td>
-//                         </>
-//                       )}
-//                       <Td>
-//                         <Input
-//                           type="date"
-//                           value={row.date}
-//                           onChange={e => updateDetailField(gIdx, dIdx, "date", e.target.value)}
-//                         />
-//                       </Td>
-//                       <Td>
-//                         <Input
-//                           type="number"
-//                           value={row.consumption}
-//                           onChange={e => updateDetailField(gIdx, dIdx, "consumption", e.target.value)}
-//                         />
-//                       </Td>
-//                       <Td>
-//                         <Input
-//                           value={row.reference}
-//                           onChange={e => updateDetailField(gIdx, dIdx, "reference", e.target.value)}
-//                         />
-//                       </Td>
-//                       <Td>
-//                         <Stack direction="row" spacing={1}>
-//                           <Button
-//                             size="xs"
-//                             onClick={() => addDetailRow(gIdx)}
-//                             colorScheme="blue"
-//                             title="Ajouter une ligne">
-//                             +
-//                           </Button>
-//                           {group.details.length > 1 && (
-//                             <Button
-//                               size="xs"
-//                               onClick={() => removeDetailRow(gIdx, dIdx)}
-//                               colorScheme="red"
-//                               title="Supprimer la ligne">
-//                               -
-//                             </Button>
-//                           )}
-//                           {dIdx === 0 && (
-//                             <Button
-//                               size="xs"
-//                               onClick={() => removeCompteur(gIdx)}
-//                               colorScheme="red"
-//                               title="Supprimer tout ce compteur">
-//                               Suppr. compteur
-//                             </Button>
-//                           )}
-//                         </Stack>
-//                       </Td>
-//                     </Tr>
-//                   ))
+//     <Box bg="white" rounded="2xl" boxShadow="xl" p={6} mb={4}>
+//       <Heading as="h3" size="md" color={olive} mb={4}>
+//         {posteLabel}
+//       </Heading>
+//       <Table size="sm" variant="simple">
+//         <Thead>
+//           <Tr>
+//             <Th>NUMÉRO</Th>
+//             <Th>ADRESSE</Th>
+//             <Th>PROVINCE/PAYS</Th>
+//             <Th>DATE</Th>
+//             <Th>CONSOMMATION (kWh)</Th>
+//             <Th>RÉFÉRENCES</Th>
+//             <Th></Th>
+//           </Tr>
+//         </Thead>
+//         <Tbody>
+//           {compteurs.map((group, gIdx) =>
+//             group.details.map((row, dIdx) => (
+//               <Tr key={gIdx + '-' + dIdx}>
+//                 {dIdx === 0 && (
+//                   <>
+//                     <Td rowSpan={group.details.length}>
+//                       <Input value={group.number}
+//                         onChange={e => updateCompteurField(gIdx, "number", e.target.value)} />
+//                     </Td>
+//                     <Td rowSpan={group.details.length}>
+//                       <Input value={group.address}
+//                         onChange={e => updateCompteurField(gIdx, "address", e.target.value)} />
+//                     </Td>
+//                     <Td rowSpan={group.details.length}>
+//                       <select
+//                         value={group.province}
+//                         onChange={e => updateCompteurField(gIdx, "province", e.target.value)}
+//                         style={{ width: "100%", padding: "8px", borderRadius: "8px" }}
+//                       >
+//                         <option value="">Sélectionner...</option>
+//                         {provinceOptions.map((p) =>
+//                           <option key={p} value={p}>{p}</option>
+//                         )}
+//                       </select>
+//                     </Td>
+//                   </>
 //                 )}
-//               </Tbody>
-//             </Table>
-//             <Button mt={3} colorScheme="green" onClick={addCompteur}>
-//               Ajouter un compteur
-//             </Button>
-//             <Button mt={3} ml={4} colorScheme="blue" onClick={handleSubmit}>
-//               Soumettre
-//             </Button>
-//             <Box mt={6} bg="#e5f2fa" rounded="xl" boxShadow="md" p={4}>
-//               <Text fontWeight="bold" color={olive} mb={2}>Calculs et résultats</Text>
-//               {(gesResults && gesResults.length > 0 && displayColumns.length > 0) ? (
-//                 <Table size="sm" variant="simple">
-//                   <Thead>
-//                     <Tr>
-//                       {displayColumns.map(f => (
-//                         <Th key={f.key}>{f.label}</Th>
-//                       ))}
-//                     </Tr>
-//                   </Thead>
-//                   <Tbody>
-//                     {gesResults.map((result, idx) => (
-//                       <Tr key={idx}>
-//                         {displayColumns.map(f => (
-//                           <Td fontWeight="bold" key={f.key}>
-//                             {(result[f.key] && result[f.key] !== "#N/A") ? result[f.key] : "-"}
-//                           </Td>
-//                         ))}
-//                       </Tr>
-//                     ))}
-//                   </Tbody>
-//                 </Table>
-//               ) : (
-//                 <Text color="gray.500">Aucun résultat à afficher.</Text>
-//               )}
-//             </Box>
-//           </Box>
-//         </Stack>
+//                 <Td>
+//                   <Input
+//                     type="date"
+//                     value={row.date}
+//                     onChange={e => updateDetailField(gIdx, dIdx, "date", e.target.value)}
+//                   />
+//                 </Td>
+//                 <Td>
+//                   <Input
+//                     type="number"
+//                     value={row.consumption}
+//                     onChange={e => updateDetailField(gIdx, dIdx, "consumption", e.target.value)}
+//                   />
+//                 </Td>
+//                 <Td>
+//                   <Input
+//                     value={row.reference}
+//                     onChange={e => updateDetailField(gIdx, dIdx, "reference", e.target.value)}
+//                   />
+//                 </Td>
+//                 <Td>
+//                   <Stack direction="row" spacing={1}>
+//                     <Button
+//                       size="xs"
+//                       onClick={() => addDetailRow(gIdx)}
+//                       colorScheme="blue"
+//                       title="Ajouter une ligne">
+//                       +
+//                     </Button>
+//                     {group.details.length > 1 && (
+//                       <Button
+//                         size="xs"
+//                         onClick={() => removeDetailRow(gIdx, dIdx)}
+//                         colorScheme="red"
+//                         title="Supprimer la ligne">
+//                         -
+//                       </Button>
+//                     )}
+//                     {dIdx === 0 && (
+//                       <Button
+//                         size="xs"
+//                         onClick={() => removeCompteur(gIdx)}
+//                         colorScheme="red"
+//                         title="Supprimer tout ce compteur">
+//                         Suppr. compteur
+//                       </Button>
+//                     )}
+//                   </Stack>
+//                 </Td>
+//               </Tr>
+//             ))
+//           )}
+//         </Tbody>
+//       </Table>
+//       <Button mt={3} colorScheme="green" onClick={addCompteur}>
+//         Ajouter un compteur
+//       </Button>
+//       <Button mt={3} ml={4} colorScheme="blue" onClick={handleSubmit}>
+//         Soumettre
+//       </Button>
+//       <Box mt={6} bg="#e5f2fa" rounded="xl" boxShadow="md" p={4}>
+//         <Text fontWeight="bold" color={olive} mb={2}>Calculs et résultats</Text>
+//         {(gesResults && gesResults.length > 0 && displayColumns.length > 0) ? (
+//           <Table size="sm" variant="simple">
+//             <Thead>
+//               <Tr>
+//                 {displayColumns.map(f => (
+//                   <Th key={f.key}>{f.label}</Th>
+//                 ))}
+//               </Tr>
+//             </Thead>
+//             <Tbody>
+//               {gesResults.map((result, idx) => (
+//                 <Tr key={idx}>
+//                   {displayColumns.map(f => (
+//                     <Td fontWeight="bold" key={f.key}>
+//                       {(result[f.key] && result[f.key] !== "#N/A") ? result[f.key] : "-"}
+//                     </Td>
+//                   ))}
+//                 </Tr>
+//               ))}
+//             </Tbody>
+//           </Table>
+//         ) : (
+//           <Text color="gray.500">Aucun résultat à afficher.</Text>
+//         )}
 //       </Box>
 //     </Box>
 //   );
