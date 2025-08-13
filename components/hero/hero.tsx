@@ -1,8 +1,9 @@
-import { Container, Flex, FlexProps, Text, VStack } from '@chakra-ui/react'
+import { Container, Flex, Text, VStack } from '@chakra-ui/react'
 
-interface HeroProps extends Omit<FlexProps, 'title'> {
+type HeroProps = {
   title: string | React.ReactNode
   description?: string | React.ReactNode
+  [key: string]: any // relax typing for spread props
 }
 
 export const Hero = ({ title, description, children, ...rest }: HeroProps) => {
