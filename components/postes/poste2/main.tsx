@@ -398,16 +398,21 @@ function updateA3Row(idx: number, key: keyof A3Row, value: string) {
 
       );
     if (code === "2B1")
-      return (
-        <SourceB1Form
-          key={code}
-          b1Rows={b1Rows}
-          setB1Rows={setB1Rows}
-          addB1Row={addB1Row}
-          highlight={highlight}
-          tableBg={bg}
-        />
-      );
+  return (
+    <SourceB1Form
+      key={code}
+      b1Rows={b1Rows}
+      setB1Rows={setB1Rows}
+      addB1Row={addB1Row}
+      posteSourceId={posteSourceId}
+      userId={userId ?? ""}
+      gesResults={gesResults}
+      setGesResults={setGesResults}
+      highlight={highlight}
+      tableBg={bg}
+    />
+  );
+
     return null;
   }
 
