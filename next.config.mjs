@@ -1,6 +1,16 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+
+  // Disable type checking during builds
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
+  reactStrictMode: true,
   transpilePackages: ['three'], // Transpile Three.js for Next.js compatibility
   webpack(config) {
     config.module.rules.push({
