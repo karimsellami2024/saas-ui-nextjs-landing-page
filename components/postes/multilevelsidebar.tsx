@@ -40,6 +40,12 @@ export default function SidebarWithContent({ onSelect, selectedMenu }: SidebarPr
       gap={4}
     >
       <VStack align="stretch" spacing={2}>
+        <SidebarItem
+                label="ENTREPRISE"
+                isActive={selectedMenu === "refunds"}
+                onClick={() => onSelect("refunds")}
+                fontSize="sm"
+              />
         {/* Dashboard */}
         <SidebarItem
           label="Dashboard"
@@ -84,12 +90,7 @@ export default function SidebarWithContent({ onSelect, selectedMenu }: SidebarPr
                 onClick={() => onSelect("Émissions fugitives directes (Réfrigérants)")}
                 fontSize="sm"
               />
-              <SidebarItem
-                label="ENTREPRISE"
-                isActive={selectedMenu === "refunds"}
-                onClick={() => onSelect("refunds")}
-                fontSize="sm"
-              />
+              
             </VStack>
           </Collapse>
         </Box>

@@ -110,13 +110,13 @@ function Section() {
       <SidebarWithContent onSelect={setSelectedMenu} selectedMenu={selectedMenu} />
       <Box flex={1} p={8} bg="#F3F6EF" minH="120vh">
         {/* {selectedMenu === "dashboard" && <ProductsAndFleetPage />} */}
-
+        {selectedMenu === "refunds" && renderOrPlaceholder("sales", <ProductsAndFleetPage />)}  
         {selectedMenu === "dashboard" && <DashboardPage />}
         {selectedMenu === "Émissions directes des sources de combustions fixes" && renderOrPlaceholder("Émissions directes des sources de combustions fixes", <Poste1Page/>)}
         {selectedMenu === "products" && renderOrPlaceholder("products", <Poste6Page />)}
         {selectedMenu === "sales" && renderOrPlaceholder("sales", <Poste2Page />)}
         {selectedMenu === "Émissions fugitives directes (Réfrigérants)" && renderOrPlaceholder("Émissions fugitives directes (Réfrigérants)", <Réfrigérants/>)}
-        {selectedMenu === "refunds" && renderOrPlaceholder("sales", <ProductsAndFleetPage />)}
+        
         {/* add more menu items as needed */}
       </Box>
     </Box>

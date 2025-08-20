@@ -88,7 +88,7 @@ const Home: NextPage = () => {
   useLandingAnimations(COLORS)
   return (
     <Box>
-      <HeroSection />
+      {/* <HeroSection />
 
       <OwnerTenantSection />
 
@@ -98,18 +98,18 @@ const Home: NextPage = () => {
 
       <FeaturedStrip />
 
-      <FeaturesSection />
+      <FeaturesSection /> */}
       <Performance3DSection />
-      <TestimonialsSection />
+      {/* <TestimonialsSection /> */}
 
       {/* Parallax + reveal for main Section block */}
-      <Box data-reveal data-parallax="0.08">
+      {/* <Box data-reveal data-parallax="0.08">
         <Box data-reveal-item>
           <Section/>
         </Box>
-      </Box>
+      </Box> */}
 
-      <CTASection />
+      {/* <CTASection /> */}
     </Box>
   )
 }
@@ -255,188 +255,6 @@ const HeroSection: React.FC = () => {
     </Box>
   );
 };
-
-// const HeroSection: React.FC = () => {
-//   return (
-//     <Box position="relative" overflow="hidden" bg="#F3FAF9">
-//       {/* Aurora blobs (theme colors) */}
-//       <Box
-//         data-aurora
-//         position="absolute"
-//         top="-20%"
-//         left="-10%"
-//         w="60vw"
-//         h="60vh"
-//         filter="blur(90px)"
-//         opacity={0.45}
-//         bg="radial-gradient(60% 60% at 30% 30%, #265966 0%, transparent 70%)"
-//         pointerEvents="none"
-//         zIndex={1}
-//       />
-//       <Box
-//         data-aurora
-//         position="absolute"
-//         bottom="-20%"
-//         right="-10%"
-//         w="55vw"
-//         h="55vh"
-//         filter="blur(110px)"
-//         opacity={0.6}
-//         bg="radial-gradient(60% 60% at 70% 60%, #DC9807 0%, transparent 70%)"
-//         pointerEvents="none"
-//         zIndex={1}
-//       />
-//       <Box
-//         data-aurora
-//         position="absolute"
-//         top="10%"
-//         right="20%"
-//         w="35vw"
-//         h="35vh"
-//         filter="blur(90px)"
-//         opacity={0.5}
-//         bg="radial-gradient(60% 60% at 50% 50%, #49C3AC 0%, transparent 70%)"
-//         pointerEvents="none"
-//         zIndex={1}
-//       />
-
-//       {/* Soft particle field */}
-//       <Box position="absolute" inset={0} zIndex={1} pointerEvents="none">
-//         <Particles colors={['#265966','#49C3AC','#DC9807']} density={1.35} opacity={0.55} />
-//       </Box>
-
-//       {/* Background gradient with slight parallax */}
-//       <Box data-parallax="0.06">
-//         <BackgroundGradient height="100%" zIndex="-1" />
-//       </Box>
-
-//       <Container maxW="container.xl" pt={{ base: 40, lg: 60 }} pb="40" style={{ perspective: '1200px' }}>
-//         <Stack direction={{ base: 'column', lg: 'row' }} alignItems="center">
-//           <Hero
-//             id="home"
-//             justifyContent="flex-start"
-//             px="0"
-//             title={
-//               <FallInPlace>
-//                 <Text as="span" data-hero-item fontSize={{ base: "3xl", md: "5xl" }} fontWeight="bold" color={COLORS.tealBlue}>
-//                   Calculez vos{' '}
-//                   <Box as="span" position="relative" display="inline-block">
-//                     <Box as="span" color={COLORS.gold}>émissions GES</Box>
-//                     <Box
-//                       id="title-underline"
-//                       position="absolute"
-//                       left={0}
-//                       bottom={-6}
-//                       height="6px"
-//                       bg={`linear-gradient(90deg, ${COLORS.gold}, #49C3AC)`}
-//                       borderRadius="9999px"
-//                       width="0%"
-//                       boxShadow="0 4px 16px rgba(0,0,0,0.15)"
-//                     />
-//                   </Box>
-//                 </Text>
-                
-//                 <Text as="span" data-hero-item fontSize={{ base: "xl", md: "2xl" }} fontWeight="bold" color={COLORS.black}>
-//                   en moins de 2 minutes avec Carbone Québec
-//                 </Text>
-//               </FallInPlace>
-//             }
-//             description={
-//               <FallInPlace delay={0.4} fontWeight="medium">
-//                 <Text data-hero-item fontSize="lg" color={COLORS.tealBlue}>
-//                   Mesurez et comprenez votre impact climatique avec notre calculateur gratuit et convivial. Recevez un rapport PDF instantané et des conseils personnalisés pour réduire vos émissions.
-//                 </Text>
-//               </FallInPlace>
-//             }
-//           >
-//             <FallInPlace delay={0.2}>
-//               <ButtonGroup spacing={4} alignItems="center" pt="8" pb="10">
-//                 <ButtonLink
-//                   data-cta-item
-//                   data-magnetic="14"
-//                   colorScheme="teal"
-//                   size="lg"
-//                   href="/calculateur"
-//                   bg={COLORS.tealBlue}
-//                   color="#fff"
-//                   fontWeight="bold"
-//                   _hover={{ bg: COLORS.gold, color: COLORS.black }}
-//                   px={8}
-//                   py={6}
-//                   fontSize="xl"
-//                   rounded="xl"
-//                 >
-//                   Essayez gratuitement
-//                 </ButtonLink>
-//                 <ButtonLink
-//                   data-cta-item
-//                   data-magnetic="10"
-//                   size="lg"
-//                   href="#avantages"
-//                   variant="outline"
-//                   color={COLORS.tealBlue}
-//                   borderColor={COLORS.tealBlue}
-//                   _hover={{ bg: COLORS.blueGray, color: COLORS.black, borderColor: COLORS.gold }}
-//                   rightIcon={<Icon as={FiArrowRight} />}
-//                 >
-//                   Voir les avantages
-//                 </ButtonLink>
-//               </ButtonGroup>
-//             </FallInPlace>
-//           </Hero>
-
-//           {/* 3D-tilt hero frame */}
-//           <Box
-//             id="hero-image"
-//             data-tilt="1"
-//             data-tilt-max="14"
-//             data-tilt-scale="1.035"
-//             height="600px"
-//             position="absolute"
-//             display={{ base: 'none', lg: 'block' }}
-//             left={{ lg: '60%', xl: '55%' }}
-//             width="80vw"
-//             maxW="1100px"
-//             margin="0 auto"
-//             zIndex={2}
-//             sx={{ transformStyle: 'preserve-3d' }}
-//           >
-//             <FallInPlace delay={0.2}>
-//               <Box
-//                 overflow="hidden"
-//                 height="100%"
-//                 width="100%"
-//                 bg="white"
-//                 borderRadius="2xl"
-//                 boxShadow="2xl"
-//                 p={2}
-//                 display="flex"
-//                 alignItems="center"
-//                 justifyContent="center"
-//               >
-//                 <Image
-//                   src="/static/images/pexels-singkham-178541-1108572.jpg"
-//                   width={1200}
-//                   height={762}
-//                   alt="Innovation verte: ampoule avec plante"
-//                   quality={85}
-//                   priority
-//                   style={{
-//                     objectFit: "cover",
-//                     borderRadius: "1.25rem",
-//                     boxShadow: "0 8px 40px 0 rgba(0,0,0,0.18)",
-//                     background: "white",
-//                     transform: "translateZ(40px)",
-//                   }}
-//                 />
-//               </Box>
-//             </FallInPlace>
-//           </Box>
-//         </Stack>
-//       </Container>
-//     </Box>
-//   )
-// }
 
 /* ===========================
    OWNER / TENANT TOGGLE
