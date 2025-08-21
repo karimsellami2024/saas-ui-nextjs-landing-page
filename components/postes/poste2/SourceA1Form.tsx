@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Stack, Text,
 } from '@chakra-ui/react';
-
+import VehicleSelect from "#components/vehicleselect/VehicleSelect"
 export type CarburantRow = {
   details: string;
   date: string;
@@ -170,21 +170,23 @@ const handleA1Submit = async () => {
             return (group.rows || []).map((row, rIdx) => (
               <Tr key={`${gIdx}-${rIdx}`}>
                 {rIdx === 0 && (
-                  <>
-                    <Td rowSpan={group.rows.length}>
-                      <Input
-                        value={group.vehicle}
-                        onChange={e => updateGroupField(gIdx, "vehicle", e.target.value)}
-                      />
-                    </Td>
-                    <Td rowSpan={group.rows.length}>
-                      <Input
-                        value={group.fuelType}
-                        onChange={e => updateGroupField(gIdx, "fuelType", e.target.value)}
-                      />
-                    </Td>
-                  </>
-                )}
+  <>
+    <Td rowSpan={group.rows.length}>
+      <Input
+        value={group.vehicle}
+        onChange={e => updateGroupField(gIdx, "vehicle", e.target.value)}
+      />
+    </Td>
+    <Td rowSpan={group.rows.length}>
+      <VehicleSelect
+        value={group.fuelType}
+        onChange={(val: string) => updateGroupField(gIdx, "fuelType", val)}
+      />
+    </Td>
+  </>
+)}
+
+                
                 <Td>
                   <Input
                     value={row.details}
@@ -287,254 +289,3 @@ const handleA1Submit = async () => {
     </Box>
   );
 }
-
-// import React, { useState } from 'react';
-// import {
-//   Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Stack, Text,
-// } from '@chakra-ui/react';
-
-// export type CarburantRow = {
-//   details: string;
-//   date: string;
-//   invoiceNumber: string;
-//   qty: string;
-// };
-// export type CarburantGroup = {
-//   vehicle: string;
-//   fuelType: string;
-//   rows: CarburantRow[];
-// };
-// type GesResult = {
-//   total_co2_gco2e?: string | number;
-//   total_ges_ch4_gco2e?: string | number;
-//   total_ges_n2o_gco2e?: string | number;
-//   total_ges_gco2e?: string | number;
-//   total_ges_tco2e?: string | number;
-//   total_energie_kwh?: string | number;
-// };
-
-// export interface SourceA1FormProps {
-//   carburantGroups: CarburantGroup[];
-//   updateGroupField: (gIdx: number, key: keyof CarburantGroup, value: string) => void;
-//   updateRowField: (gIdx: number, rIdx: number, key: keyof CarburantRow, value: string) => void;
-//   addVehicleGroup: () => void;
-//   addRow: (gIdx: number) => void;
-//   removeRow: (gIdx: number, rIdx: number) => void;
-//   removeGroup: (gIdx: number) => void;
-//   flattenCarburantGroups: (groups: CarburantGroup[]) => any[];
-//   highlight?: string;
-//   tableBg?: string;
-//   posteSourceId: string;
-//   userId: string;
-//   handleSubmit: (posteSourceId: string) => Promise<void>;
-//   gesResults?: GesResult[];
-// }
-
-// export function SourceA1Form({
-//   carburantGroups = [],
-//   updateGroupField,
-//   updateRowField,
-//   addVehicleGroup,
-//   addRow,
-//   removeRow,
-//   removeGroup,
-//   flattenCarburantGroups,
-//   highlight = '#245a7c',
-//   tableBg = '#f3f6ef',
-//   posteSourceId,
-//   userId,
-//   handleSubmit,
-//   gesResults = [],
-// }: SourceA1FormProps) {
-//   const [loading, setLoading] = useState(false);
-
-//   // Validate data before submission
-//   const validateData = (groups: CarburantGroup[]) => {
-//     return groups.every(group =>
-//       group.vehicle && group.fuelType && group.rows.length > 0 && group.rows.every(row =>
-//         row.details && row.date && row.invoiceNumber && row.qty
-//       )
-//     );
-//   };
-
-//   const handleFormSubmit = async () => {
-//     if (!posteSourceId || !userId) {
-//       alert("Missing required fields (posteSourceId or userId)");
-//       return;
-//     }
-//     if (!validateData(carburantGroups)) {
-//       alert("Veuillez remplir tous les champs des groupes de carburant, y compris au moins une ligne par groupe.");
-//       return;
-//     }
-//     setLoading(true);
-
-//     try {
-//       // Sanitize and nest the data structure
-//       const sanitizedGroups = carburantGroups.map(group => ({
-//         ...group,
-//         rows: group.rows.map(row => ({
-//           ...row,
-//           qty: parseFloat(row.qty) || 0, // Convert qty to number
-//         })),
-//       }));
-
-//       const payload = {
-//         user_id: userId,
-//         poste_source_id: posteSourceId,
-//         source_code: 'A1',
-//         data: { groups: sanitizedGroups }, // Nested structure
-//       };
-//       console.log('🟦 [handleFormSubmit] Sending payload:', JSON.stringify(payload, null, 2)); // Detailed log
-//       await handleSubmit(posteSourceId);
-//     } catch (error) {
-//       console.error('🟥 [handleFormSubmit] Submission error:', error);
-//       alert("Erreur lors de la soumission. Vérifiez la console pour plus de détails.");
-//     }
-//     setLoading(false);
-//   };
-
-//   return (
-//     <Box bg="white" rounded="2xl" boxShadow="xl" p={6} mb={4}>
-//       <Heading as="h3" size="md" color={highlight} mb={4}>
-//         Saisie carburant – Groupé par véhicule
-//       </Heading>
-//       <Table size="sm" variant="simple">
-//         <Thead>
-//           <Tr>
-//             <Th>Véhicule / Province</Th>
-//             <Th>Type de carburant</Th>
-//             <Th>Détail</Th>
-//             <Th>Date</Th>
-//             <Th># facture</Th>
-//             <Th>Quantité de carburant</Th>
-//             <Th>Unité</Th>
-//             <Th>Total carburant</Th>
-//             <Th></Th>
-//           </Tr>
-//         </Thead>
-//         <Tbody>
-//           {(carburantGroups || []).map((group, gIdx) => {
-//             const total = (group.rows || []).reduce(
-//               (sum, r) => sum + parseFloat(r.qty || "0"),
-//               0
-//             );
-//             return (group.rows || []).map((row, rIdx) => (
-//               <Tr key={`${gIdx}-${rIdx}`}>
-//                 {rIdx === 0 && (
-//                   <>
-//                     <Td rowSpan={group.rows.length}>
-//                       <Input
-//                         value={group.vehicle}
-//                         onChange={e => updateGroupField(gIdx, "vehicle", e.target.value)}
-//                       />
-//                     </Td>
-//                     <Td rowSpan={group.rows.length}>
-//                       <Input
-//                         value={group.fuelType}
-//                         onChange={e => updateGroupField(gIdx, "fuelType", e.target.value)}
-//                       />
-//                     </Td>
-//                   </>
-//                 )}
-//                 <Td>
-//                   <Input
-//                     value={row.details}
-//                     onChange={e => updateRowField(gIdx, rIdx, "details", e.target.value)}
-//                   />
-//                 </Td>
-//                 <Td>
-//                   <Input
-//                     type="date"
-//                     value={row.date}
-//                     onChange={e => updateRowField(gIdx, rIdx, "date", e.target.value)}
-//                   />
-//                 </Td>
-//                 <Td>
-//                   <Input
-//                     value={row.invoiceNumber}
-//                     onChange={e => updateRowField(gIdx, rIdx, "invoiceNumber", e.target.value)}
-//                   />
-//                 </Td>
-//                 <Td>
-//                   <Input
-//                     type="number"
-//                     value={row.qty}
-//                     onChange={e => updateRowField(gIdx, rIdx, "qty", e.target.value)}
-//                   />
-//                 </Td>
-//                 <Td>L</Td>
-//                 {rIdx === 0 && (
-//                   <Td rowSpan={group.rows.length} fontWeight="bold">
-//                     {total.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} L
-//                   </Td>
-//                 )}
-//                 <Td>
-//                   <Stack direction="row" spacing={1}>
-//                     <Button
-//                       size="xs"
-//                       onClick={() => addRow(gIdx)}
-//                       colorScheme="blue"
-//                       title="Ajouter une ligne"
-//                     >+</Button>
-//                     {group.rows.length > 1 && (
-//                       <Button
-//                         size="xs"
-//                         onClick={() => removeRow(gIdx, rIdx)}
-//                         colorScheme="red"
-//                         title="Supprimer la ligne"
-//                       >-</Button>
-//                     )}
-//                     {rIdx === 0 && (
-//                       <Button
-//                         size="xs"
-//                         onClick={() => removeGroup(gIdx)}
-//                         colorScheme="red"
-//                         title="Supprimer tout ce véhicule"
-//                       >Suppr. véhicule</Button>
-//                     )}
-//                   </Stack>
-//                 </Td>
-//               </Tr>
-//             ));
-//           })}
-//         </Tbody>
-//       </Table>
-//       <Button mt={3} colorScheme="green" onClick={addVehicleGroup}>
-//         Ajouter un véhicule
-//       </Button>
-//       <Button mt={3} ml={4} colorScheme="blue" onClick={handleFormSubmit} isLoading={loading}>
-//         Soumettre
-//       </Button>
-//       <Box mt={6} bg="#e5f2fa" rounded="xl" boxShadow="md" p={4}>
-//         <Text fontWeight="bold" color={highlight} mb={2}>Calculs et résultats</Text>
-//         <Table size="sm" variant="simple">
-//           <Thead>
-//             <Tr>
-//               <Th>CO₂ [gCO2e]</Th>
-//               <Th>CH₄ [gCO2e]</Th>
-//               <Th>N₂O [gCO2e]</Th>
-//               <Th>Total GES [gCO2e]</Th>
-//               <Th>Total GES [tCO2e]</Th>
-//               <Th>Énergie équivalente [kWh]</Th>
-//             </Tr>
-//           </Thead>
-//           <Tbody>
-//             {(flattenCarburantGroups(carburantGroups) || []).map((_: any, idx: number) => {
-//               const row = gesResults[idx] || {};
-//               return (
-//                 <Tr key={idx}>
-//                   <Td fontWeight="bold">{row.total_co2_gco2e ?? '-'}</Td>
-//                   <Td fontWeight="bold">{row.total_ges_ch4_gco2e ?? '-'}</Td>
-//                   <Td fontWeight="bold">{row.total_ges_n2o_gco2e ?? '-'}</Td>
-//                   <Td fontWeight="bold">{row.total_ges_gco2e ?? '-'}</Td>
-//                   <Td fontWeight="bold">{row.total_ges_tco2e ?? '-'}</Td>
-//                   <Td fontWeight="bold">{row.total_energie_kwh ?? '-'}</Td>
-//                 </Tr>
-//               );
-//             })}
-//           </Tbody>
-//         </Table>
-//       </Box>
-//     </Box>
-//   );
-// }

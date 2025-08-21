@@ -1,14 +1,19 @@
 'use client'
+
 import {
   Box,
   Container,
   Text,
-  Badge,
   Button,
+  Heading,
+  VStack,
+  Badge,
+  Icon,
 } from '@chakra-ui/react'
 import { keyframes } from '@emotion/react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { FaFileInvoice, FaCalculator, FaHistory, FaChartPie } from 'react-icons/fa'
 
 // Import the 3D Canvas notebook scene
 const Hero3DDevices = dynamic(() => import('../3d/Hero3DDevices'), { ssr: false })
@@ -29,15 +34,17 @@ function Callout({
   x,
   y,
   align = 'left',
-  label = 'Carbone Québec',
+  label,
   children,
+  icon,
   alt = false,
 }: {
   x: string
   y: string
   align?: 'left' | 'right'
-  label?: string
+  label: string
   children: React.ReactNode
+  icon?: React.ElementType
   alt?: boolean
 }) {
   return (
@@ -46,15 +53,13 @@ function Callout({
       left={align === 'left' ? x : 'auto'}
       right={align === 'right' ? x : 'auto'}
       top={y}
-      bg="gray.100"
+      bg="whiteAlpha.90"
       color={COLORS.black}
       rounded="2xl"
-      boxShadow="lg"
-      border="1px solid"
-      borderColor="blackAlpha.100"
+      boxShadow="xl"
       px={5}
       py={4}
-      maxW="300px"
+      maxW="280px"
       animation={`${alt ? float2 : float1} 4.8s ease-in-out infinite alternate`}
     >
       <Badge
@@ -68,69 +73,102 @@ function Callout({
       >
         {label}
       </Badge>
-      <Text fontWeight="semibold">{children}</Text>
+      <Text fontWeight="semibold" display="flex" alignItems="center" gap={2}>
+        {icon && <Icon as={icon} color={COLORS.teal} />}
+        {children}
+      </Text>
     </Box>
   )
 }
 
 export default function Performance3DSection() {
   return (
-    <Box position="relative" py={{ base: 16, md: 24 }} overflow="hidden" bg="white">
-      <Container maxW="container.xl" position="relative" minH={{ base: '1150px', md: '1250px' }}>
-        
-        {/* The 3D notebook model */}
-        <Hero3DDevices height={1020} />
+    <Box
+      position="relative"
+      minH="100vh"
+      overflow="hidden"
+      bg="black"
+    >
+      {/* === 3D Background Layer === */}
+      <Box
+        position="absolute"
+        inset={0}
+        zIndex={0}
+        opacity={0.35} // 👈 léger fondu pour laisser le texte ressortir
+      >
+        <Hero3DDevices height={1200} />
+      </Box>
 
-        {/* Floating callouts around the 3D model */}
-        <Callout x="5%" y="25%" align="left" label="Données">
+      {/* === Foreground Content === */}
+      <Container
+        maxW="container.xl"
+        position="relative"
+        zIndex={1}
+        py={{ base: 20, md: 32 }}
+      >
+        {/* Hero Text */}
+        <VStack spacing={6} textAlign="center" mb={14}>
+          <Heading
+            as="h1"
+            fontSize={{ base: '3xl', md: '5xl' }}
+            fontWeight="extrabold"
+            bgGradient="linear(to-r, teal.300, teal.600)"
+            bgClip="text"
+          >
+            Votre Calculateur Carbone
+          </Heading>
+          <Text fontSize={{ base: 'md', md: 'xl' }} color="gray.100" maxW="700px">
+            Une solution simple et rapide pour calculer, analyser et réduire vos émissions GES.  
+            Découvrez vos postes d’émissions et générez vos rapports automatiquement.
+          </Text>
+
+          {/* CTA */}
+          <Link href="/intro">
+            <Button
+              size="lg"
+              px={12}
+              py={7}
+              rounded="full"
+              fontWeight="bold"
+              fontSize="xl"
+              bgGradient="linear(to-r, teal.500, teal.700)"
+              color="white"
+              _hover={{
+                bgGradient: 'linear(to-r, teal.600, teal.800)',
+                transform: 'scale(1.05)',
+              }}
+              _active={{
+                transform: 'scale(0.98)',
+              }}
+              boxShadow="0 10px 30px rgba(0,0,0,0.4)"
+              transition="all 0.25s ease-in-out"
+            >
+              🚀 COMMENCER
+            </Button>
+          </Link>
+        </VStack>
+
+        {/* Floating callouts */}
+        <Callout x="5%" y="25%" align="left" label="Données" icon={FaFileInvoice}>
           Collecte des factures et consommations
         </Callout>
-        <Callout x="2%" y="55%" align="left" label="Calculs">
+        <Callout x="2%" y="55%" align="left" label="Calculs" icon={FaCalculator}>
           Émissions GES (CO₂, CH₄, N₂O)
         </Callout>
-        <Callout x="8%" y="75%" align="left" label="Suivi" alt>
+        <Callout x="8%" y="75%" align="left" label="Suivi" icon={FaHistory} alt>
           Historique et comparaison annuelle
         </Callout>
 
-        <Callout x="5%" y="30%" align="right" label="Rapports">
+        <Callout x="5%" y="30%" align="right" label="Rapports" icon={FaChartPie}>
           Génération automatique de bilans carbone
         </Callout>
         <Callout x="10%" y="65%" align="right" label="Indicateurs" alt>
           Intensité carbone par site et service
         </Callout>
-
-        {/* ✅ Button moved BELOW the 3D model */}
-        <Box textAlign="center" mt={16}>
-  <Link href="/chart">
-    <Button
-      size="lg"
-      px={10}
-      py={7}
-      rounded="full"
-      fontWeight="bold"
-      fontSize="xl"
-      bgGradient="linear(to-r, teal.600, teal.400)"
-      color="white"
-      _hover={{
-        bgGradient: 'linear(to-r, teal.700, teal.500)',
-        transform: 'scale(1.05)',
-      }}
-      _active={{
-        transform: 'scale(0.98)',
-      }}
-      boxShadow="0 8px 20px rgba(0,0,0,0.25)"
-      transition="all 0.25s ease-in-out"
-    >
-      🚀 COMMENCER
-    </Button>
-  </Link>
-</Box>
-
       </Container>
     </Box>
   )
 }
-
 
 
 // 'use client'

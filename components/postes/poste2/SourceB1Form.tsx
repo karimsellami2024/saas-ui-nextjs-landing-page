@@ -19,7 +19,7 @@ import {
 } from '@chakra-ui/react';
 import { RepeatIcon } from '@chakra-ui/icons';
 import { supabase } from '../../../lib/supabaseClient';
-
+import VehicleSelect from "#components/vehicleselect/VehicleSelect"
 type B1Row = {
   vehicle: string;   // label/details
   year: string;

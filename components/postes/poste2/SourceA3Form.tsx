@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import {
   Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Stack, Text,
 } from '@chakra-ui/react';
-
+import VehicleSelect from "#components/vehicleselect/VehicleSelect"
 export type A3Row = {
   vehicle: string;
   type: string;
@@ -160,11 +160,12 @@ export function Source2A3Form({
                 />
               </Td>
               <Td>
-                <Input
-                  value={row.type}
-                  onChange={e => updateA3Row(idx, "type", e.target.value)}
-                />
-              </Td>
+  <VehicleSelect
+    value={row.type}
+    onChange={(val) => updateA3Row(idx, "type", val)}
+  />
+</Td>
+
               <Td>
                 <Input
                   type="date"

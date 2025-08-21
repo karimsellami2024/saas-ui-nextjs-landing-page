@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import {
   Box, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Text, Spinner,
-  IconButton, HStack, useToast,
+  IconButton, HStack, useToast,Select,
 } from "@chakra-ui/react";
 import { CloseIcon } from "@chakra-ui/icons";
 import { supabase } from "../../lib/supabaseClient";
+import VehicleSelect from "#components/vehicleselect/VehicleSelect"
 
 // ---- Types ----
-type Lieu = { nom: string; description: string; adresse: string; ges: string };
-type ProductItem = { nom: string; description: string; gesUnite: string; quantite: string; unite: string; gesTotal: string };
-type ServiceItem = { nom: string; description: string; gesUnite: string; quantite: string; unite: string; gesTotal: string };
+type Lieu = { nom: string; description: string; adresse: string };
+type ProductItem = { nom: string; description: string;  quantite: string; unite: string };
+type ServiceItem = { nom: string; description: string; quantite: string; unite: string };
 
 // New vehicle shape (matches your screenshot)
 type VehicleItem = {
@@ -23,9 +24,9 @@ type VehicleItem = {
   conso_l_100km: string;    // CONSO. [L/100KM]
 };
 
-const emptyLieu: Lieu = { nom: "", description: "", adresse: "", ges: "" };
-const emptyProduct: ProductItem = { nom: "", description: "", gesUnite: "", quantite: "", unite: "", gesTotal: "" };
-const emptyService: ServiceItem = { nom: "", description: "", gesUnite: "", quantite: "", unite: "", gesTotal: "" };
+const emptyLieu: Lieu = { nom: "", description: "", adresse: "",  };
+const emptyProduct: ProductItem = { nom: "", description: "",  quantite: "", unite: "",  };
+const emptyService: ServiceItem = { nom: "", description: "",  quantite: "", unite: "" };
 const emptyVehicle: VehicleItem = {
   details: "",
   annee: "",
@@ -243,7 +244,7 @@ export default function ProductionAndProductsPage() {
               <Th>Nom du lieu</Th>
               <Th>Description</Th>
               <Th>Adresse</Th>
-              <Th>GES par Site [tCO2e]</Th>
+              
               <Th w="40px"></Th>
             </Tr>
           </Thead>
@@ -253,7 +254,7 @@ export default function ProductionAndProductsPage() {
                 <Td><Input value={lieu.nom || ""} onChange={e => updateLieu(i, "nom", e.target.value)} /></Td>
                 <Td><Input value={lieu.description || ""} onChange={e => updateLieu(i, "description", e.target.value)} /></Td>
                 <Td><Input value={lieu.adresse || ""} onChange={e => updateLieu(i, "adresse", e.target.value)} /></Td>
-                <Td><Input value={lieu.ges || ""} onChange={e => updateLieu(i, "ges", e.target.value)} /></Td>
+                
                 <Td>
                   <IconButton aria-label="Supprimer" icon={<CloseIcon boxSize="2" />} size="xs"
                     onClick={() => removeRow(lieux, setLieux, i)} />
@@ -275,10 +276,10 @@ export default function ProductionAndProductsPage() {
             <Tr>
               <Th>Nom du produit</Th>
               <Th>Description</Th>
-              <Th>GES par unité<br />[kgCO2e/unité]</Th>
+              
               <Th>Quantité</Th>
               <Th>Unité</Th>
-              <Th>GES total<br />[tCO2e]</Th>
+              
               <Th w="40px"></Th>
             </Tr>
           </Thead>
@@ -287,10 +288,29 @@ export default function ProductionAndProductsPage() {
               <Tr key={`prod-${i}`}>
                 <Td><Input value={prod.nom || ""} onChange={e => updateProduct(i, "nom", e.target.value)} /></Td>
                 <Td><Input value={prod.description || ""} onChange={e => updateProduct(i, "description", e.target.value)} /></Td>
-                <Td><Input value={prod.gesUnite || ""} onChange={e => updateProduct(i, "gesUnite", e.target.value)} /></Td>
-                <Td><Input value={prod.quantite || ""} onChange={e => updateProduct(i, "quantite", e.target.value)} /></Td>
-                <Td><Input value={prod.unite || ""} onChange={e => updateProduct(i, "unite", e.target.value)} /></Td>
-                <Td><Input value={prod.gesTotal || ""} onChange={e => updateProduct(i, "gesTotal", e.target.value)} /></Td>
+                <Td>
+  <Input
+    value={prod.quantite || ""}
+    onChange={e => updateProduct(i, "quantite", e.target.value)}
+  />
+</Td>
+<Td>
+  <Select
+  placeholder="Choisir unité"
+  value={prod.unite || ""}
+  onChange={e => updateProduct(i, "unite", e.target.value)}
+>
+  <option value="kg">kg</option>
+  <option value="lb">lb</option>
+  <option value="m">mètres</option>
+  <option value="ft">pieds</option>
+  <option value="L">litres</option>
+  <option value="kWh">kWh</option>
+  <option value="t">tonnes</option>
+</Select>
+
+</Td>
+
                 <Td>
                   <IconButton aria-label="Supprimer" icon={<CloseIcon boxSize="2" />} size="xs"
                     onClick={() => removeRow(products, setProducts, i)} />
@@ -312,10 +332,10 @@ export default function ProductionAndProductsPage() {
             <Tr>
               <Th>Nom du service</Th>
               <Th>Description</Th>
-              <Th>GES par unité<br />[kgCO2e/unité]</Th>
+              
               <Th>Quantité</Th>
               <Th>Unité</Th>
-              <Th>GES total<br />[tCO2e]</Th>
+              
               <Th w="40px"></Th>
             </Tr>
           </Thead>
@@ -324,10 +344,10 @@ export default function ProductionAndProductsPage() {
               <Tr key={`svc-${i}`}>
                 <Td><Input value={svc.nom || ""} onChange={e => updateService(i, "nom", e.target.value)} /></Td>
                 <Td><Input value={svc.description || ""} onChange={e => updateService(i, "description", e.target.value)} /></Td>
-                <Td><Input value={svc.gesUnite || ""} onChange={e => updateService(i, "gesUnite", e.target.value)} /></Td>
+                
                 <Td><Input value={svc.quantite || ""} onChange={e => updateService(i, "quantite", e.target.value)} /></Td>
                 <Td><Input value={svc.unite || ""} onChange={e => updateService(i, "unite", e.target.value)} /></Td>
-                <Td><Input value={svc.gesTotal || ""} onChange={e => updateService(i, "gesTotal", e.target.value)} /></Td>
+                
                 <Td>
                   <IconButton aria-label="Supprimer" icon={<CloseIcon boxSize="2" />} size="xs"
                     onClick={() => removeRow(services, setServices, i)} />
@@ -340,44 +360,98 @@ export default function ProductionAndProductsPage() {
 
       {/* Flotte de véhicules (new columns) */}
       <Box bg="white" p={4} borderRadius="md" boxShadow="md">
-        <HStack justify="space-between" mb={2}>
-          <Text fontWeight="bold">Liste de la flotte de véhicule</Text>
-          <Button size="sm" colorScheme="yellow" onClick={addVehicle}>Ajouter un véhicule</Button>
-        </HStack>
-        <Table variant="simple" size="sm">
-          <Thead bg="yellow.200">
-            <Tr>
-              <Th>DÉTAILS SUR LES VÉHICULES</Th>
-              <Th>ANNÉE</Th>
-              <Th>MARQUE</Th>
-              <Th>MODÈLE</Th>
-              <Th>TRANSMISSION</Th>
-              <Th>DISTANCE PARCOURUE [KM]</Th>
-              <Th>TYPE ET CARBURANT</Th>
-              <Th>CONSO. [L/100KM]</Th>
-              <Th w="40px"></Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {vehicles.map((veh, i) => (
-              <Tr key={`veh-${i}`}>
-                <Td><Input value={veh.details || ""} onChange={e => updateVehicle(i, "details", e.target.value)} placeholder="Plaque, usage, notes…" /></Td>
-                <Td><Input value={veh.annee || ""} onChange={e => updateVehicle(i, "annee", e.target.value)} placeholder="2021" /></Td>
-                <Td><Input value={veh.marque || ""} onChange={e => updateVehicle(i, "marque", e.target.value)} placeholder="Toyota" /></Td>
-                <Td><Input value={veh.modele || ""} onChange={e => updateVehicle(i, "modele", e.target.value)} placeholder="Corolla" /></Td>
-                <Td><Input value={veh.transmission || ""} onChange={e => updateVehicle(i, "transmission", e.target.value)} placeholder="Manuelle/Automatique" /></Td>
-                <Td><Input value={veh.distance_km || ""} onChange={e => updateVehicle(i, "distance_km", e.target.value)} placeholder="ex: 12500" /></Td>
-                <Td><Input value={veh.type_carburant || ""} onChange={e => updateVehicle(i, "type_carburant", e.target.value)} placeholder="Essence, Diesel, Hybride…" /></Td>
-                <Td><Input value={veh.conso_l_100km || ""} onChange={e => updateVehicle(i, "conso_l_100km", e.target.value)} placeholder="ex: 7.2" /></Td>
-                <Td>
-                  <IconButton aria-label="Supprimer" icon={<CloseIcon boxSize="2" />} size="xs"
-                    onClick={() => removeRow(vehicles, setVehicles, i)} />
-                </Td>
-              </Tr>
-            ))}
-          </Tbody>
-        </Table>
-      </Box>
+  <HStack justify="space-between" mb={2}>
+    <Text fontWeight="bold">Liste de la flotte de véhicule</Text>
+    <Button size="sm" colorScheme="yellow" onClick={addVehicle}>Ajouter un véhicule</Button>
+  </HStack>
+  <Table variant="simple" size="sm">
+    <Thead bg="yellow.200">
+      <Tr>
+        <Th>DÉTAILS SUR LES VÉHICULES</Th>
+        <Th>ANNÉE</Th>
+        <Th>MARQUE</Th>
+        <Th>MODÈLE</Th>
+        <Th>TRANSMISSION</Th>
+        <Th>DISTANCE PARCOURUE [KM]</Th>
+        <Th>TYPE ET CARBURANT</Th>
+        <Th>CONSO. [L/100KM]</Th>
+        <Th w="40px"></Th>
+      </Tr>
+    </Thead>
+    <Tbody>
+      {vehicles.map((veh, i) => (
+        <Tr key={`veh-${i}`}>
+          <Td>
+            <Input
+              value={veh.details || ""}
+              onChange={e => updateVehicle(i, "details", e.target.value)}
+              placeholder="Plaque, usage, notes…"
+            />
+          </Td>
+          <Td>
+            <Input
+              value={veh.annee || ""}
+              onChange={e => updateVehicle(i, "annee", e.target.value)}
+              placeholder="2021"
+            />
+          </Td>
+          <Td>
+            <Input
+              value={veh.marque || ""}
+              onChange={e => updateVehicle(i, "marque", e.target.value)}
+              placeholder="Toyota"
+            />
+          </Td>
+          <Td>
+            <Input
+              value={veh.modele || ""}
+              onChange={e => updateVehicle(i, "modele", e.target.value)}
+              placeholder="Corolla"
+            />
+          </Td>
+          <Td>
+            <Input
+              value={veh.transmission || ""}
+              onChange={e => updateVehicle(i, "transmission", e.target.value)}
+              placeholder="Manuelle/Automatique"
+            />
+          </Td>
+          <Td>
+            <Input
+              value={veh.distance_km || ""}
+              onChange={e => updateVehicle(i, "distance_km", e.target.value)}
+              placeholder="ex: 12500"
+            />
+          </Td>
+
+          {/* Replace Input with VehicleSelect */}
+          <Td>
+            <VehicleSelect
+              value={veh.type_carburant || ""}
+              onChange={(val: string) => updateVehicle(i, "type_carburant", val)}
+            />
+          </Td>
+
+          <Td>
+            <Input
+              value={veh.conso_l_100km || ""}
+              onChange={e => updateVehicle(i, "conso_l_100km", e.target.value)}
+              placeholder="ex: 7.2"
+            />
+          </Td>
+          <Td>
+            <IconButton
+              aria-label="Supprimer"
+              icon={<CloseIcon boxSize="2" />}
+              size="xs"
+              onClick={() => removeRow(vehicles, setVehicles, i)}
+            />
+          </Td>
+        </Tr>
+      ))}
+    </Tbody>
+  </Table>
+</Box>
 
       {/* Save Button */}
       <Box textAlign="center" mt={8}>

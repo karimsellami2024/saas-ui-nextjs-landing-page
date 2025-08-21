@@ -49,7 +49,7 @@ export default function Hero3DDevices({ height = 560 }: Props) {
         shadows
         camera={{
           position: [1.2, 2.4, 3.2],
-          fov: 70,
+          fov: 100,
         }}
       >
         <color attach="background" args={['#F3FAF9']} />
