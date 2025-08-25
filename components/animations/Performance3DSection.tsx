@@ -9,27 +9,111 @@ import {
   VStack,
   Badge,
   Icon,
+  Spinner, // (not used, but keep if you want a fallback)
 } from '@chakra-ui/react'
 import { keyframes } from '@emotion/react'
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
+import { useEffect, useRef, useState } from 'react'
 import { FaFileInvoice, FaCalculator, FaHistory, FaChartPie } from 'react-icons/fa'
 
-// Import the 3D Canvas notebook scene
+// 3D scene (no SSR)
 const Hero3DDevices = dynamic(() => import('../3d/Hero3DDevices'), { ssr: false })
 
 const COLORS = { black: '#08131F', teal: '#265966', gold: '#DC9807' }
 
-/** Floating keyframes for callouts */
-const float1 = keyframes`
-  0% { transform: translateY(0px) translateX(0px) rotate(0.2deg); }
-  100% { transform: translateY(-12px) translateX(6px) rotate(-0.2deg); }
-`
-const float2 = keyframes`
-  0% { transform: translateY(0px) translateX(0px) rotate(-0.2deg); }
-  100% { transform: translateY(-10px) translateX(-6px) rotate(0.2deg); }
+/* -------------------- Hypnotic Loader Animations -------------------- */
+const spin = keyframes`
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 `
 
+const pulse = keyframes`
+  0%   { transform: scale(0.95); filter: blur(10px); opacity: .9; }
+  50%  { transform: scale(1.05); filter: blur(14px); opacity: .8; }
+  100% { transform: scale(0.95); filter: blur(10px); opacity: .9; }
+`
+
+const morph = keyframes`
+  0%   { border-radius: 36% 64% 58% 42% / 43% 35% 65% 57%; transform: rotate(0deg) scale(1); }
+  50%  { border-radius: 58% 42% 36% 64% / 53% 65% 35% 47%; transform: rotate(10deg) scale(1.03); }
+  100% { border-radius: 36% 64% 58% 42% / 43% 35% 65% 57%; transform: rotate(0deg) scale(1); }
+`
+
+const orbit = keyframes`
+  from { transform: rotate(0deg) translateX(90px) rotate(0deg); }
+  to   { transform: rotate(360deg) translateX(90px) rotate(-360deg); }
+`
+
+function LoaderOverlay() {
+  return (
+    <Box
+      position="fixed"
+      inset={0}
+      zIndex={9999}
+      // 👉 Brighter background: white with gradient of blue
+      bg="linear-gradient(135deg, #ffffff 0%, #e6f7ff 50%, #a3d9ff 100%)"
+      display="grid"
+      placeItems="center"
+    >
+      <Box position="relative" w="220px" h="220px">
+        {/* Glass ring */}
+        <Box
+          position="absolute"
+          inset="-8px"
+          borderRadius="full"
+          bg="conic-gradient(from 0deg, rgba(0,128,255,0.15), rgba(255,255,255,0.65), rgba(0,128,255,0.15))"
+          animation={`${spin} 3.4s linear infinite`}
+          filter="blur(2px)"
+          _after={{
+            content: '""',
+            position: 'absolute',
+            inset: '14px',
+            borderRadius: 'full',
+            bg: 'rgba(255,255,255,0.15)',
+            backdropFilter: 'blur(6px)',
+            boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.15)',
+          }}
+        />
+
+        {/* Morphing luminous blob */}
+        <Box
+          position="absolute"
+          top="50%"
+          left="50%"
+          w="160px"
+          h="160px"
+          transform="translate(-50%, -50%)"
+          bg="radial-gradient(circle at 30% 30%, rgba(0,180,255,0.55), rgba(0,128,255,0.9))"
+          animation={`${morph} 5s ease-in-out infinite, ${pulse} 2.2s ease-in-out infinite`}
+          mixBlendMode="screen"
+        />
+
+        {/* Orbiting dots */}
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Box
+            key={i}
+            position="absolute"
+            top="50%"
+            left="50%"
+            w="8px"
+            h="8px"
+            borderRadius="full"
+            bg="blue.400"
+            boxShadow="0 0 14px 4px rgba(0,180,255,0.45)"
+            transform="translate(-50%, -50%)"
+            animation={`${orbit} ${6 + i * 0.6}s linear infinite`}
+            opacity={0.9}
+            style={{ animationDelay: `${i * 0.15}s` }}
+          />
+        ))}
+      </Box>
+    </Box>
+  )
+}
+
+
+/* -------------------- Callout -------------------- */
 function Callout({
   x,
   y,
@@ -60,7 +144,7 @@ function Callout({
       px={5}
       py={4}
       maxW="280px"
-      animation={`${alt ? float2 : float1} 4.8s ease-in-out infinite alternate`}
+      zIndex={2}
     >
       <Badge
         bg={COLORS.teal}
@@ -81,324 +165,423 @@ function Callout({
   )
 }
 
+/* -------------------- Page -------------------- */
 export default function Performance3DSection() {
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const titleRef = useRef<HTMLHeadingElement | null>(null)
+  const textRef = useRef<HTMLParagraphElement | null>(null)
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+
+  const [loading, setLoading] = useState(true)
+
+  // Show the mesmerizing loader for ~2s
+  useEffect(() => {
+    const timer = setTimeout(() => setLoading(false), 2000)
+    return () => clearTimeout(timer)
+  }, [])
+
   return (
-    <Box
-      position="relative"
-      minH="100vh"
-      overflow="hidden"
-      bg="black"
-    >
-      {/* === 3D Background Layer === */}
+    <>
+      {loading && <LoaderOverlay />}
+
       <Box
-        position="absolute"
-        inset={0}
-        zIndex={0}
-        opacity={0.35} // 👈 léger fondu pour laisser le texte ressortir
-      >
-        <Hero3DDevices height={1200} />
-      </Box>
-
-      {/* === Foreground Content === */}
-      <Container
-        maxW="container.xl"
+        ref={rootRef}
         position="relative"
-        zIndex={1}
-        py={{ base: 20, md: 32 }}
+        minH="100vh"
+        overflow="hidden"
+        bg="linear-gradient(135deg, #08131F 0%, #1A2A44 100%)"
+        // Fade-in once loader disappears
+        opacity={loading ? 0 : 1}
+        transition="opacity .6s ease"
       >
-        {/* Hero Text */}
-        <VStack spacing={6} textAlign="center" mb={14}>
-          <Heading
-            as="h1"
-            fontSize={{ base: '3xl', md: '5xl' }}
-            fontWeight="extrabold"
-            bgGradient="linear(to-r, teal.300, teal.600)"
-            bgClip="text"
-          >
-            Votre Calculateur Carbone
-          </Heading>
-          <Text fontSize={{ base: 'md', md: 'xl' }} color="gray.100" maxW="700px">
-            Une solution simple et rapide pour calculer, analyser et réduire vos émissions GES.  
-            Découvrez vos postes d’émissions et générez vos rapports automatiquement.
-          </Text>
+        {/* 3D Background Layer */}
+        <Box className="background-layer" position="absolute" inset={0} zIndex={0} opacity={0.95}>
+          <Hero3DDevices height={1200} />
+        </Box>
 
-          {/* CTA */}
-          <Link href="/intro">
-            <Button
-              size="lg"
-              px={12}
-              py={7}
-              rounded="full"
-              fontWeight="bold"
-              fontSize="xl"
-              bgGradient="linear(to-r, teal.500, teal.700)"
-              color="white"
-              _hover={{
-                bgGradient: 'linear(to-r, teal.600, teal.800)',
-                transform: 'scale(1.05)',
-              }}
-              _active={{
-                transform: 'scale(0.98)',
-              }}
-              boxShadow="0 10px 30px rgba(0,0,0,0.4)"
-              transition="all 0.25s ease-in-out"
+        {/* Foreground */}
+        <Container maxW="container.xl" position="relative" zIndex={1} py={{ base: 20, md: 32 }}>
+          <VStack spacing={6} textAlign="center" mb={14}>
+            <Heading
+              ref={titleRef}
+              as="h1"
+              className="title"
+              fontSize={{ base: '3xl', md: '5xl' }}
+              fontWeight="extrabold"
+              bgGradient="linear(to-r, teal.700, teal.900)"
+              bgClip="text"
             >
-              🚀 COMMENCER
-            </Button>
-          </Link>
-        </VStack>
+              Votre Calculateur Carbone
+            </Heading>
 
-        {/* Floating callouts */}
-        <Callout x="5%" y="25%" align="left" label="Données" icon={FaFileInvoice}>
-          Collecte des factures et consommations
-        </Callout>
-        <Callout x="2%" y="55%" align="left" label="Calculs" icon={FaCalculator}>
-          Émissions GES (CO₂, CH₄, N₂O)
-        </Callout>
-        <Callout x="8%" y="75%" align="left" label="Suivi" icon={FaHistory} alt>
-          Historique et comparaison annuelle
-        </Callout>
+            <Text
+              ref={textRef}
+              className="text"
+              fontSize={{ base: 'md', md: 'xl' }}
+              color="gray.200"
+              fontWeight="semibold"
+              maxW="700px"
+            >
+              Une solution simple et rapide pour calculer, analyser et réduire vos émissions GES.
+              Découvrez vos postes d’émissions et générez vos rapports automatiquement.
+            </Text>
 
-        <Callout x="5%" y="30%" align="right" label="Rapports" icon={FaChartPie}>
-          Génération automatique de bilans carbone
-        </Callout>
-        <Callout x="10%" y="65%" align="right" label="Indicateurs" alt>
-          Intensité carbone par site et service
-        </Callout>
-      </Container>
-    </Box>
+            <Link href="/intro">
+              <Button
+                ref={buttonRef}
+                className="button"
+                size="lg"
+                px={12}
+                py={7}
+                rounded="full"
+                fontWeight="bold"
+                fontSize="xl"
+                bgGradient="linear(to-r, teal.500, teal.700)"
+                color="white"
+                _hover={{
+                  bgGradient: 'linear(to-r, teal.600, teal.800)',
+                  transform: 'scale(1.08)',
+                }}
+                _active={{ transform: 'scale(0.96)' }}
+                boxShadow="0 15px 40px rgba(38, 89, 102, 0.6)"
+                transition="all 0.3s ease-in-out"
+              >
+                🚀 COMMENCER
+              </Button>
+            </Link>
+          </VStack>
+
+          {/* Callouts */}
+          <Callout x="5%" y="25%" align="left" label="Données" icon={FaFileInvoice}>
+            Collecte des factures et consommations
+          </Callout>
+          <Callout x="2%" y="55%" align="left" label="Calculs" icon={FaCalculator}>
+            Émissions GES (CO₂, CH₄, N₂O)
+          </Callout>
+          <Callout x="8%" y="75%" align="left" label="Suivi" icon={FaHistory} alt>
+            Historique et comparaison annuelle
+          </Callout>
+          <Callout x="5%" y="30%" align="right" label="Rapports" icon={FaChartPie}>
+            Génération automatique de bilans carbone
+          </Callout>
+          <Callout x="10%" y="65%" align="right" label="Indicateurs" alt>
+            Intensité carbone par site et service
+          </Callout>
+        </Container>
+      </Box>
+    </>
   )
 }
 
 
 // 'use client'
-// import { useEffect, useRef } from 'react'
+
 // import {
 //   Box,
 //   Container,
-//   Heading,
 //   Text,
+//   Button,
+//   Heading,
+//   VStack,
 //   Badge,
-  
-//   useBreakpointValue,
+//   Icon,
 // } from '@chakra-ui/react'
-// import Image from 'next/image'
-// import { keyframes } from '@emotion/react'
+// import dynamic from 'next/dynamic'
+// import Link from 'next/link'
+// import { useEffect, useRef, useState } from 'react'
+// import { FaFileInvoice, FaCalculator, FaHistory, FaChartPie } from 'react-icons/fa'
 
-// const COLORS = { tealBlue: '#265966', black: '#08131F', gold: '#DC9807' }
+// // 3D scene (no SSR)
+// const Hero3DDevices = dynamic(() => import('../3d/Hero3DDevices'), { ssr: false })
 
-// /** Floating keyframes for callouts */
-// const float1 = keyframes`
-//   0% { transform: translateY(0px) translateX(0px) rotate(0.2deg); }
-//   100% { transform: translateY(-12px) translateX(6px) rotate(-0.2deg); }
-// `
-// const float2 = keyframes`
-//   0% { transform: translateY(0px) translateX(0px) rotate(-0.2deg); }
-//   100% { transform: translateY(-10px) translateX(-6px) rotate(0.2deg); }
-// `
+// const COLORS = { black: '#08131F', teal: '#265966', gold: '#DC9807' }
 
+// /* -------------------- Callout -------------------- */
 // function Callout({
 //   x,
 //   y,
 //   align = 'left',
-//   label = 'Owner',
+//   label,
 //   children,
+//   icon,
 //   alt = false,
 // }: {
 //   x: string
 //   y: string
 //   align?: 'left' | 'right'
-//   label?: string
+//   label: string
 //   children: React.ReactNode
+//   icon?: React.ElementType
 //   alt?: boolean
 // }) {
+//   const rootRef = useRef<HTMLDivElement | null>(null)
+//   const innerRef = useRef<HTMLDivElement | null>(null)
+//   const scopeRef = useRef<any>(null)
+
+//   useEffect(() => {
+//     let cleanup = () => {}
+//     ;(async () => {
+//       // anime.js v4 named exports
+//       const { animate, createScope, createSpring } = await import('animejs')
+
+//       scopeRef.current = createScope({ root: rootRef })
+
+      
+
+//       cleanup = () => {
+//         try {
+//           scopeRef.current?.revert()
+//         } catch {}
+//       }
+//     })()
+
+//     return () => cleanup()
+//   }, [alt])
+
 //   return (
 //     <Box
+//       ref={rootRef}
 //       position="absolute"
 //       left={align === 'left' ? x : 'auto'}
 //       right={align === 'right' ? x : 'auto'}
 //       top={y}
-//       bg="gray.100"
+//       bg="whiteAlpha.90"
 //       color={COLORS.black}
 //       rounded="2xl"
-//       boxShadow="lg"
-//       border="1px solid"
-//       borderColor="blackAlpha.100"
+//       boxShadow="xl"
 //       px={5}
 //       py={4}
-//       maxW="320px"
-//       animation={`${alt ? float2 : float1} 4.8s ease-in-out infinite alternate`}
+//       maxW="280px"
+//       zIndex={2}
+//       data-callout
+//       style={{ opacity: 0, transform: 'translateY(16px)' }} // entrance animated by parent
 //     >
-//       <Badge
-//         bg="black"
-//         color="white"
-//         rounded="full"
-//         px={3}
-//         py={1}
-//         fontWeight="semibold"
-//         mb={2}
-//       >
-//         {label}
-//       </Badge>
-//       <Text fontWeight="semibold">{children}</Text>
+//       <Box ref={innerRef}>
+//         <Badge
+//           bg={COLORS.teal}
+//           color="white"
+//           rounded="full"
+//           px={3}
+//           py={1}
+//           fontWeight="semibold"
+//           mb={2}
+//         >
+//           {label}
+//         </Badge>
+//         <Text fontWeight="semibold" display="flex" alignItems="center" gap={2}>
+//           {icon && <Icon as={icon} color={COLORS.teal} />}
+//           {children}
+//         </Text>
+//       </Box>
 //     </Box>
 //   )
 // }
 
-// /** Smooth pointer-tilt without any library */
-// function useTilt(elRef: React.RefObject<HTMLElement>, opts?: { max?: number; scale?: number }) {
+// /* -------------------- Page -------------------- */
+// export default function Performance3DSection() {
+//   const rootRef = useRef<HTMLDivElement | null>(null)
+//   const titleRef = useRef<HTMLHeadingElement | null>(null)
+//   const textRef = useRef<HTMLParagraphElement | null>(null)
+//   const buttonRef = useRef<HTMLButtonElement | null>(null)
+//   const [rotations, setRotations] = useState(0)
+
+//   // TS-safe stagger helpers for anime v4
+//   const byIndexDelay = ((_: unknown, i: number) => i * 25) as any
+//   const calloutDelay = ((_: unknown, i: number) => 600 + i * 120) as any
+
 //   useEffect(() => {
-//     const el = elRef.current
-//     if (!el) return
+//     let cleanup = () => {}
+//     ;(async () => {
+//       const { animate, createScope } = await import('animejs')
 
-//     const max = opts?.max ?? 14 // degrees
-//     const scale = opts?.scale ?? 1.03
-//     const prefersReduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-//     const disableOnMobile = window.matchMedia('(pointer: coarse)').matches
+//       const scope = createScope({ root: rootRef })
 
-//     if (prefersReduce || disableOnMobile) return
+//       scope.add(() => {
+//         const root = rootRef.current
+//         if (!root || !titleRef.current) return
 
-//     let rx = 0, ry = 0
-//     let tx = 0, ty = 0
-//     let s = 1
-//     let raf = 0
+//         // Split title into letters
+//         const titleEl = titleRef.current
+//         const original = titleEl.innerText
+//         titleEl.innerHTML = original
+//           .split('')
+//           .map(
+//             (ch) =>
+//               `<span class="letter" style="display:inline-block; opacity:0">${ch === ' ' ? '&nbsp;' : ch}</span>`
+//           )
+//           .join('')
 
-//     const lerp = (a: number, b: number, t: number) => a + (b - a) * t
+//         // Heading letters
+//         animate(root.querySelectorAll('.title .letter'), {
+//           translateY: ['1.2em', '0em'],
+//           opacity: [0, 1],
+//           duration: 700,
+//           delay: byIndexDelay, // ✅ fixed type
+//           easing: 'out(3)',
+//         })
 
-//     const animate = () => {
-//       rx = lerp(rx, tx, 0.12)
-//       ry = lerp(ry, ty, 0.12)
-//       s = lerp(s, scale, 0.12)
-//       el.style.transform = `rotateX(${ry.toFixed(2)}deg) rotateY(${rx.toFixed(2)}deg) scale(${s.toFixed(3)})`
-//       raf = requestAnimationFrame(animate)
-//     }
+//         // Sub text
+//         if (textRef.current) {
+//           textRef.current.style.opacity = '0'
+//           textRef.current.style.transform = 'translateX(-50px)'
+//           animate(textRef.current, {
+//             opacity: [0, 1],
+//             translateX: [-50, 0],
+//             duration: 900,
+//             delay: 450,
+//             easing: 'out(3)',
+//           })
+//         }
 
-//     const onMove = (e: PointerEvent) => {
-//       const rect = el.getBoundingClientRect()
-//       const px = (e.clientX - rect.left) / rect.width - 0.5
-//       const py = (e.clientY - rect.top) / rect.height - 0.5
-//       tx = -(py * max)
-//       ty = px * max
-//       if (!raf) raf = requestAnimationFrame(animate)
-//     }
+//         // Button
+//         if (buttonRef.current) {
+//           buttonRef.current.style.opacity = '0'
+//           buttonRef.current.style.transform = 'scale(0) rotate(45deg)'
+//           animate(buttonRef.current, {
+//             scale: [0, 1],
+//             opacity: [0, 1],
+//             rotate: [45, 0],
+//             duration: 700,
+//             delay: 700,
+//             easing: 'out(4)',
+//           })
 
-//     const onLeave = () => {
-//       tx = 0
-//       ty = 0
-//       s = 1
-//       if (!raf) raf = requestAnimationFrame(animate)
-//       // stop after it settles
-//       setTimeout(() => {
-//         cancelAnimationFrame(raf)
-//         raf = 0
-//       }, 350)
-//     }
+//           // breathing loop
+//           animate(buttonRef.current, {
+//             scale: [{ to: 1.02, duration: 1200, ease: 'inOut(2)' }, { to: 1, duration: 1200, ease: 'inOut(2)' }],
+//             loop: true,
+//             delay: 1600,
+//           })
+//         }
 
-//     el.addEventListener('pointermove', onMove)
-//     el.addEventListener('pointerleave', onLeave)
+//         // Callouts entrance
+//         animate(root.querySelectorAll('[data-callout]'), {
+//           translateY: [16, 0],
+//           opacity: [0, 1],
+//           duration: 550,
+//           delay: calloutDelay, // ✅ fixed type
+//           easing: 'out(3)',
+//         })
 
-//     return () => {
-//       el.removeEventListener('pointermove', onMove)
-//       el.removeEventListener('pointerleave', onLeave)
-//       if (raf) cancelAnimationFrame(raf)
-//     }
-//   }, [elRef, opts?.max, opts?.scale])
-// }
+//         // Background pulse (optional)
+//         const bg = root.querySelector('.background-layer')
+//         if (bg) {
+//           animate(bg, {
+//             opacity: [0.9, 0.95, 0.9],
+//             duration: 3000,
+//             easing: 'linear',
+//             loop: true,
+//           })
+//         }
+//       })
 
-// export default function Performance3DSection({
-//   imageSrc = '/static/images/ges-dashboard.png', // ⬅️ put your screenshot here
-// }: {
-//   imageSrc?: string
-// }) {
-//   const deviceRef = useRef<HTMLDivElement | null>(null)
-//   useTilt(deviceRef, { max: 16, scale: 1.035 })
-//   const w = useBreakpointValue({ base: '92%', md: '780px' })
-//   const h = useBreakpointValue({ base: '420px', md: '520px' })
+//       cleanup = () => {
+//         try {
+//           scope.revert()
+//         } catch {}
+//       }
+//     })()
+
+//     return () => cleanup()
+//   }, [])
+
+//   const handleClick = async () => {
+//     const { animate } = await import('animejs')
+//     setRotations((prev) => {
+//       const next = prev + 1
+//       if (buttonRef.current) {
+//         animate(buttonRef.current, {
+//           rotate: next * 360,
+//           duration: 1200,
+//           easing: 'out(4)',
+//         })
+//       }
+//       return next
+//     })
+//   }
 
 //   return (
-//     <Box position="relative" py={{ base: 16, md: 24 }} overflow="hidden" bg="white">
-//       <Container maxW="container.xl" position="relative" minH={{ base: '780px', md: '780px' }}>
-//         {/* Headline */}
-//         <Heading as="h2" size="xl" color={COLORS.black} maxW="760px" mb={6}>
-//           <Box as="span" fontWeight="extrabold" color={COLORS.black}>
-//             Restez connecté·e
-//           </Box>{' '}
-//           à la performance de vos programmes climatiques
-//         </Heading>
+//     <Box
+//       ref={rootRef}
+//       position="relative"
+//       minH="100vh"
+//       overflow="hidden"
+//       bg="linear-gradient(135deg, #08131F 0%, #1A2A44 100%)"
+//     >
+//       {/* 3D Background Layer */}
+//       <Box className="background-layer" position="absolute" inset={0} zIndex={0} opacity={0.95}>
+//         <Hero3DDevices height={1200} />
+//       </Box>
 
-//         {/* 3D device */}
-//         <Box
-//           ref={deviceRef}
-//           position="absolute"
-//           right={{ base: '2%', md: '6%' }}
-//           top={{ base: '30%', md: '18%' }}
-//           w={w}
-//           h={h}
-//           transform="rotateZ(-10deg) rotateX(18deg) rotateY(-10deg)"
-//           transition="transform .2s ease-out"
-//           sx={{ transformStyle: 'preserve-3d' }}
-//           cursor="pointer"
-//         >
-//           {/* outline / faux line-art */}
-//           <Box
-//             position="absolute"
-//             inset={0}
-//             rounded="2xl"
-//             bg="white"
-//             boxShadow="
-//               0 0 0 2px rgba(0,0,0,.6),
-//               6px 6px 0 0 rgba(0,0,0,.25),
-//               12px 12px 0 0 rgba(0,0,0,.15)
-//             "
-//           />
+//       {/* Foreground */}
+//       <Container maxW="container.xl" position="relative" zIndex={1} py={{ base: 20, md: 32 }}>
+//         <VStack spacing={6} textAlign="center" mb={14}>
+//           <Heading
+//   ref={titleRef}
+//   as="h1"
+//   className="title"
+//   fontSize={{ base: '3xl', md: '5xl' }}
+//   fontWeight="extrabold"
+//   bgGradient="linear(to-r, teal.700, teal.900)"  // ✅ Darker teal gradient
+//   bgClip="text"
+// >
+//   Votre Calculateur Carbone
+// </Heading>
 
-//           {/* screen frame */}
-//           <Box
-//             position="absolute"
-//             inset="24px 24px auto 24px"
-//             h="70%"
-//             rounded="xl"
-//             bg="white"
-//             border="2px solid rgba(0,0,0,.6)"
-//             overflow="hidden"
-//             sx={{ transform: 'translateZ(40px)' }}
-//           >
-//             {/* Your screenshot IN the device */}
-//             <Image
-//               src={imageSrc}
-//               alt="Dashboard"
-//               fill
-//               priority
-//               sizes="(min-width: 62em) 700px, 90vw"
-//               style={{ objectFit: 'cover' }}
-//             />
-//           </Box>
+// <Text
+//   ref={textRef}
+//   className="text"
+//   fontSize={{ base: 'md', md: 'xl' }}
+//   color="gray.700"   // ✅ Dark gray for visibility on white
+//   fontWeight="semibold"
+//   maxW="700px"
+// >
+//   Une solution simple et rapide pour calculer, analyser et réduire vos émissions GES.
+//   Découvrez vos postes d’émissions et générez vos rapports automatiquement.
+// </Text>
 
-//           {/* keyboard deck */}
-//           <Box
-//             position="absolute"
-//             left="24px"
-//             right="24px"
-//             bottom="26px"
-//             top="72%"
-//             rounded="xl"
-//             border="2px solid rgba(0,0,0,.6)"
-//             bg="linear-gradient(transparent 88%, rgba(0,0,0,.08) 0) left/100% 28px repeat-y,
-//                 linear-gradient(90deg, transparent 92%, rgba(0,0,0,.08) 0) left/40px 100% repeat-x"
-//             sx={{ transform: 'translateZ(20px)' }}
-//           />
-//         </Box>
 
-//         {/* Floating callouts around the device */}
-//         <Callout x="2%" y="36%" align="left">Onboarding et mise en place</Callout>
-//         <Callout x="12%" y="58%" align="left">Performance des abonnés</Callout>
-//         <Callout x="6%" y="74%" align="left" label="I manage" alt>
-//           Suivi des économies
+//           <Link href="/intro">
+//             <Button
+//               ref={buttonRef}
+//               className="button"
+//               size="lg"
+//               px={12}
+//               py={7}
+//               rounded="full"
+//               fontWeight="bold"
+//               fontSize="xl"
+//               bgGradient="linear(to-r, teal.500, teal.700)"
+//               color="white"
+//               _hover={{
+//                 bgGradient: 'linear(to-r, teal.600, teal.800)',
+//                 transform: 'scale(1.08)',
+//               }}
+//               _active={{ transform: 'scale(0.96)' }}
+//               boxShadow="0 15px 40px rgba(38, 89, 102, 0.6)"
+//               transition="all 0.3s ease-in-out"
+//               onClick={handleClick}
+//             >
+//               🚀 COMMENCER
+//             </Button>
+//           </Link>
+//         </VStack>
+
+//         {/* Callouts */}
+//         <Callout x="5%" y="25%" align="left" label="Données" icon={FaFileInvoice}>
+//           Collecte des factures et consommations
 //         </Callout>
-
-//         <Callout x="6%" y="22%" align="right">Données bâtiment & locataires</Callout>
-//         <Callout x="10%" y="64%" align="right" alt>
-//           Indicateurs financiers (NOI)
+//         <Callout x="2%" y="55%" align="left" label="Calculs" icon={FaCalculator}>
+//           Émissions GES (CO₂, CH₄, N₂O)
+//         </Callout>
+//         <Callout x="8%" y="75%" align="left" label="Suivi" icon={FaHistory} alt>
+//           Historique et comparaison annuelle
+//         </Callout>
+//         <Callout x="5%" y="30%" align="right" label="Rapports" icon={FaChartPie}>
+//           Génération automatique de bilans carbone
+//         </Callout>
+//         <Callout x="10%" y="65%" align="right" label="Indicateurs" alt>
+//           Intensité carbone par site et service
 //         </Callout>
 //       </Container>
 //     </Box>
