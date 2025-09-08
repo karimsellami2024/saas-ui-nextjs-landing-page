@@ -18,4 +18,5 @@ export const VEHICLE_OPTIONS = [
   "Véhicule - Électrique [kWh]",
   "Aviation - Kérosène [L]",
   "Aviation - Essence [L]",
+
 ]
