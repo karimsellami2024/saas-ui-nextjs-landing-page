@@ -5,7 +5,8 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import {
   Box, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Text, Spinner,
   IconButton, HStack, useToast, Select, Tag, TagLabel, TagCloseButton, Wrap, WrapItem,
-  useColorModeValue, Switch
+  useColorModeValue, Switch, NumberInput, NumberInputField, NumberInputStepper,
+  NumberIncrementStepper, NumberDecrementStepper
 } from "@chakra-ui/react";
 import { CloseIcon } from "@chakra-ui/icons";
 import { supabase } from "../../lib/supabaseClient";
@@ -18,12 +19,16 @@ function normalize(s: string) {
   return (s ?? "").trim();
 }
 function unique<T>(arr: T[]) { return Array.from(new Set(arr)); }
+function clampInt(n: number, min = 1, max = 9999) { return Math.max(min, Math.min(max, Math.floor(n || 0))); }
 
 type Lieu = { nom: string; description: string; adresse: string };
 type ProductItem = { nom: string; description: string; quantite: string; unite: string };
 type ServiceItem = { nom: string; description: string; quantite: string; unite: string };
 
 type VehicleItem = {
+  // NEW: quantity support
+  qty: number;
+
   details: string; annee: string; marque: string; modele: string;
   transmission: string; distance_km: string; type_carburant: string; conso_l_100km: string;
   type_equipement_refrigeration: string; type_refrigerant: string; charge_lbs: string;
@@ -39,6 +44,7 @@ const emptyLieu: Lieu = { nom: "", description: "", adresse: "" };
 const emptyProduct: ProductItem = { nom: "", description: "", quantite: "", unite: "" };
 const emptyService: ServiceItem = { nom: "", description: "", quantite: "", unite: "" };
 const emptyVehicle: VehicleItem = {
+  qty: 1, // NEW default quantity
   details: "", annee: "", marque: "", modele: "", transmission: "", distance_km: "",
   type_carburant: "", conso_l_100km: "",
   type_equipement_refrigeration: DEFAULT_EQUIP, // defaulted
@@ -66,6 +72,9 @@ export default function ProductionAndProductsPage() {
   const [services, setServices] = useState<ServiceItem[]>([{ ...emptyService }]);
   const [vehicles, setVehicles] = useState<VehicleItem[]>([{ ...emptyVehicle }]);
   const [lookupLoadingIndex, setLookupLoadingIndex] = useState<number | null>(null);
+
+  // NEW: control whether to expand duplicates on save
+  const [expandOnSave, setExpandOnSave] = useState<boolean>(false);
 
   // Company references (file names only)
   const [companyReferences, setCompanyReferences] = useState<string[]>([]);
@@ -133,6 +142,7 @@ export default function ProductionAndProductsPage() {
   function normalizeVehicles(arr: any[]): VehicleItem[] {
     if (!Array.isArray(arr) || arr.length === 0) return [{ ...emptyVehicle }];
     return arr.map((v: any) => ({
+      qty: clampInt(Number(v?.qty) || 1), // NEW: bring forward existing qty or default 1
       details: v?.details ?? v?.nom ?? "",
       annee: v?.annee ?? "",
       marque: v?.marque ?? "",
@@ -143,7 +153,6 @@ export default function ProductionAndProductsPage() {
       conso_l_100km: v?.conso_l_100km ?? "",
       // ---- apply defaults if missing/empty ----
       type_equipement_refrigeration: v?.type_equipement_refrigeration || DEFAULT_EQUIP,
-      // accept both "R134a" and "R-134a" but store default if missing
       type_refrigerant: v?.type_refrigerant || DEFAULT_REFRIG,
       charge_lbs: (v?.charge_lbs != null && String(v?.charge_lbs) !== "") ? String(v?.charge_lbs) : DEFAULT_CHARGE,
       fuites_lbs: v?.fuites_lbs != null ? String(v?.fuites_lbs) : "",
@@ -310,6 +319,18 @@ export default function ProductionAndProductsPage() {
     }
   }, [vehicles, toast]);
 
+  // Helper to expand duplicates if requested
+  function expandVehicles(list: VehicleItem[]): VehicleItem[] {
+    const out: VehicleItem[] = [];
+    for (const v of list) {
+      const n = clampInt(v.qty || 1);
+      for (let i = 0; i < n; i++) {
+        out.push({ ...v, qty: 1 }); // each copy is qty 1
+      }
+    }
+    return out;
+  }
+
   // --- Save handler ---
   const handleSave = async () => {
     if (!companyId) {
@@ -318,6 +339,8 @@ export default function ProductionAndProductsPage() {
     }
     setSaving(true);
     try {
+      const vehiclesPayload = expandOnSave ? expandVehicles(vehicles) : vehicles;
+
       const res = await fetch("/api/company-info", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -326,13 +349,19 @@ export default function ProductionAndProductsPage() {
           production_sites: lieux,
           products,
           services,
-          vehicle_fleet: vehicles,
+          vehicle_fleet: vehiclesPayload,
           company_references: companyReferences,
         }),
       });
       const result = await res.json().catch(() => ({} as any));
       if (!res.ok) throw new Error(result?.error || "Erreur lors de la sauvegarde");
-      toast({ status: "success", title: "Données sauvegardées avec succès !" });
+      toast({
+        status: "success",
+        title: "Données sauvegardées avec succès !",
+        description: expandOnSave
+          ? "Les lignes ont été dupliquées selon les quantités."
+          : "Les quantités ont été enregistrées sur chaque ligne.",
+      });
     } catch (err: any) {
       console.error(err);
       toast({ status: "error", title: "Échec de la sauvegarde", description: err?.message ?? String(err) });
@@ -487,15 +516,33 @@ export default function ProductionAndProductsPage() {
       </Box>
 
       {/* Flotte de véhicules */}
-      <Box bg="white" p={4} borderRadius="md" boxShadow="md">
-        <HStack justify="space-between" mb={2}>
-          <Text fontWeight="bold">Liste de la flotte de véhicule</Text>
-          <Button size="sm" colorScheme="yellow" onClick={addVehicle}>Ajouter un véhicule</Button>
-        </HStack>
+      {/* Flotte de véhicules */}
+<Box
+  bg="white"
+  p={4}
+  borderRadius="md"
+  boxShadow="md"
+  // Keep left aligned with the wrapper, but let the right side go full-bleed
+  w="100%"
+  maxW="unset"
+  overflowX="auto"
+  sx={{ mr: "calc(50% - 50vw)" }}  // <- open to the right edge
+>
+  <HStack justify="space-between" mb={2}>
+    <Text fontWeight="bold">Liste de la flotte de véhicule</Text>
+    <HStack spacing={4}>
+      <HStack>
+        <Switch isChecked={expandOnSave} onChange={(e) => setExpandOnSave(e.target.checked)} colorScheme="green" />
+        <Text fontSize="sm" color="gray.600">Dupliquer à l'enregistrement</Text>
+      </HStack>
+      <Button size="sm" colorScheme="yellow" onClick={addVehicle}>Ajouter un véhicule</Button>
+    </HStack>
+  </HStack>
 
         <Table variant="simple" size="sm">
           <Thead bg="yellow.200">
             <Tr>
+              <Th>QTÉ</Th>
               <Th>DÉTAILS SUR LES VÉHICULES</Th>
               <Th colSpan={3}>ANNÉE / MARQUE / MODÈLE</Th>
               <Th>TRANSMISSION</Th>
@@ -518,6 +565,24 @@ export default function ProductionAndProductsPage() {
 
               return (
                 <Tr key={`veh-${i}`}>
+                  {/* Quantity */}
+                  <Td>
+                    <NumberInput
+                      size="sm"
+                      min={1}
+                      max={9999}
+                      value={veh.qty ?? 1}
+                      onChange={(_, num) => updateVehicle(i, "qty", clampInt(num))}
+                      w="84px"
+                    >
+                      <NumberInputField />
+                      <NumberInputStepper>
+                        <NumberIncrementStepper />
+                        <NumberDecrementStepper />
+                      </NumberInputStepper>
+                    </NumberInput>
+                  </Td>
+
                   <Td>
                     <Input value={veh.details || ""} onChange={e => updateVehicle(i, "details", e.target.value)} placeholder="Plaque, usage, notes…" />
                   </Td>
@@ -653,7 +718,7 @@ export default function ProductionAndProductsPage() {
 // import {
 //   Box, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Text, Spinner,
 //   IconButton, HStack, useToast, Select, Tag, TagLabel, TagCloseButton, Wrap, WrapItem,
-//   useColorModeValue, Switch, Flex
+//   useColorModeValue, Switch
 // } from "@chakra-ui/react";
 // import { CloseIcon } from "@chakra-ui/icons";
 // import { supabase } from "../../lib/supabaseClient";
@@ -678,21 +743,31 @@ export default function ProductionAndProductsPage() {
 //   fuites_lbs?: string; climatisation: boolean;
 // };
 
+// // ---- Defaults you asked for ----
+// const DEFAULT_EQUIP = "Climatisation - Automobile";
+// const DEFAULT_REFRIG = "R134a";
+// const DEFAULT_CHARGE = "1000";
+
 // const emptyLieu: Lieu = { nom: "", description: "", adresse: "" };
 // const emptyProduct: ProductItem = { nom: "", description: "", quantite: "", unite: "" };
 // const emptyService: ServiceItem = { nom: "", description: "", quantite: "", unite: "" };
 // const emptyVehicle: VehicleItem = {
 //   details: "", annee: "", marque: "", modele: "", transmission: "", distance_km: "",
-//   type_carburant: "", conso_l_100km: "", type_equipement_refrigeration: "",
-//   type_refrigerant: "", charge_lbs: "", fuites_lbs: "", climatisation: false,
+//   type_carburant: "", conso_l_100km: "",
+//   type_equipement_refrigeration: DEFAULT_EQUIP, // defaulted
+//   type_refrigerant: DEFAULT_REFRIG,             // defaulted
+//   charge_lbs: DEFAULT_CHARGE,                   // defaulted
+//   fuites_lbs: "", climatisation: false,
 // };
 
 // // Options pour les champs réfrigération
 // const REFRIG_EQUIP_OPTIONS = [
+//   DEFAULT_EQUIP, // include default in options
 //   "Aucun","Unité mobile (camion)","Vitrine/armoire réfrigérée","Chambre froide",
 //   "Congélateur","Pompe à chaleur","Autre",
 // ];
 // const REFRIGERANT_OPTIONS = [
+//   DEFAULT_REFRIG, // include default without the dash
 //   "R-134a","R-410A","R-404A","R-407C","R-22 (legacy)","CO₂ (R-744)","NH₃ (R-717)","Propane (R-290)","Autre",
 // ];
 
@@ -779,9 +854,11 @@ export default function ProductionAndProductsPage() {
 //       distance_km: v?.distance_km ?? "",
 //       type_carburant: v?.type_carburant ?? v?.type ?? v?.carburant ?? "",
 //       conso_l_100km: v?.conso_l_100km ?? "",
-//       type_equipement_refrigeration: v?.type_equipement_refrigeration ?? "",
-//       type_refrigerant: v?.type_refrigerant ?? "",
-//       charge_lbs: v?.charge_lbs != null ? String(v?.charge_lbs) : "",
+//       // ---- apply defaults if missing/empty ----
+//       type_equipement_refrigeration: v?.type_equipement_refrigeration || DEFAULT_EQUIP,
+//       // accept both "R134a" and "R-134a" but store default if missing
+//       type_refrigerant: v?.type_refrigerant || DEFAULT_REFRIG,
+//       charge_lbs: (v?.charge_lbs != null && String(v?.charge_lbs) !== "") ? String(v?.charge_lbs) : DEFAULT_CHARGE,
 //       fuites_lbs: v?.fuites_lbs != null ? String(v?.fuites_lbs) : "",
 //       climatisation: typeof v?.climatisation === "boolean" ? v.climatisation : Boolean(v?.clim),
 //     }));
@@ -875,78 +952,76 @@ export default function ProductionAndProductsPage() {
 //   const hoverColor = useColorModeValue("#CBD5E0", "#4A5568");
 //   const activeColor = useColorModeValue("#A0AEC0", "#718096");
 
-//   // === Vehicle lookup: call /api/vehicle and prefill fields ===
-//  // === Vehicle lookup: POST JSON directly to Cloud Run and prefill fields ===
-// const fetchAndPrefillVehicle = useCallback(async (index: number) => {
-//   const v = vehicles[index];
-//   if (!v?.annee || !v?.marque || !v?.modele) return;
+//   // === Vehicle lookup: POST JSON directly to Cloud Run and prefill fields ===
+//   const fetchAndPrefillVehicle = useCallback(async (index: number) => {
+//     const v = vehicles[index];
+//     if (!v?.annee || !v?.marque || !v?.modele) return;
 
-//   setLookupLoadingIndex(index);
-//   try {
-//     const resp = await fetch("https://vehiculecanada-592102073404.us-central1.run.app/vehicle", {
-//       method: "POST",
-//       headers: { "Content-Type": "application/json" },
-//       body: JSON.stringify({
-//         year: Number(v.annee),         // send as number (backend accepts str/int)
-//         marque: v.marque,
-//         modele: v.modele,
-//       }),
-//     });
-
-//     const data = await resp.json().catch(() => ({} as any));
-//     if (!resp.ok || !data?.ok) {
-//       throw new Error(data?.detail || data?.error || `Requête échouée (${resp.status})`);
-//     }
-
-//     const rows: Array<{ R?: string; Q?: string; U?: string }> = data.rows || [];
-//     if (!rows.length) {
-//       toast({ status: "info", title: "Aucun résultat", description: "Aucune correspondance trouvée pour ce véhicule." });
-//       return;
-//     }
-
-//     const uniq = (arr: (string | undefined)[]) =>
-//       Array.from(new Set(arr.filter(Boolean).map((x) => String(x))));
-
-//     const rVals = uniq(rows.map(r => r.R));
-//     const qVals = uniq(rows.map(r => r.Q));
-//     const uVals = uniq(rows.map(r => r.U));
-
-//     const q = qVals[0];
-//     const qNormalized = q ? q.replace(",", ".") : "";  // "9,95" -> "9.95"
-//     const u = uVals[0] || "";
-
-//     let r = "";
-//     if (rVals.length === 1) {
-//       r = rVals[0]!;
-//     } else if (rVals.length > 1) {
-//       toast({
-//         status: "info",
-//         title: "Plusieurs transmissions possibles",
-//         description: rVals.join(" / "),
-//         duration: 5000,
+//     setLookupLoadingIndex(index);
+//     try {
+//       const resp = await fetch("https://vehiculecanada-592102073404.us-central1.run.app/vehicle", {
+//         method: "POST",
+//         headers: { "Content-Type": "application/json" },
+//         body: JSON.stringify({
+//           year: Number(v.annee),         // send as number (backend accepts str/int)
+//           marque: v.marque,
+//           modele: v.modele,
+//         }),
 //       });
+
+//       const data = await resp.json().catch(() => ({} as any));
+//       if (!resp.ok || !data?.ok) {
+//         throw new Error(data?.detail || data?.error || `Requête échouée (${resp.status})`);
+//       }
+
+//       const rows: Array<{ R?: string; Q?: string; U?: string }> = data.rows || [];
+//       if (!rows.length) {
+//         toast({ status: "info", title: "Aucun résultat", description: "Aucune correspondance trouvée pour ce véhicule." });
+//         return;
+//       }
+
+//       const uniq = (arr: (string | undefined)[]) =>
+//         Array.from(new Set(arr.filter(Boolean).map((x) => String(x))));
+
+//       const rVals = uniq(rows.map(r => r.R));
+//       const qVals = uniq(rows.map(r => r.Q));
+//       const uVals = uniq(rows.map(r => r.U));
+
+//       const q = qVals[0];
+//       const qNormalized = q ? q.replace(",", ".") : "";  // "9,95" -> "9.95"
+//       const u = uVals[0] || "";
+
+//       let r = "";
+//       if (rVals.length === 1) {
+//         r = rVals[0]!;
+//       } else if (rVals.length > 1) {
+//         toast({
+//           status: "info",
+//           title: "Plusieurs transmissions possibles",
+//           description: rVals.join(" / "),
+//           duration: 5000,
+//         });
+//       }
+
+//       setVehicles(prev => {
+//         const copy = [...prev];
+//         copy[index] = {
+//           ...copy[index],
+//           type_carburant: u || copy[index].type_carburant,
+//           conso_l_100km: qNormalized || copy[index].conso_l_100km,
+//           transmission: r || copy[index].transmission,
+//         };
+//         return copy;
+//       });
+
+//       toast({ status: "success", title: "Champs préremplis", description: "Les données ont été récupérées." });
+//     } catch (err: any) {
+//       console.error(err);
+//       toast({ status: "error", title: "Erreur de recherche", description: err?.message ?? String(err) });
+//     } finally {
+//       setLookupLoadingIndex(null);
 //     }
-
-//     setVehicles(prev => {
-//       const copy = [...prev];
-//       copy[index] = {
-//         ...copy[index],
-//         type_carburant: u || copy[index].type_carburant,
-//         conso_l_100km: qNormalized || copy[index].conso_l_100km,
-//         transmission: r || copy[index].transmission,
-//       };
-//       return copy;
-//     });
-
-//     toast({ status: "success", title: "Champs préremplis", description: "Les données ont été récupérées." });
-//   } catch (err: any) {
-//     console.error(err);
-//     toast({ status: "error", title: "Erreur de recherche", description: err?.message ?? String(err) });
-//   } finally {
-//     setLookupLoadingIndex(null);
-//   }
-// }, [vehicles, toast]);
-
+//   }, [vehicles, toast]);
 
 //   // --- Save handler ---
 //   const handleSave = async () => {
@@ -1137,7 +1212,6 @@ export default function ProductionAndProductsPage() {
 //               <Th>DÉTAILS SUR LES VÉHICULES</Th>
 //               <Th colSpan={3}>ANNÉE / MARQUE / MODÈLE</Th>
 //               <Th>TRANSMISSION</Th>
-              
 //               <Th>TYPE ET CARBURANT</Th>
 //               <Th>CONSO. [L/100KM]</Th>
 //               <Th>ÉQUIPEMENT FRIGO</Th>
@@ -1163,81 +1237,78 @@ export default function ProductionAndProductsPage() {
 
 //                   {/* Cascading dropdowns */}
 //                   <Td colSpan={3}>
-//   <HStack spacing={3} align="center" w="full">
-//     {/* Année */}
-//     <Select
-//       placeholder={loadingCatalog ? "Chargement..." : "Année"}
-//       isDisabled={loadingCatalog || !!catalogError}
-//       value={veh.annee || ""}
-//       onChange={(e) => {
-//         updateVehicle(i, "annee", e.target.value);
-//         updateVehicle(i, "marque", "");
-//         updateVehicle(i, "modele", "");
-//       }}
-//       size="lg"
-//       h="48px"
-//       w={{ base: "160px", md: "220px" }}
-//     >
-//       {yearOptions.map(y => (
-//         <option key={y} value={y}>{y}</option>
-//       ))}
-//     </Select>
+//                     <HStack spacing={3} align="center" w="full">
+//                       {/* Année */}
+//                       <Select
+//                         placeholder={loadingCatalog ? "Chargement..." : "Année"}
+//                         isDisabled={loadingCatalog || !!catalogError}
+//                         value={veh.annee || ""}
+//                         onChange={(e) => {
+//                           updateVehicle(i, "annee", e.target.value);
+//                           updateVehicle(i, "marque", "");
+//                           updateVehicle(i, "modele", "");
+//                         }}
+//                         size="lg"
+//                         h="48px"
+//                         w={{ base: "160px", md: "220px" }}
+//                       >
+//                         {yearOptions.map(y => (
+//                           <option key={y} value={y}>{y}</option>
+//                         ))}
+//                       </Select>
 
-//     {/* Marque */}
-//     <Select
-//       placeholder={!veh.annee ? "Choisir année d'abord" : "Marque"}
-//       isDisabled={!veh.annee || loadingCatalog || !!catalogError}
-//       value={veh.marque || ""}
-//       onChange={(e) => {
-//         updateVehicle(i, "marque", e.target.value);
-//         updateVehicle(i, "modele", "");
-//       }}
-//       size="lg"
-//       h="48px"
-//       w={{ base: "220px", md: "320px" }}
-//     >
-//       {makeOptions.map(m => (
-//         <option key={m} value={m}>{m}</option>
-//       ))}
-//     </Select>
+//                       {/* Marque */}
+//                       <Select
+//                         placeholder={!veh.annee ? "Choisir année d'abord" : "Marque"}
+//                         isDisabled={!veh.annee || loadingCatalog || !!catalogError}
+//                         value={veh.marque || ""}
+//                         onChange={(e) => {
+//                           updateVehicle(i, "marque", e.target.value);
+//                           updateVehicle(i, "modele", "");
+//                         }}
+//                         size="lg"
+//                         h="48px"
+//                         w={{ base: "220px", md: "320px" }}
+//                       >
+//                         {makeOptions.map(m => (
+//                           <option key={m} value={m}>{m}</option>
+//                         ))}
+//                       </Select>
 
-//     {/* Modèle */}
-//     <Select
-//       placeholder={!veh.marque ? "Choisir marque d'abord" : "Modèle"}
-//       isDisabled={!veh.annee || !veh.marque || loadingCatalog || !!catalogError}
-//       value={veh.modele || ""}
-//       onChange={(e) => {
-        
-//         updateVehicle(i, "modele", e.target.value);
-//       }}
-//       size="lg"
-//       h="48px"
-//       w={{ base: "260px", md: "420px" }}
-//     >
-//       {modelOptions.map(md => (
-//         <option key={md} value={md}>{md}</option>
-//       ))}
-//     </Select>
+//                       {/* Modèle */}
+//                       <Select
+//                         placeholder={!veh.marque ? "Choisir marque d'abord" : "Modèle"}
+//                         isDisabled={!veh.annee || !veh.marque || loadingCatalog || !!catalogError}
+//                         value={veh.modele || ""}
+//                         onChange={(e) => {
+//                           updateVehicle(i, "modele", e.target.value);
+//                         }}
+//                         size="lg"
+//                         h="48px"
+//                         w={{ base: "260px", md: "420px" }}
+//                       >
+//                         {modelOptions.map(md => (
+//                           <option key={md} value={md}>{md}</option>
+//                         ))}
+//                       </Select>
 
-//     {/* Bouton de recherche */}
-//     <Button
-//       colorScheme="yellow"
-//       onClick={() => fetchAndPrefillVehicle(i)}
-//       isDisabled={!veh.annee || !veh.marque || !veh.modele}
-//       isLoading={lookupLoadingIndex === i}
-//       h="48px"
-//       px={5}
-//     >
-//       Rechercher
-//     </Button>
-//   </HStack>
-// </Td>
-
+//                       {/* Bouton de recherche */}
+//                       <Button
+//                         colorScheme="yellow"
+//                         onClick={() => fetchAndPrefillVehicle(i)}
+//                         isDisabled={!veh.annee || !veh.marque || !veh.modele}
+//                         isLoading={isThisLoading}
+//                         h="48px"
+//                         px={5}
+//                       >
+//                         Rechercher
+//                       </Button>
+//                     </HStack>
+//                   </Td>
 
 //                   <Td>
 //                     <Input value={veh.transmission || ""} onChange={e => updateVehicle(i, "transmission", e.target.value)} placeholder="Manuelle/Automatique" />
 //                   </Td>
-                  
 
 //                   <Td>
 //                     <VehicleSelect value={veh.type_carburant || ""} onChange={(val: string) => updateVehicle(i, "type_carburant", val)} />
