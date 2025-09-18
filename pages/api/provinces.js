@@ -4,7 +4,7 @@ export default async function handler(req, res) {
   }
   try {
     // Replace with your Cloud Run URL!
-    const response = await fetch("https://poste6webhook-592102073404.us-central1.run.app/provinces");
+    const response = await fetch("https://provinces-129138384907.us-central1.run.app/provinces");
     if (!response.ok) {
       return res.status(500).json({ error: "Failed to fetch provinces" });
     }

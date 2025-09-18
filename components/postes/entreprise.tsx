@@ -255,7 +255,7 @@ export default function ProductionAndProductsPage() {
 
     setLookupLoadingIndex(index);
     try {
-      const resp = await fetch("https://vehiculecanada-592102073404.us-central1.run.app/vehicle", {
+      const resp = await fetch("https://vehiculecanada-129138384907.us-central1.run.app//vehicle", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

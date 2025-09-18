@@ -83,7 +83,7 @@ export default async function handler(req, res) {
 
     // Proxy to Flask backend (multi-file support)
     const response = await fetch(
-      'https://upload-bill-592102073404.us-central1.run.app/api/upload-bill',
+      'https://upload-bill-129138384907.us-central1.run.app/api/upload-bill',
       {
         method: 'POST',
         body: proxyForm,

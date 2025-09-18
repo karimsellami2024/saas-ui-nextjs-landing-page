@@ -209,7 +209,7 @@ export function SourceB1Form({
     let webhookOk = false;
 
     try {
-      const r = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/2B1', {
+      const r = await fetch('https://allposteswebhook-129138384907.us-central1.run.app/submit/2B1', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
