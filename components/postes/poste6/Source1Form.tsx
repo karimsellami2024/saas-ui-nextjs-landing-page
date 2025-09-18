@@ -1,7 +1,8 @@
+
 import { useEffect, useState } from 'react';
 import {
   Box, Heading, Text, Table, Thead, Tbody, Tr, Th, Td,
-  Input, Button, Spinner, Stack, useColorModeValue, useToast
+  Input, Button, Spinner, Stack, useToast
 } from '@chakra-ui/react';
 import { useDropzone } from 'react-dropzone';
 import { supabase } from '../../../lib/supabaseClient';
@@ -59,10 +60,10 @@ export function SourceAForm({
       if (Array.isArray(data) && data.length > 0) {
         // Map backend response to form structure
         const extracted = data.map(item => {
-          const r = item.result || {};
+          const r = (item as any).result || {};
           // French date → yyyy-mm-dd
           let dateVal = r.date || '';
-          const months = {
+          const months: Record<string, string> = {
             janvier: '01', février: '02', mars: '03', avril: '04', mai: '05',
             juin: '06', juillet: '07', août: '08', septembre: '09',
             octobre: '10', novembre: '11', décembre: '12'
@@ -75,7 +76,7 @@ export function SourceAForm({
           }
           // Combine secondary info into references
           const references = [
-            item.filename,
+            (item as any).filename,
             r.period ? `Période: ${r.period}` : '',
             r.amount ? `Montant: ${r.amount}` : '',
             r.client_name ? `Client: ${r.client_name}` : ''
@@ -86,7 +87,7 @@ export function SourceAForm({
             province: '', // User can pick manually
             details: [{
               date: dateVal,
-              consumption: r.kwh ? r.kwh.replace(/\s/g, '') : '',
+              consumption: r.kwh ? String(r.kwh).replace(/\s/g, '') : '',
               reference: references
             }]
           };
@@ -137,6 +138,94 @@ export function SourceAForm({
       .then((data) => setProvinceOptions(data.provinces || []));
   }, []);
 
+  // =======================
+  // NEW: Prefill from /api/get-source (poste 6, source_code 6A1)
+  // =======================
+  const isDefaultEmptyForm = (groups: CompteurGroup[]) => {
+    if (groups.length !== 1) return false;
+    const g = groups[0];
+    if (g.number || g.address || g.province) return false;
+    if (g.details.length !== 1) return false;
+    const d = g.details[0];
+    return !d.date && !d.consumption && !d.reference;
+  };
+
+  const buildGroupsFromCountersInvoices = (counters: any[] = [], invoices: any[] = []): CompteurGroup[] => {
+    const byNumber: Record<string, CompteurGroup> = {};
+    (invoices || []).forEach(inv => {
+      const num = inv.number || '';
+      if (!byNumber[num]) {
+        const counter = (counters || []).find((c: any) => c.number === num) || {};
+        byNumber[num] = {
+          number: num,
+          address: counter.address || inv.address || '',
+          province: counter.province || inv.province || '',
+          details: [],
+        };
+      }
+      byNumber[num].details.push({
+        date: inv.date || '',
+        consumption: inv.consumption || '',
+        reference: inv.reference || '',
+      });
+    });
+    const groups = Object.values(byNumber);
+    if (!groups.length && counters.length) {
+      return counters.map((c: any) => ({
+        number: c.number || '',
+        address: c.address || '',
+        province: c.province || '',
+        details: [{ date: '', consumption: '', reference: '' }],
+      }));
+    }
+    return groups;
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        // get a user id
+        let activeUserId = propUserId ?? userId;
+        if (!activeUserId) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user?.id) return;
+          activeUserId = user.id;
+          setUserId(user.id);
+        }
+
+        // only hydrate if user hasn't typed anything yet
+        if (!isDefaultEmptyForm(compteurs)) return;
+
+        const qs = new URLSearchParams({
+          user_id: String(activeUserId),
+          poste_num: String(posteNum),   // 6
+          source_code: '6A1',
+        });
+        const res = await fetch(`/api/GetSourceHandler?${qs.toString()}`, { method: 'GET' });
+        if (!res.ok) return;
+        const json = await res.json();
+
+        const savedData = json?.data;
+        const savedResults = json?.results;
+
+        if (savedData && (Array.isArray(savedData.counters) || Array.isArray(savedData.invoices))) {
+          const groups = buildGroupsFromCountersInvoices(savedData.counters || [], savedData.invoices || []);
+          if (groups.length) {
+            setCompteurs(groups);
+          }
+        }
+        if (Array.isArray(savedResults) && savedResults.length) {
+          setGesResults(savedResults);
+        }
+      } catch {
+        // best-effort prefill; ignore errors silently
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [propUserId, userId, posteNum]);
+  // =======================
+
+  // ORIGINAL effect that reads from submissions/postes (UNCHANGED)
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -320,13 +409,13 @@ export function SourceAForm({
           : 'Données 6A1 sauvegardées sans résultat de calcul GES.');
       }
     } catch (error) {
-      alert('Erreur inattendue lors de la sauvegarde en base.');
+    alert('Erreur inattendue lors de la sauvegarde en base.');
     }
     setLoading(false);
   };
 
   const displayColumns = resultFields.filter(f =>
-    gesResults.some(res => res && res[f.key] !== undefined && res[f.key] !== "" && res[f.key] !== "#N/A")
+    gesResults.some(res => res && (res as any)[f.key] !== undefined && (res as any)[f.key] !== "" && (res as any)[f.key] !== "#N/A")
   );
 
   if (loading)
@@ -467,11 +556,13 @@ export function SourceAForm({
       </Button>
       <Box mt={6} bg="#e5f2fa" rounded="xl" boxShadow="md" p={4}>
         <Text fontWeight="bold" color={olive} mb={2}>Calculs et résultats</Text>
-        {(gesResults && gesResults.length > 0 && displayColumns.length > 0) ? (
+        {(gesResults && gesResults.length > 0) ? (
           <Table size="sm" variant="simple">
             <Thead>
               <Tr>
-                {displayColumns.map(f => (
+                {resultFields.filter(f =>
+                  gesResults.some(res => res && (res as any)[f.key] !== undefined && (res as any)[f.key] !== "" && (res as any)[f.key] !== "#N/A")
+                ).map(f => (
                   <Th key={f.key}>{f.label}</Th>
                 ))}
               </Tr>
@@ -479,9 +570,11 @@ export function SourceAForm({
             <Tbody>
               {gesResults.map((result, idx) => (
                 <Tr key={idx}>
-                  {displayColumns.map(f => (
+                  {resultFields.filter(f =>
+                    gesResults.some(res => res && (res as any)[f.key] !== undefined && (res as any)[f.key] !== "" && (res as any)[f.key] !== "#N/A")
+                  ).map(f => (
                     <Td fontWeight="bold" key={f.key}>
-                      {(result[f.key] && result[f.key] !== "#N/A") ? result[f.key] : "-"}
+                      {((result as any)[f.key] && (result as any)[f.key] !== "#N/A") ? (result as any)[f.key] : "-"}
                     </Td>
                   ))}
                 </Tr>
@@ -496,12 +589,12 @@ export function SourceAForm({
   );
 }
 
-
 // import { useEffect, useState } from 'react';
 // import {
 //   Box, Heading, Text, Table, Thead, Tbody, Tr, Th, Td,
-//   Input, Button, Spinner, Stack, useColorModeValue
+//   Input, Button, Spinner, Stack, useColorModeValue, useToast
 // } from '@chakra-ui/react';
+// import { useDropzone } from 'react-dropzone';
 // import { supabase } from '../../../lib/supabaseClient';
 
 // type GesResults = {
@@ -539,8 +632,95 @@ export function SourceAForm({
 //   const [submissionId, setSubmissionId] = useState<string | null>(null);
 //   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
 //   const [loading, setLoading] = useState(true);
+//   const [uploading, setUploading] = useState(false);
 
+//   const toast = useToast();
 //   const olive = '#708238';
+
+//   // Drag & drop file upload logic
+//   const onDrop = async (acceptedFiles: File[]) => {
+//     if (!acceptedFiles.length) return;
+//     setUploading(true);
+//     const formData = new FormData();
+//     acceptedFiles.forEach(file => formData.append('file', file));
+//     try {
+//       const res = await fetch('/api/upload-bill', { method: 'POST', body: formData });
+//       const data = await res.json();
+//       if (!res.ok) throw new Error(data.error || 'Erreur lors de l\'extraction');
+//       if (Array.isArray(data) && data.length > 0) {
+//         // Map backend response to form structure
+//         const extracted = data.map(item => {
+//           const r = item.result || {};
+//           // French date → yyyy-mm-dd
+//           let dateVal = r.date || '';
+//           const months = {
+//             janvier: '01', février: '02', mars: '03', avril: '04', mai: '05',
+//             juin: '06', juillet: '07', août: '08', septembre: '09',
+//             octobre: '10', novembre: '11', décembre: '12'
+//           };
+//           const frDateMatch = dateVal.match(/^(\d{1,2}) (\w+) (\d{4})$/i);
+//           if (frDateMatch) {
+//             const [, day, month, year] = frDateMatch;
+//             const mm = months[month.toLowerCase()] || '01';
+//             dateVal = `${year}-${mm}-${day.padStart(2, '0')}`;
+//           }
+//           // Combine secondary info into references
+//           const references = [
+//             item.filename,
+//             r.period ? `Période: ${r.period}` : '',
+//             r.amount ? `Montant: ${r.amount}` : '',
+//             r.client_name ? `Client: ${r.client_name}` : ''
+//           ].filter(Boolean).join(' | ');
+//           return {
+//             number: '', // Not in result, let user fill if needed
+//             address: r.address || '',
+//             province: '', // User can pick manually
+//             details: [{
+//               date: dateVal,
+//               consumption: r.kwh ? r.kwh.replace(/\s/g, '') : '',
+//               reference: references
+//             }]
+//           };
+//         });
+//         setCompteurs(extracted);
+//         toast({
+//           title: 'Factures importées!',
+//           description: 'Champs auto-remplis à partir des fichiers.',
+//           status: 'success',
+//           duration: 3000,
+//           isClosable: true,
+//         });
+//       } else {
+//         toast({
+//           title: 'Aucune donnée détectée.',
+//           description: 'Impossible de lire les fichiers.',
+//           status: 'warning',
+//           duration: 3000,
+//           isClosable: true,
+//         });
+//       }
+//     } catch (err: any) {
+//       toast({
+//         title: 'Erreur à l\'import.',
+//         description: err.message,
+//         status: 'error',
+//         duration: 3000,
+//         isClosable: true,
+//       });
+//     } finally {
+//       setUploading(false);
+//     }
+//   };
+
+//   const { getRootProps, getInputProps, isDragActive } = useDropzone({
+//     onDrop,
+//     accept: {
+//       'application/pdf': ['.pdf'],
+//       'image/*': ['.png', '.jpg', '.jpeg'],
+//     },
+//     multiple: true,
+//     disabled: uploading,
+//   });
 
 //   useEffect(() => {
 //     fetch("/api/provinces")
@@ -747,12 +927,35 @@ export function SourceAForm({
 //       </Box>
 //     );
 
-//   // --- CONTENT BLOCK (no outer full page spacing) ---
 //   return (
 //     <Box bg="white" rounded="2xl" boxShadow="xl" p={6} mb={4}>
 //       <Heading as="h3" size="md" color={olive} mb={4}>
 //         {posteLabel}
 //       </Heading>
+
+//       {/* Drag & Drop Bill Upload */}
+//       <Box
+//         mt={2}
+//         mb={2}
+//         p={4}
+//         borderWidth={2}
+//         borderStyle="dashed"
+//         borderRadius="md"
+//         bg="#f9fafb"
+//         textAlign="center"
+//         style={{ cursor: 'pointer', opacity: uploading ? 0.6 : 1 }}
+//         {...getRootProps()}
+//       >
+//         <input {...getInputProps()} />
+//         <Text>
+//           {uploading
+//             ? 'Extraction en cours...'
+//             : isDragActive
+//               ? "Déposez les fichiers ici..."
+//               : 'Glissez-déposez une ou plusieurs factures PDF ou images ici, ou cliquez pour sélectionner'}
+//         </Text>
+//       </Box>
+
 //       <Table size="sm" variant="simple">
 //         <Thead>
 //           <Tr>
