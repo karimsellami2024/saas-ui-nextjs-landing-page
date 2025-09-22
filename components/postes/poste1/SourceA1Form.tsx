@@ -1,6 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Select, Text,
+  Spinner, Stack
 } from '@chakra-ui/react';
 import { supabase } from '../../../lib/supabaseClient';
 import { usePrefillPosteSource } from 'components/postes/HookForGetDataSource';
@@ -31,8 +32,8 @@ export interface Source1AFormProps {
   setRows: React.Dispatch<React.SetStateAction<Source1ARow[]>>;
   highlight?: string;
   tableBg?: string;
-  posteSourceId: string;
-  userId: string;
+  posteSourceId: string | null;
+  userId?: string | null;
   gesResults?: GesResult[];
   setGesResults: (results: GesResult[]) => void;
 }
@@ -70,43 +71,138 @@ export function Source1AForm({
   highlight = '#245a7c',
   tableBg = '#f3f6ef',
   posteSourceId,
-  userId,
+  userId: propUserId,
   gesResults = [],
   setGesResults,
 }: Source1AFormProps) {
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(propUserId ?? null);
 
-  // === NEW: Prefill from /api/get-source (poste 1, source 1A1) ===
+  // === Prefill (poste 1, source 1A1) ===
   const {
     loading: prefillLoading,
     error: prefillError,
     data: prefillData,
     results: prefillResults,
-  } = usePrefillPosteSource(userId, 1, '1A1', { rows: DEFAULT_ROWS });
+  } = usePrefillPosteSource((userId ?? '') as string, 1, '1A1', { rows: DEFAULT_ROWS });
 
-  // When prefill returns, update parent-managed rows + results once
-  useEffect(() => {
-    if (prefillData?.rows) {
-      const dataRows = Array.isArray(prefillData.rows) ? prefillData.rows : DEFAULT_ROWS;
-      // ensure each row matches Source1ARow shape
-      setRows(
-        dataRows.length ? dataRows : DEFAULT_ROWS
-      );
-    } else if (!rows?.length) {
-      setRows(DEFAULT_ROWS);
-    }
-    if (prefillResults) {
-      // expecting an array of result rows; if single object, wrap it
-      const normalized = Array.isArray(prefillResults) ? prefillResults : [prefillResults];
-      setGesResults(normalized as GesResult[]);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [prefillData, prefillResults]);
+  // Is the form pristine (untouched)?
+  const isPristine = useMemo(() => {
+    if (!rows || rows.length === 0) return true;
+    if (rows.length !== 1) return false;
+    const r = rows[0];
+    return (
+      !r.equipment &&
+      !r.description &&
+      !r.date &&
+      !r.site &&
+      !r.product &&
+      !r.reference &&
+      !r.usageAndFuel &&
+      !r.qty &&
+      !r.unit
+    );
+  }, [rows]);
 
   // NEW: dropdown options from Supabase
   const [siteOptions, setSiteOptions] = useState<string[]>([]);
   const [productOptions, setProductOptions] = useState<string[]>([]);
   const [referenceOptions, setReferenceOptions] = useState<string[]>([]);
+
+  // Load user & saved draft/results from DB (latest submission/poste)
+  useEffect(() => {
+    (async () => {
+      setLoading(true);
+
+      let activeUserId = propUserId ?? null;
+      if (!activeUserId) {
+        const { data: auth } = await supabase.auth.getUser();
+        if (auth?.user) activeUserId = auth.user.id;
+      }
+      if (!activeUserId) {
+        // still allow prefill hook to show something if it can
+        setLoading(false);
+        return;
+      }
+      setUserId(activeUserId);
+
+      // Load saved data/results
+      const { data, error } = await supabase
+        .from('submissions')
+        .select(
+          `
+          id,
+          postes!postes_submission_id_fkey (
+            id, poste_num, data, results
+          )
+        `
+        )
+        .eq('user_id', activeUserId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (!error && data?.postes) {
+        const poste = posteSourceId
+          ? data.postes.find((p: any) => p.id === posteSourceId)
+          : data.postes.find((p: any) => p.poste_num === 1);
+
+        if (poste) {
+          let parsed = poste.data;
+          if (typeof parsed === 'string') {
+            try { parsed = JSON.parse(parsed); } catch { parsed = {}; }
+          }
+          if (parsed?.rows && Array.isArray(parsed.rows)) {
+            setRows(parsed.rows.map((r: any) => ({
+              equipment: r.equipment ?? '',
+              description: r.description ?? '',
+              date: r.date ?? '',
+              site: r.site ?? '',
+              product: r.product ?? '',
+              reference: r.reference ?? '',
+              usageAndFuel: r.usageAndFuel ?? r.fuel ?? '',
+              qty: String(r.qty ?? ''),
+              unit: r.unit ?? '',
+            })));
+          } else if (!rows?.length) {
+            setRows(DEFAULT_ROWS);
+          }
+
+          if (Array.isArray(poste.results)) {
+            setGesResults(poste.results as GesResult[]);
+          }
+        } else if (!rows?.length) {
+          setRows(DEFAULT_ROWS);
+        }
+      } else if (!rows?.length) {
+        setRows(DEFAULT_ROWS);
+      }
+
+      setLoading(false);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [posteSourceId, propUserId]);
+
+  // Hydrate from prefill only if pristine and not loading DB
+  useEffect(() => {
+    if (loading || prefillLoading) return;
+    if (!isPristine) return;
+
+    if (prefillData?.rows) {
+      const dataRows = Array.isArray(prefillData.rows) ? prefillData.rows : DEFAULT_ROWS;
+      setRows(dataRows.length ? dataRows : DEFAULT_ROWS);
+    } else if (!rows?.length) {
+      setRows(DEFAULT_ROWS);
+    }
+
+    if (prefillResults) {
+      const normalized = Array.isArray(prefillResults) ? prefillResults : [prefillResults];
+      setGesResults(normalized as GesResult[]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefillData, prefillResults, prefillLoading, loading, isPristine]);
 
   // Load company dropdown data (sites, products, references)
   useEffect(() => {
@@ -145,12 +241,12 @@ export function Source1AForm({
         setProductOptions(uniq(prods));
         setReferenceOptions(uniq(refs));
       } catch {
-        // silent fail; dropdowns will just be empty
+        // silent fail; dropdowns remain empty
       }
     })();
   }, [userId]);
 
-  // Validate required fields
+  // Validation (for manual submit)
   const validateData = (rws: Source1ARow[]) =>
     rws.length > 0 &&
     rws.every(row =>
@@ -162,7 +258,78 @@ export function Source1AForm({
       row.unit
     );
 
-  // --- SUBMIT ---
+  // ---------- Debounced autosave (draft) ----------
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedJSONRef = useRef<string>('');
+
+  const makeSanitizedRows = (rws: Source1ARow[]) =>
+    rws.map(row => ({
+      equipment: row.equipment,
+      description: row.description,
+      date: row.date,
+      site: row.site,
+      product: row.product,
+      reference: row.reference,
+      usageAndFuel: row.usageAndFuel,
+      qty: parseFloat(String(row.qty)) || 0,
+      unit: row.unit,
+    }));
+
+  const saveDraft = async () => {
+    if (!userId || !posteSourceId) return;
+
+    // avoid redundant saves
+    const jsonNow = JSON.stringify(rows);
+    if (jsonNow === lastSavedJSONRef.current) return;
+
+    setSaving(true);
+    setSaveMsg('Enregistrement…');
+
+    const payload = {
+      user_id: userId,
+      poste_source_id: posteSourceId,
+      poste_num: 1,
+      source_code: '1A1',
+      data: { rows: makeSanitizedRows(rows) },
+      results: gesResults ?? [],
+    };
+
+    try {
+      const dbResponse = await fetch('/api/4submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const dbResult = await dbResponse.json();
+      if (!dbResponse.ok) {
+        setSaveMsg('Erreur d’enregistrement');
+        console.error('Autosave DB error:', dbResult?.error || dbResult);
+      } else {
+        lastSavedJSONRef.current = jsonNow;
+        setSaveMsg('Enregistré');
+      }
+    } catch (e) {
+      console.error('Autosave network error:', e);
+      setSaveMsg('Erreur réseau');
+    } finally {
+      setSaving(false);
+      setTimeout(() => setSaveMsg(null), 1500);
+    }
+  };
+
+  useEffect(() => {
+    if (!userId || !posteSourceId) return;
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(saveDraft, 1000); // 1s after last keystroke
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows, userId, posteSourceId]);
+
+  // ---------- Manual submit (compute + save) ----------
+  const [submitting, setSubmitting] = useState(false);
+
   const handleSubmit = async () => {
     if (!posteSourceId || !userId) {
       alert('Champs obligatoires manquants (posteSourceId ou userId)');
@@ -172,25 +339,21 @@ export function Source1AForm({
       alert('Veuillez remplir tous les champs requis.');
       return;
     }
-    setLoading(true);
+    setSubmitting(true);
+    setGesResults([]);
 
-    // 1. Sanitize rows
-    const sanitizedRows = rows.map(row => ({
-      ...row,
-      qty: parseFloat(String(row.qty)) || 0,
-    }));
     const payload = {
       user_id: userId,
       poste_source_id: posteSourceId,
       poste_num: 1, // 1A1
       source_code: '1A1',
-      data: { rows: sanitizedRows },
+      data: { rows: makeSanitizedRows(rows) },
     };
 
-    let results: any[] = [];
+    let results: GesResult[] = [];
     let webhookOk = false;
 
-    // 2. Cloud Run webhook call
+    // Cloud Run webhook call
     try {
       const response = await fetch(
         'https://allposteswebhook-129138384907.us-central1.run.app/submit/1A1',
@@ -211,7 +374,7 @@ export function Source1AForm({
       alert('Erreur réseau lors du calcul Cloud Run.');
     }
 
-    // 3. Save to DB
+    // Save to DB with results
     try {
       const dbPayload = { ...payload, results };
       const dbResponse = await fetch('/api/4submit', {
@@ -223,7 +386,8 @@ export function Source1AForm({
       if (!dbResponse.ok) {
         alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
       } else {
-        setGesResults(results as GesResult[]);
+        setGesResults(results);
+        lastSavedJSONRef.current = JSON.stringify(rows);
         alert(
           webhookOk
             ? 'Données 1A1 calculées et sauvegardées avec succès!'
@@ -234,7 +398,7 @@ export function Source1AForm({
       alert('Erreur inattendue lors de la sauvegarde en base.');
     }
 
-    setLoading(false);
+    setSubmitting(false);
   };
 
   // row helpers
@@ -279,18 +443,29 @@ export function Source1AForm({
     });
   };
 
+  if (loading || prefillLoading) {
+    return (
+      <Box display="flex" alignItems="center" justifyContent="center" minH="300px">
+        <Spinner color={highlight} size="xl" />
+      </Box>
+    );
+  }
+
   return (
     <Box bg="white" rounded="2xl" boxShadow="xl" p={6} mb={4}>
-      <Heading as="h3" size="md" color={highlight} mb={4}>
+      <Heading as="h3" size="md" color={highlight} mb={2}>
         Chauffage des bâtiments et équipements fixes – Source 1A1
       </Heading>
 
-      {prefillLoading && (
-        <Text mb={2} fontSize="sm" color="gray.500">Chargement des données enregistrées…</Text>
-      )}
-      {prefillError && (
-        <Text mb={2} fontSize="sm" color="red.500">Erreur de préchargement : {prefillError}</Text>
-      )}
+      <Stack direction="row" align="center" spacing={3} mb={4}>
+        {saving && <Spinner size="sm" color={highlight} />}
+        <Text fontSize="sm" color="gray.600">
+          {saveMsg ?? 'Saisie automatique activée'}
+        </Text>
+        {prefillError && (
+          <Text fontSize="sm" color="red.500">Erreur de préchargement : {String(prefillError)}</Text>
+        )}
+      </Stack>
 
       <Table size="sm" variant="simple" bg={tableBg}>
         <Thead>
@@ -421,7 +596,7 @@ export function Source1AForm({
       <Button mt={3} colorScheme="blue" onClick={addRow}>
         Ajouter une ligne
       </Button>
-      <Button mt={3} ml={4} colorScheme="green" onClick={handleSubmit} isLoading={loading}>
+      <Button mt={3} ml={4} colorScheme="green" onClick={handleSubmit} isLoading={submitting}>
         Soumettre
       </Button>
 
@@ -459,11 +634,12 @@ export function Source1AForm({
 
 
 
-// import React, { useEffect, useMemo, useState } from 'react';
+// import React, { useEffect, useState } from 'react';
 // import {
 //   Box, Heading, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Select, Text,
 // } from '@chakra-ui/react';
 // import { supabase } from '../../../lib/supabaseClient';
+// import { usePrefillPosteSource } from 'components/postes/HookForGetDataSource';
 
 // export type Source1ARow = {
 //   equipment: string;
@@ -501,9 +677,22 @@ export function Source1AForm({
 //   'Génératrice - Mazout [L]',
 //   'Chauffage - Bois [kg]',
 //   'Chauffage - Propane [L]',
-//   // Add more as needed
 // ];
 // const UNIT_OPTIONS = ['L', 'kg'];
+
+// const DEFAULT_ROWS: Source1ARow[] = [
+//   {
+//     equipment: '',
+//     description: '',
+//     date: '',
+//     site: '',
+//     product: '',
+//     reference: '',
+//     usageAndFuel: '',
+//     qty: '',
+//     unit: '',
+//   },
+// ];
 
 // // helper to parse unit from a fuel option e.g. "... [L]" -> "L"
 // const parseUnitFromFuel = (fuelLabel: string) => {
@@ -522,6 +711,33 @@ export function Source1AForm({
 //   setGesResults,
 // }: Source1AFormProps) {
 //   const [loading, setLoading] = useState(false);
+
+//   // === NEW: Prefill from /api/get-source (poste 1, source 1A1) ===
+//   const {
+//     loading: prefillLoading,
+//     error: prefillError,
+//     data: prefillData,
+//     results: prefillResults,
+//   } = usePrefillPosteSource(userId, 1, '1A1', { rows: DEFAULT_ROWS });
+
+//   // When prefill returns, update parent-managed rows + results once
+//   useEffect(() => {
+//     if (prefillData?.rows) {
+//       const dataRows = Array.isArray(prefillData.rows) ? prefillData.rows : DEFAULT_ROWS;
+//       // ensure each row matches Source1ARow shape
+//       setRows(
+//         dataRows.length ? dataRows : DEFAULT_ROWS
+//       );
+//     } else if (!rows?.length) {
+//       setRows(DEFAULT_ROWS);
+//     }
+//     if (prefillResults) {
+//       // expecting an array of result rows; if single object, wrap it
+//       const normalized = Array.isArray(prefillResults) ? prefillResults : [prefillResults];
+//       setGesResults(normalized as GesResult[]);
+//     }
+//     // eslint-disable-next-line react-hooks/exhaustive-deps
+//   }, [prefillData, prefillResults]);
 
 //   // NEW: dropdown options from Supabase
 //   const [siteOptions, setSiteOptions] = useState<string[]>([]);
@@ -560,9 +776,7 @@ export function Source1AForm({
 //           ? (company.company_references as any[]).map(r => String(r)).filter(Boolean)
 //           : [];
 
-//         // Deduplicate
 //         const uniq = (arr: string[]) => Array.from(new Set(arr));
-
 //         setSiteOptions(uniq(sites));
 //         setProductOptions(uniq(prods));
 //         setReferenceOptions(uniq(refs));
@@ -573,9 +787,9 @@ export function Source1AForm({
 //   }, [userId]);
 
 //   // Validate required fields
-//   const validateData = (rows: Source1ARow[]) =>
-//     rows.length > 0 &&
-//     rows.every(row =>
+//   const validateData = (rws: Source1ARow[]) =>
+//     rws.length > 0 &&
+//     rws.every(row =>
 //       row.equipment &&
 //       row.site &&
 //       row.product &&
@@ -615,7 +829,7 @@ export function Source1AForm({
 //     // 2. Cloud Run webhook call
 //     try {
 //       const response = await fetch(
-//         'https://allposteswebhook-592102073404.us-central1.run.app/submit/1A1',
+//         'https://allposteswebhook-129138384907.us-central1.run.app/submit/1A1',
 //         {
 //           method: 'POST',
 //           headers: { 'Content-Type': 'application/json' },
@@ -645,7 +859,7 @@ export function Source1AForm({
 //       if (!dbResponse.ok) {
 //         alert('Erreur lors de la sauvegarde en base : ' + (dbResult.error || ''));
 //       } else {
-//         setGesResults(results);
+//         setGesResults(results as GesResult[]);
 //         alert(
 //           webhookOk
 //             ? 'Données 1A1 calculées et sauvegardées avec succès!'
@@ -706,6 +920,14 @@ export function Source1AForm({
 //       <Heading as="h3" size="md" color={highlight} mb={4}>
 //         Chauffage des bâtiments et équipements fixes – Source 1A1
 //       </Heading>
+
+//       {prefillLoading && (
+//         <Text mb={2} fontSize="sm" color="gray.500">Chargement des données enregistrées…</Text>
+//       )}
+//       {prefillError && (
+//         <Text mb={2} fontSize="sm" color="red.500">Erreur de préchargement : {prefillError}</Text>
+//       )}
+
 //       <Table size="sm" variant="simple" bg={tableBg}>
 //         <Thead>
 //           <Tr>
@@ -807,13 +1029,13 @@ export function Source1AForm({
 
 //               <Td>
 //                 <Select
-//                     value={row.unit}
-//                     onChange={e => updateRowField(idx, 'unit', e.target.value)}
-//                     placeholder="Unité"
-//                   >
-//                     {UNIT_OPTIONS.map(opt => (
-//                       <option key={opt} value={opt}>{opt}</option>
-//                     ))}
+//                   value={row.unit}
+//                   onChange={e => updateRowField(idx, 'unit', e.target.value)}
+//                   placeholder="Unité"
+//                 >
+//                   {UNIT_OPTIONS.map(opt => (
+//                     <option key={opt} value={opt}>{opt}</option>
+//                   ))}
 //                 </Select>
 //               </Td>
 

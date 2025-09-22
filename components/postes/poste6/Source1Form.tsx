@@ -1,11 +1,12 @@
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Box, Heading, Text, Table, Thead, Tbody, Tr, Th, Td,
-  Input, Button, Spinner, Stack, useToast
+  Input, Button, Spinner, Stack, useToast, HStack, Icon
 } from '@chakra-ui/react';
 import { useDropzone } from 'react-dropzone';
 import { supabase } from '../../../lib/supabaseClient';
+import { CheckCircleIcon } from '@chakra-ui/icons';
 
 type GesResults = {
   total_co2_gco2e: number | string;
@@ -44,6 +45,11 @@ export function SourceAForm({
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
 
+  // === AUTOSAVE additions ===
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const lastSavedHashRef = useRef<string>("");      // prevent duplicate saves
+  const debounceTimerRef = useRef<any>(null);
   const toast = useToast();
   const olive = '#708238';
 
@@ -82,9 +88,9 @@ export function SourceAForm({
             r.client_name ? `Client: ${r.client_name}` : ''
           ].filter(Boolean).join(' | ');
           return {
-            number: '', // Not in result, let user fill if needed
+            number: '',
             address: r.address || '',
-            province: '', // User can pick manually
+            province: '',
             details: [{
               date: dateVal,
               consumption: r.kwh ? String(r.kwh).replace(/\s/g, '') : '',
@@ -93,6 +99,8 @@ export function SourceAForm({
           };
         });
         setCompteurs(extracted);
+        // Trigger autosave after drop
+        scheduleAutosave();
         toast({
           title: 'Factures importées!',
           description: 'Champs auto-remplis à partir des fichiers.',
@@ -139,7 +147,7 @@ export function SourceAForm({
   }, []);
 
   // =======================
-  // NEW: Prefill from /api/get-source (poste 6, source_code 6A1)
+  // Prefill (unchanged)
   // =======================
   const isDefaultEmptyForm = (groups: CompteurGroup[]) => {
     if (groups.length !== 1) return false;
@@ -192,13 +200,12 @@ export function SourceAForm({
           activeUserId = user.id;
           setUserId(user.id);
         }
-
-        // only hydrate if user hasn't typed anything yet
+        // hydrate only if untouched
         if (!isDefaultEmptyForm(compteurs)) return;
 
         const qs = new URLSearchParams({
           user_id: String(activeUserId),
-          poste_num: String(posteNum),   // 6
+          poste_num: String(posteNum),
           source_code: '6A1',
         });
         const res = await fetch(`/api/GetSourceHandler?${qs.toString()}`, { method: 'GET' });
@@ -218,14 +225,13 @@ export function SourceAForm({
           setGesResults(savedResults);
         }
       } catch {
-        // best-effort prefill; ignore errors silently
+        // ignore
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [propUserId, userId, posteNum]);
-  // =======================
 
-  // ORIGINAL effect that reads from submissions/postes (UNCHANGED)
+  // ORIGINAL submissions/postes load (unchanged)
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -300,40 +306,142 @@ export function SourceAForm({
   }, [propUserId, initialPosteId, posteNum]);
 
   // --- Group logic ---
-  const addCompteur = () => setCompteurs(prev => [
-    ...prev,
-    { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] },
-  ]);
-  const removeCompteur = (gIdx: number) => setCompteurs(prev => prev.filter((_, idx) => idx !== gIdx));
+  const addCompteur = () => { setCompteurs(prev => [...prev, { number: '', address: '', province: '', details: [{ date: '', consumption: '', reference: '' }] }]); scheduleAutosave(); };
+  const removeCompteur = (gIdx: number) => { setCompteurs(prev => prev.filter((_, idx) => idx !== gIdx)); scheduleAutosave(); };
   type CompteurFieldKey = 'number' | 'address' | 'province';
   const updateCompteurField = (gIdx: number, key: CompteurFieldKey, value: string) => {
     const newList = [...compteurs];
     newList[gIdx][key] = value;
     setCompteurs(newList);
+    scheduleAutosave(); // === AUTOSAVE
   };
   const addDetailRow = (gIdx: number) => {
     const newList = [...compteurs];
     newList[gIdx].details.push({ date: '', consumption: '', reference: '' });
     setCompteurs(newList);
+    scheduleAutosave(); // === AUTOSAVE
   };
   const removeDetailRow = (gIdx: number, dIdx: number) => {
     const newList = [...compteurs];
     newList[gIdx].details.splice(dIdx, 1);
     if (newList[gIdx].details.length === 0) newList.splice(gIdx, 1);
     setCompteurs(newList);
+    scheduleAutosave(); // === AUTOSAVE
   };
   const updateDetailField = (gIdx: number, dIdx: number, key: keyof CompteurDetailRow, value: string) => {
     const newList = [...compteurs];
     newList[gIdx].details[dIdx][key] = value;
     setCompteurs(newList);
+    scheduleAutosave(); // === AUTOSAVE
   };
 
-  const validateData = (compteurs: CompteurGroup[]) =>
-    compteurs.length > 0 && compteurs.every(group =>
+  const validateData = (groups: CompteurGroup[]) =>
+    groups.length > 0 && groups.every(group =>
       group.number && group.address && group.province &&
       group.details.every(detail => detail.date && detail.consumption)
     );
 
+  // === AUTOSAVE: build payload + hash ===
+  const buildPayload = (groups: CompteurGroup[]) => {
+    const counters = groups.map(group => ({
+      number: group.number,
+      address: group.address,
+      province: group.province,
+    }));
+    const invoices = groups.flatMap(group =>
+      group.details.map(detail => ({
+        number: group.number,
+        address: group.address,
+        province: group.province,
+        date: detail.date,
+        consumption: detail.consumption,
+        reference: detail.reference,
+      }))
+    );
+    return { counters, invoices };
+  };
+
+  const payloadHash = useMemo(() => {
+    try {
+      const base = buildPayload(compteurs);
+      return JSON.stringify(base);
+    } catch {
+      return "";
+    }
+  }, [compteurs]);
+
+  // === AUTOSAVE: debounced scheduler ===
+  function scheduleAutosave() {
+    if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = setTimeout(() => {
+      void autosave(); // fire-and-forget
+    }, 800); // user "finishes inputting"
+  }
+
+  // === AUTOSAVE: main function ===
+  const autosave = async () => {
+    if (!userId || !posteId) return;                    // need IDs to save
+    const base = buildPayload(compteurs);
+    const baseHash = JSON.stringify(base);
+    if (baseHash === lastSavedHashRef.current) return;  // skip identical state
+
+    setAutoSaving(true);
+    setJustSaved(false);
+
+    let results: GesResults[] = [];
+
+    try {
+      // If valid → compute results first
+      if (validateData(compteurs)) {
+        try {
+          const resp = await fetch('https://allposteswebhook-129138384907.us-central1.run.app/submit/6A1', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_id: userId,
+              poste_source_id: posteId,
+              source_code: '6A1',
+              poste_num: 6,
+              data: base,
+            }),
+          });
+          const json = await resp.json();
+          if (resp.ok && Array.isArray(json.results)) {
+            results = json.results as GesResults[];
+            setGesResults(results);
+          }
+        } catch {
+          // Silent: if webhook fails, we still save the draft without results
+        }
+      }
+
+      // Save to DB (draft or full)
+      const dbPayload = {
+        user_id: userId,
+        poste_source_id: posteId,
+        source_code: '6A1',
+        poste_num: 6,
+        data: base,
+        results,
+      };
+
+      const dbResp = await fetch('/api/4submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dbPayload),
+      });
+
+      if (dbResp.ok) {
+        lastSavedHashRef.current = baseHash;
+        setJustSaved(true);
+        setTimeout(() => setJustSaved(false), 1500);
+      }
+    } finally {
+      setAutoSaving(false);
+    }
+  };
+
+  // Manual submit (kept)
   const handleSubmit = async () => {
     if (!userId || !posteId) {
       alert("Champs obligatoires manquants (posteId ou userId)");
@@ -346,28 +454,13 @@ export function SourceAForm({
     setGesResults([]);
     setLoading(true);
 
-    // 1. Sanitize/mapping for backend
-    const counters = compteurs.map(group => ({
-      number: group.number,
-      address: group.address,
-      province: group.province,
-    }));
-    const invoices = compteurs.flatMap(group =>
-      group.details.map(detail => ({
-        number: group.number,
-        address: group.address,
-        province: group.province,
-        date: detail.date,
-        consumption: detail.consumption,
-        reference: detail.reference,
-      }))
-    );
+    const data = buildPayload(compteurs);
     const payload = {
       user_id: userId,
       poste_source_id: posteId,
       source_code: '6A1',
       poste_num: 6,
-      data: { counters, invoices },
+      data,
     };
 
     let results: GesResults[] = [];
@@ -391,7 +484,7 @@ export function SourceAForm({
       alert('Erreur réseau lors du calcul Cloud Run.');
     }
 
-    // 3. Save to your database with the GENERAL 4submit endpoint!
+    // 3. Save to database
     try {
       const dbPayload = { ...payload, results };
       const dbResponse = await fetch('/api/4submit', {
@@ -409,7 +502,7 @@ export function SourceAForm({
           : 'Données 6A1 sauvegardées sans résultat de calcul GES.');
       }
     } catch (error) {
-    alert('Erreur inattendue lors de la sauvegarde en base.');
+      alert('Erreur inattendue lors de la sauvegarde en base.');
     }
     setLoading(false);
   };
@@ -427,9 +520,24 @@ export function SourceAForm({
 
   return (
     <Box bg="white" rounded="2xl" boxShadow="xl" p={6} mb={4}>
-      <Heading as="h3" size="md" color={olive} mb={4}>
-        {posteLabel}
-      </Heading>
+      <HStack justify="space-between" align="center" mb={4}>
+        <Heading as="h3" size="md" color={olive}>
+          {posteLabel}
+        </Heading>
+        {/* === AUTOSAVE status === */}
+        <HStack spacing={3} minW="160px" justify="flex-end">
+          {autoSaving && (
+            <HStack color="gray.600">
+              <Spinner size="sm" /> <Text fontSize="sm">Enregistrement…</Text>
+            </HStack>
+          )}
+          {!autoSaving && justSaved && (
+            <HStack color="green.600">
+              <Icon as={CheckCircleIcon} /> <Text fontSize="sm">Enregistré</Text>
+            </HStack>
+          )}
+        </HStack>
+      </HStack>
 
       {/* Drag & Drop Bill Upload */}
       <Box
@@ -548,12 +656,14 @@ export function SourceAForm({
           )}
         </Tbody>
       </Table>
+
       <Button mt={3} colorScheme="green" onClick={addCompteur}>
         Ajouter un compteur
       </Button>
       <Button mt={3} ml={4} colorScheme="blue" onClick={handleSubmit}>
         Soumettre
       </Button>
+
       <Box mt={6} bg="#e5f2fa" rounded="xl" boxShadow="md" p={4}>
         <Text fontWeight="bold" color={olive} mb={2}>Calculs et résultats</Text>
         {(gesResults && gesResults.length > 0) ? (
@@ -589,10 +699,11 @@ export function SourceAForm({
   );
 }
 
+
 // import { useEffect, useState } from 'react';
 // import {
 //   Box, Heading, Text, Table, Thead, Tbody, Tr, Th, Td,
-//   Input, Button, Spinner, Stack, useColorModeValue, useToast
+//   Input, Button, Spinner, Stack, useToast
 // } from '@chakra-ui/react';
 // import { useDropzone } from 'react-dropzone';
 // import { supabase } from '../../../lib/supabaseClient';
@@ -650,10 +761,10 @@ export function SourceAForm({
 //       if (Array.isArray(data) && data.length > 0) {
 //         // Map backend response to form structure
 //         const extracted = data.map(item => {
-//           const r = item.result || {};
+//           const r = (item as any).result || {};
 //           // French date → yyyy-mm-dd
 //           let dateVal = r.date || '';
-//           const months = {
+//           const months: Record<string, string> = {
 //             janvier: '01', février: '02', mars: '03', avril: '04', mai: '05',
 //             juin: '06', juillet: '07', août: '08', septembre: '09',
 //             octobre: '10', novembre: '11', décembre: '12'
@@ -666,7 +777,7 @@ export function SourceAForm({
 //           }
 //           // Combine secondary info into references
 //           const references = [
-//             item.filename,
+//             (item as any).filename,
 //             r.period ? `Période: ${r.period}` : '',
 //             r.amount ? `Montant: ${r.amount}` : '',
 //             r.client_name ? `Client: ${r.client_name}` : ''
@@ -677,7 +788,7 @@ export function SourceAForm({
 //             province: '', // User can pick manually
 //             details: [{
 //               date: dateVal,
-//               consumption: r.kwh ? r.kwh.replace(/\s/g, '') : '',
+//               consumption: r.kwh ? String(r.kwh).replace(/\s/g, '') : '',
 //               reference: references
 //             }]
 //           };
@@ -728,6 +839,94 @@ export function SourceAForm({
 //       .then((data) => setProvinceOptions(data.provinces || []));
 //   }, []);
 
+//   // =======================
+//   // NEW: Prefill from /api/get-source (poste 6, source_code 6A1)
+//   // =======================
+//   const isDefaultEmptyForm = (groups: CompteurGroup[]) => {
+//     if (groups.length !== 1) return false;
+//     const g = groups[0];
+//     if (g.number || g.address || g.province) return false;
+//     if (g.details.length !== 1) return false;
+//     const d = g.details[0];
+//     return !d.date && !d.consumption && !d.reference;
+//   };
+
+//   const buildGroupsFromCountersInvoices = (counters: any[] = [], invoices: any[] = []): CompteurGroup[] => {
+//     const byNumber: Record<string, CompteurGroup> = {};
+//     (invoices || []).forEach(inv => {
+//       const num = inv.number || '';
+//       if (!byNumber[num]) {
+//         const counter = (counters || []).find((c: any) => c.number === num) || {};
+//         byNumber[num] = {
+//           number: num,
+//           address: counter.address || inv.address || '',
+//           province: counter.province || inv.province || '',
+//           details: [],
+//         };
+//       }
+//       byNumber[num].details.push({
+//         date: inv.date || '',
+//         consumption: inv.consumption || '',
+//         reference: inv.reference || '',
+//       });
+//     });
+//     const groups = Object.values(byNumber);
+//     if (!groups.length && counters.length) {
+//       return counters.map((c: any) => ({
+//         number: c.number || '',
+//         address: c.address || '',
+//         province: c.province || '',
+//         details: [{ date: '', consumption: '', reference: '' }],
+//       }));
+//     }
+//     return groups;
+//   };
+
+//   useEffect(() => {
+//     (async () => {
+//       try {
+//         // get a user id
+//         let activeUserId = propUserId ?? userId;
+//         if (!activeUserId) {
+//           const { data: { user } } = await supabase.auth.getUser();
+//           if (!user?.id) return;
+//           activeUserId = user.id;
+//           setUserId(user.id);
+//         }
+
+//         // only hydrate if user hasn't typed anything yet
+//         if (!isDefaultEmptyForm(compteurs)) return;
+
+//         const qs = new URLSearchParams({
+//           user_id: String(activeUserId),
+//           poste_num: String(posteNum),   // 6
+//           source_code: '6A1',
+//         });
+//         const res = await fetch(`/api/GetSourceHandler?${qs.toString()}`, { method: 'GET' });
+//         if (!res.ok) return;
+//         const json = await res.json();
+
+//         const savedData = json?.data;
+//         const savedResults = json?.results;
+
+//         if (savedData && (Array.isArray(savedData.counters) || Array.isArray(savedData.invoices))) {
+//           const groups = buildGroupsFromCountersInvoices(savedData.counters || [], savedData.invoices || []);
+//           if (groups.length) {
+//             setCompteurs(groups);
+//           }
+//         }
+//         if (Array.isArray(savedResults) && savedResults.length) {
+//           setGesResults(savedResults);
+//         }
+//       } catch {
+//         // best-effort prefill; ignore errors silently
+//       }
+//     })();
+//     // eslint-disable-next-line react-hooks/exhaustive-deps
+//   }, [propUserId, userId, posteNum]);
+//   // =======================
+
+//   // ORIGINAL effect that reads from submissions/postes (UNCHANGED)
 //   useEffect(() => {
 //     (async () => {
 //       setLoading(true);
@@ -877,7 +1076,7 @@ export function SourceAForm({
 
 //     // 2. Call webhook first for calculation
 //     try {
-//       const response = await fetch('https://allposteswebhook-592102073404.us-central1.run.app/submit/6A1', {
+//       const response = await fetch('https://allposteswebhook-129138384907.us-central1.run.app/submit/6A1', {
 //         method: 'POST',
 //         headers: { 'Content-Type': 'application/json' },
 //         body: JSON.stringify(payload),
@@ -911,13 +1110,13 @@ export function SourceAForm({
 //           : 'Données 6A1 sauvegardées sans résultat de calcul GES.');
 //       }
 //     } catch (error) {
-//       alert('Erreur inattendue lors de la sauvegarde en base.');
+//     alert('Erreur inattendue lors de la sauvegarde en base.');
 //     }
 //     setLoading(false);
 //   };
 
 //   const displayColumns = resultFields.filter(f =>
-//     gesResults.some(res => res && res[f.key] !== undefined && res[f.key] !== "" && res[f.key] !== "#N/A")
+//     gesResults.some(res => res && (res as any)[f.key] !== undefined && (res as any)[f.key] !== "" && (res as any)[f.key] !== "#N/A")
 //   );
 
 //   if (loading)
@@ -1058,11 +1257,13 @@ export function SourceAForm({
 //       </Button>
 //       <Box mt={6} bg="#e5f2fa" rounded="xl" boxShadow="md" p={4}>
 //         <Text fontWeight="bold" color={olive} mb={2}>Calculs et résultats</Text>
-//         {(gesResults && gesResults.length > 0 && displayColumns.length > 0) ? (
+//         {(gesResults && gesResults.length > 0) ? (
 //           <Table size="sm" variant="simple">
 //             <Thead>
 //               <Tr>
-//                 {displayColumns.map(f => (
+//                 {resultFields.filter(f =>
+//                   gesResults.some(res => res && (res as any)[f.key] !== undefined && (res as any)[f.key] !== "" && (res as any)[f.key] !== "#N/A")
+//                 ).map(f => (
 //                   <Th key={f.key}>{f.label}</Th>
 //                 ))}
 //               </Tr>
@@ -1070,9 +1271,11 @@ export function SourceAForm({
 //             <Tbody>
 //               {gesResults.map((result, idx) => (
 //                 <Tr key={idx}>
-//                   {displayColumns.map(f => (
+//                   {resultFields.filter(f =>
+//                     gesResults.some(res => res && (res as any)[f.key] !== undefined && (res as any)[f.key] !== "" && (res as any)[f.key] !== "#N/A")
+//                   ).map(f => (
 //                     <Td fontWeight="bold" key={f.key}>
-//                       {(result[f.key] && result[f.key] !== "#N/A") ? result[f.key] : "-"}
+//                       {((result as any)[f.key] && (result as any)[f.key] !== "#N/A") ? (result as any)[f.key] : "-"}
 //                     </Td>
 //                   ))}
 //                 </Tr>
