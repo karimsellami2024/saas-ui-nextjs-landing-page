@@ -110,6 +110,12 @@ export default function CompanyInfoForm({ userId, onComplete }: CompanyInfoFormP
         label: 'Climatisation des véhicules',
         enabled: true
       },
+      postesByNum[4] && {
+        poste_id: postesByNum[4].id,
+        source_code: '4B2',
+        label: 'Climatisation des véhicules',
+        enabled: true
+      },
 
       // Poste 6
       postesByNum[6] && {

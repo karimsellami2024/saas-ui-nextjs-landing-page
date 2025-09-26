@@ -3,6 +3,7 @@ import { Box, Heading, Spinner, Text, useColorModeValue } from '@chakra-ui/react
 import { supabase } from '../../../lib/supabaseClient';
 import { Source4A1Form } from './Source4A1Form';
 import { Source4B1Form } from './Source4B1Form';
+import { Source4B2Form } from './Source4B2Form'; // ⬅️ NEW
 
 // ---- Types for form state ----
 type Source4A1Row = {
@@ -18,6 +19,7 @@ type Source4A1Row = {
   qtyInEquipment: string;
   leakObserved: string;
 };
+
 type Source4B1Row = {
   vehicle: string;
   description: string;
@@ -31,6 +33,15 @@ type Source4B1Row = {
   qtyInEquipment: string;
   leakObserved: string;
   climatisation: string;
+};
+
+// ⬅️ NEW: minimal 4B2 row shape (per your 4B2 form)
+type Source4B2Row = {
+  vehicle: string;
+  date: string;
+  refrigerant: string;
+  qtyInEquipment: string;
+  leakObserved: string; // facultatif
 };
 
 // Make sure this matches your forms!
@@ -60,8 +71,10 @@ export default function Poste4Page() {
   // Shared data states for forms
   const [a1Rows, setA1Rows] = useState<Source4A1Row[]>([]);
   const [b1Rows, setB1Rows] = useState<Source4B1Row[]>([]);
+  const [b2Rows, setB2Rows] = useState<Source4B2Row[]>([]); // ⬅️ NEW
   const [gesResults4A1, setGesResults4A1] = useState<GesResult[]>([]);
   const [gesResults4B1, setGesResults4B1] = useState<GesResult[]>([]);
+  const [gesResults4B2, setGesResults4B2] = useState<GesResult[]>([]); // ⬅️ NEW
 
   // --- Handlers for 4A1
   const addA1Row = () =>
@@ -117,6 +130,27 @@ export default function Poste4Page() {
     });
   };
   const removeB1Row = (idx: number) => setB1Rows(prev => prev.filter((_, i) => i !== idx));
+
+  // --- Handlers for 4B2 (minimal form) ---
+  const addB2Row = () =>
+    setB2Rows(prev => [
+      ...prev,
+      {
+        vehicle: '',
+        date: '',
+        refrigerant: 'R-134a',  // default as requested
+        qtyInEquipment: '',
+        leakObserved: '',
+      },
+    ]);
+  const updateB2Row = (idx: number, key: keyof Source4B2Row, value: string) => {
+    setB2Rows(prev => {
+      const copy = [...prev];
+      copy[idx][key] = value;
+      return copy;
+    });
+  };
+  const removeB2Row = (idx: number) => setB2Rows(prev => prev.filter((_, i) => i !== idx));
 
   // --- Fetch user and config ---
   const highlight = '#245a7c';
@@ -202,6 +236,25 @@ export default function Poste4Page() {
         />
       );
     }
+    // ⬅️ NEW: 4B2 rendering
+    if (code === "4B2" && userId && posteSourceId) {
+      return (
+        <Source4B2Form
+          key={code}
+          rows={b2Rows}
+          setRows={setB2Rows}
+          addRow={addB2Row}
+          removeRow={removeB2Row}
+          updateRow={updateB2Row}
+          posteSourceId={posteSourceId}
+          userId={userId}
+          gesResults={gesResults4B2}
+          setGesResults={setGesResults4B2}
+          highlight={highlight}
+          tableBg={bg}
+        />
+      );
+    }
     return null;
   }
 
@@ -237,6 +290,7 @@ export default function Poste4Page() {
   );
 }
 
+
 // import { useEffect, useState } from 'react';
 // import { Box, Heading, Spinner, Text, useColorModeValue } from '@chakra-ui/react';
 // import { supabase } from '../../../lib/supabaseClient';
@@ -257,7 +311,6 @@ export default function Poste4Page() {
 //   qtyInEquipment: string;
 //   leakObserved: string;
 // };
-
 // type Source4B1Row = {
 //   vehicle: string;
 //   description: string;
@@ -273,6 +326,19 @@ export default function Poste4Page() {
 //   climatisation: string;
 // };
 
+// // Make sure this matches your forms!
+// type GesResult = {
+//   prob_fuite?: string | number;
+//   fuite_estime?: string | number;
+//   fuite_calculee?: string | number;
+//   prp?: string | number;
+//   total_co2_gco2e?: string | number;
+//   total_ges_ch4_gco2e?: string | number;
+//   total_ges_n2o_gco2e?: string | number;
+//   total_ges_gco2e?: string | number;
+//   total_ges_tco2e?: string | number;
+//   total_energie_kwh?: string | number;
+// };
 
 // const POSTE_LABEL = "POSTE 4 – VOTRE LIBELLÉ ICI";
 
@@ -287,27 +353,27 @@ export default function Poste4Page() {
 //   // Shared data states for forms
 //   const [a1Rows, setA1Rows] = useState<Source4A1Row[]>([]);
 //   const [b1Rows, setB1Rows] = useState<Source4B1Row[]>([]);
-//   const [gesResults, setGesResults] = useState<any[]>([]);
+//   const [gesResults4A1, setGesResults4A1] = useState<GesResult[]>([]);
+//   const [gesResults4B1, setGesResults4B1] = useState<GesResult[]>([]);
 
 //   // --- Handlers for 4A1
-//  const addA1Row = () =>
-//   setA1Rows(prev => [
-//     ...prev,
-//     {
-//       equipment: '',
-//       description: '',
-//       date: '',
-//       months: '',
-//       site: '',
-//       product: '',
-//       reference: '',
-//       refrigerationType: '',
-//       refrigerant: '',
-//       qtyInEquipment: '',
-//       leakObserved: '',
-//     },
-//   ]);
-
+//   const addA1Row = () =>
+//     setA1Rows(prev => [
+//       ...prev,
+//       {
+//         equipment: '',
+//         description: '',
+//         date: '',
+//         months: '',
+//         site: '',
+//         product: '',
+//         reference: '',
+//         refrigerationType: '',
+//         refrigerant: '',
+//         qtyInEquipment: '',
+//         leakObserved: '',
+//       },
+//     ]);
 //   const updateA1Row = (idx: number, key: keyof Source4A1Row, value: string) => {
 //     setA1Rows(prev => {
 //       const copy = [...prev];
@@ -318,25 +384,24 @@ export default function Poste4Page() {
 //   const removeA1Row = (idx: number) => setA1Rows(prev => prev.filter((_, i) => i !== idx));
 
 //   // --- Handlers for 4B1
-//  const addB1Row = () =>
-//   setB1Rows(prev => [
-//     ...prev,
-//     {
-//       vehicle: '',
-//       description: '',
-//       date: '',
-//       months: '',
-//       site: '',
-//       product: '',
-//       reference: '',
-//       refrigerationType: '',
-//       refrigerant: '',
-//       qtyInEquipment: '',
-//       leakObserved: '',
-//       climatisation: '',
-//     },
-//   ]);
-
+//   const addB1Row = () =>
+//     setB1Rows(prev => [
+//       ...prev,
+//       {
+//         vehicle: '',
+//         description: '',
+//         date: '',
+//         months: '',
+//         site: '',
+//         product: '',
+//         reference: '',
+//         refrigerationType: '',
+//         refrigerant: '',
+//         qtyInEquipment: '',
+//         leakObserved: '',
+//         climatisation: '',
+//       },
+//     ]);
 //   const updateB1Row = (idx: number, key: keyof Source4B1Row, value: string) => {
 //     setB1Rows(prev => {
 //       const copy = [...prev];
@@ -405,8 +470,8 @@ export default function Poste4Page() {
 //           updateRow={updateA1Row}
 //           posteSourceId={posteSourceId}
 //           userId={userId}
-//           gesResults={gesResults}
-//           setGesResults={setGesResults}
+//           gesResults={gesResults4A1}
+//           setGesResults={setGesResults4A1}
 //           highlight={highlight}
 //           tableBg={bg}
 //         />
@@ -423,8 +488,8 @@ export default function Poste4Page() {
 //           updateRow={updateB1Row}
 //           posteSourceId={posteSourceId}
 //           userId={userId}
-//           gesResults={gesResults}
-//           setGesResults={setGesResults}
+//           gesResults={gesResults4B1}
+//           setGesResults={setGesResults4B1}
 //           highlight={highlight}
 //           tableBg={bg}
 //         />
