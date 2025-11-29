@@ -19,15 +19,15 @@ const COL = {
   shadow: "0 4px 16px rgba(0,0,0,0.08)",
   radius: "20px",
 };
-
 export default function DashboardNoNav() {
   return (
     <Box minH="100vh" bg={COL.pageBg}>
-      {/* Page container */}
-      <Box maxW="1200px" mx="auto" px={{ base: 4, md: 6 }} py={{ base: 5, md: 8 }}>
-
-        {/* Row 1: Welcome + Promo (no sidebar) */}
+      {/* FULL-WIDTH PAGE */}
+      <Box w="100%" px={{ base: 4, md: 6 }} py={{ base: 5, md: 8 }}>
+        
+        {/* Row 1: Welcome + Promo */}
         <Grid templateColumns={{ base: "1fr", lg: "2fr 1fr" }} gap={6} mb={6}>
+
           {/* Welcome band */}
           <Box
             bg={COL.surface}
@@ -43,13 +43,23 @@ export default function DashboardNoNav() {
                 <Heading fontSize={{ base: "xl", md: "2xl" }} color={COL.text} mb={2}>
                   Bienvenue Carbone Québec !
                 </Heading>
+
                 <Text color={COL.muted} mb={4}>
                   Prêt à passer à l’action ? Commencer dès maintenant !
                 </Text>
-                <Button variant="outline" borderRadius="full" px={5} h="40px" borderColor="#2E2E2E" color={COL.text}>
+
+                <Button
+                  variant="outline"
+                  borderRadius="full"
+                  px={5}
+                  h="40px"
+                  borderColor="#2E2E2E"
+                  color={COL.text}
+                >
                   Voir notre progression
                 </Button>
               </Box>
+
               <Box>
                 <Image
                   src="/img/illus-progress.png"
@@ -76,9 +86,10 @@ export default function DashboardNoNav() {
           Vos outils pour agir :
         </Text>
 
-        {/* Row 2: 3-column grid */}
+        {/* Row 2 */}
         <Grid templateColumns={{ base: "1fr", xl: "1.5fr 1fr 1fr" }} gap={6}>
-          {/* Column 1: Tool cards (stack 3) */}
+
+          {/* Column 1 */}
           <VStack align="stretch" spacing={6}>
             <ToolCard
               illu="/img/illus-decarb.png"
@@ -95,12 +106,12 @@ export default function DashboardNoNav() {
             <ToolCard
               illu="/img/illus-report.png"
               title="Rapport de durabilité"
-              subtitle="Une fois vos données saisies, générez votre rapport de durabilité, prêt à être partagé."
+              subtitle="Une fois vos données saisies, générez votre rapport de durabilité."
               cta="Générer le rapport"
             />
           </VStack>
 
-          {/* Column 2: Donut + Plan d’action */}
+          {/* Column 2 */}
           <VStack align="stretch" spacing={6}>
             <DonutStatCard
               valuePct={63}
@@ -110,10 +121,10 @@ export default function DashboardNoNav() {
             <ActionPlanCard />
           </VStack>
 
-          {/* Column 3: Two stacked promos */}
+          {/* Column 3 */}
           <VStack align="stretch" spacing={6}>
             <PromoTile
-              src="/img/cta-action.png" /* replace with your image */
+              src="/img/cta-action.png"
               title="Passer à l’action"
               subtitle="Découvrez comment passer à l’action dès maintenant"
             />
@@ -123,6 +134,7 @@ export default function DashboardNoNav() {
               subtitle="Consultez nos formations"
             />
           </VStack>
+
         </Grid>
       </Box>
     </Box>

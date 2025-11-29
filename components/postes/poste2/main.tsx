@@ -226,13 +226,13 @@ export default function Poste2Page() {
     <Box bg={pageBg} minH="100vh" px={{ base: 4, md: 8 }} py={{ base: 6, md: 10 }} color={COL.textBody}>
       <Stack maxW="1200px" mx="auto" spacing={6}>
         {/* Titre + aide */}
-        <HStack justify="space-between" align="center">
+        {/* <HStack justify="space-between" align="center">
           <Heading as="h1" size="lg">Émissions directes</Heading>
           <Icon as={HelpCircle} boxSize={4} />
-        </HStack>
+        </HStack> */}
 
         {/* Pills/onglets (visuel) */}
-        <HStack mt={2} spacing={4}>
+        {/* <HStack mt={2} spacing={4}>
           {[
             { title: "Combustions fixes", active: false },
             { title: "Combustions mobiles", active: true },
@@ -261,11 +261,11 @@ export default function Poste2Page() {
               {tab.title}
             </Box>
           ))}
-        </HStack>
+        </HStack> */}
 
         {/* En-tête Poste + Carte latérale */}
         <HStack align="stretch" spacing={6}>
-          <Box
+          {/* <Box
             flex="1"
             bg={COL.surface}
             rounded="2xl"
@@ -280,10 +280,10 @@ export default function Poste2Page() {
                 Ici, vous pouvez entrer vos véhicules et équipements mobiles pour mesurer l’impact de leurs déplacements et de leur utilisation. Qu’il s’agisse de voitures, camions, camionnettes, équipements de levage, bateaux ou autres fonctionnant au combustible fossile, la plateforme calcule pour vous les émissions correspondantes.
               </Text>
             </VStack>
-          </Box>
+          </Box> */}
 
           {/* Carte droite (total basé sur gesResults) */}
-          <Box
+          {/* <Box
             w={{ base: "100%", md: "380px" }}
             bg={COL.surfaceMuted}
             rounded="2xl"
@@ -326,7 +326,7 @@ export default function Poste2Page() {
                 </Box>
               </HStack>
             </VStack>
-          </Box>
+          </Box> */}
         </HStack>
 
         {/* --------- Contenu dynamique des sources --------- */}

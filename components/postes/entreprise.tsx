@@ -6,7 +6,7 @@ import {
   Box, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Text, Spinner,
   IconButton, HStack, useToast, Select, Tag, TagLabel, TagCloseButton, Wrap, WrapItem,
   useColorModeValue, Switch, NumberInput, NumberInputField, NumberInputStepper,
-  NumberIncrementStepper, NumberDecrementStepper
+  NumberIncrementStepper, NumberDecrementStepper, VStack
 } from "@chakra-ui/react";
 import { CloseIcon } from "@chakra-ui/icons";
 import { supabase } from "../../lib/supabaseClient";
@@ -26,9 +26,7 @@ type ProductItem = { nom: string; description: string; quantite: string; unite: 
 type ServiceItem = { nom: string; description: string; quantite: string; unite: string };
 
 type VehicleItem = {
-  // NEW: quantity support
   qty: number;
-
   details: string; annee: string; marque: string; modele: string;
   transmission: string; distance_km: string; type_carburant: string; conso_l_100km: string;
   type_equipement_refrigeration: string; type_refrigerant: string; charge_lbs: string;
@@ -44,25 +42,36 @@ const emptyLieu: Lieu = { nom: "", description: "", adresse: "" };
 const emptyProduct: ProductItem = { nom: "", description: "", quantite: "", unite: "" };
 const emptyService: ServiceItem = { nom: "", description: "", quantite: "", unite: "" };
 const emptyVehicle: VehicleItem = {
-  qty: 1, // NEW default quantity
+  qty: 1,
   details: "", annee: "", marque: "", modele: "", transmission: "", distance_km: "",
   type_carburant: "", conso_l_100km: "",
-  type_equipement_refrigeration: DEFAULT_EQUIP, // defaulted
-  type_refrigerant: DEFAULT_REFRIG,             // defaulted
-  charge_lbs: DEFAULT_CHARGE,                   // defaulted
+  type_equipement_refrigeration: DEFAULT_EQUIP,
+  type_refrigerant: DEFAULT_REFRIG,
+  charge_lbs: DEFAULT_CHARGE,
   fuites_lbs: "", climatisation: false,
 };
 
 // Options pour les champs réfrigération
 const REFRIG_EQUIP_OPTIONS = [
-  DEFAULT_EQUIP, // include default in options
+  DEFAULT_EQUIP,
   "Aucun","Unité mobile (camion)","Vitrine/armoire réfrigérée","Chambre froide",
   "Congélateur","Pompe à chaleur","Autre",
 ];
 const REFRIGERANT_OPTIONS = [
-  DEFAULT_REFRIG, // include default without the dash
+  DEFAULT_REFRIG,
   "R-134a","R-410A","R-404A","R-407C","R-22 (legacy)","CO₂ (R-744)","NH₃ (R-717)","Propane (R-290)","Autre",
 ];
+
+// --- design tokens aligned with dashboard ---
+const cardShadow = "0 10px 28px rgba(0,0,0,0.07)";
+const COL = {
+  textBody: "#213A2E",
+  textMuted: "#51645B",
+  surface: "#FFFFFF",
+  surfaceMuted: "#EAF1EC",
+  border: "#E1E7E3",
+  accent: "#264a3b",
+};
 
 export default function ProductionAndProductsPage() {
   const toast = useToast();
@@ -73,7 +82,6 @@ export default function ProductionAndProductsPage() {
   const [vehicles, setVehicles] = useState<VehicleItem[]>([{ ...emptyVehicle }]);
   const [lookupLoadingIndex, setLookupLoadingIndex] = useState<number | null>(null);
 
-  // NEW: control whether to expand duplicates on save
   const [expandOnSave, setExpandOnSave] = useState<boolean>(false);
 
   // Company references (file names only)
@@ -142,7 +150,7 @@ export default function ProductionAndProductsPage() {
   function normalizeVehicles(arr: any[]): VehicleItem[] {
     if (!Array.isArray(arr) || arr.length === 0) return [{ ...emptyVehicle }];
     return arr.map((v: any) => ({
-      qty: clampInt(Number(v?.qty) || 1), // NEW: bring forward existing qty or default 1
+      qty: clampInt(Number(v?.qty) || 1),
       details: v?.details ?? v?.nom ?? "",
       annee: v?.annee ?? "",
       marque: v?.marque ?? "",
@@ -151,7 +159,6 @@ export default function ProductionAndProductsPage() {
       distance_km: v?.distance_km ?? "",
       type_carburant: v?.type_carburant ?? v?.type ?? v?.carburant ?? "",
       conso_l_100km: v?.conso_l_100km ?? "",
-      // ---- apply defaults if missing/empty ----
       type_equipement_refrigeration: v?.type_equipement_refrigeration || DEFAULT_EQUIP,
       type_refrigerant: v?.type_refrigerant || DEFAULT_REFRIG,
       charge_lbs: (v?.charge_lbs != null && String(v?.charge_lbs) !== "") ? String(v?.charge_lbs) : DEFAULT_CHARGE,
@@ -237,16 +244,23 @@ export default function ProductionAndProductsPage() {
     toast({ status: "success", title: `${names.length} fichier(s) ajouté(s) aux références` });
   }, [toast]);
 
-  const onDrop = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); if (e.dataTransfer?.files?.length) addFilenames(e.dataTransfer.files); };
-  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); };
-  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); };
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); e.stopPropagation(); setIsDragging(false);
+    if (e.dataTransfer?.files?.length) addFilenames(e.dataTransfer.files);
+  };
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); e.stopPropagation(); setIsDragging(true);
+  };
+  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault(); e.stopPropagation(); setIsDragging(false);
+  };
 
   const fileInputId = "company-refs-file-input";
   const removeReference = (name: string) => setCompanyReferences(prev => prev.filter(n => n !== name));
 
-  const borderColor = useColorModeValue("#E2E8F0", "#2D3748");
-  const hoverColor = useColorModeValue("#CBD5E0", "#4A5568");
-  const activeColor = useColorModeValue("#A0AEC0", "#718096");
+  const borderColor = useColorModeValue(COL.border, "#2D3748");
+  const hoverColor = useColorModeValue("#E2E8F0", "#4A5568");
+  const activeColor = useColorModeValue("#CBD5E0", "#718096");
 
   // === Vehicle lookup: POST JSON directly to Cloud Run and prefill fields ===
   const fetchAndPrefillVehicle = useCallback(async (index: number) => {
@@ -259,7 +273,7 @@ export default function ProductionAndProductsPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          year: Number(v.annee),         // send as number (backend accepts str/int)
+          year: Number(v.annee),
           marque: v.marque,
           modele: v.modele,
         }),
@@ -284,7 +298,7 @@ export default function ProductionAndProductsPage() {
       const uVals = uniq(rows.map(r => r.U));
 
       const q = qVals[0];
-      const qNormalized = q ? q.replace(",", ".") : "";  // "9,95" -> "9.95"
+      const qNormalized = q ? q.replace(",", ".") : "";
       const u = uVals[0] || "";
 
       let r = "";
@@ -325,7 +339,7 @@ export default function ProductionAndProductsPage() {
     for (const v of list) {
       const n = clampInt(v.qty || 1);
       for (let i = 0; i < n; i++) {
-        out.push({ ...v, qty: 1 }); // each copy is qty 1
+        out.push({ ...v, qty: 1 });
       }
     }
     return out;
@@ -372,48 +386,84 @@ export default function ProductionAndProductsPage() {
 
   if (companyLoading)
     return (
-      <Box p={8} minH="60vh" display="flex" alignItems="center" justifyContent="center">
-        <Spinner size="xl" color="yellow.500" />
-        <Text ml={4}>Chargement de la compagnie...</Text>
+      <Box
+        p={8}
+        minH="40vh"
+        display="flex"
+        alignItems="center"
+        justifyContent="center"
+      >
+        <Spinner size="lg" color={COL.accent} />
+        <Text ml={4} color={COL.textMuted}>Chargement des informations de la compagnie...</Text>
       </Box>
     );
 
   return (
-    <Box p={8} bg="#f4f4f4" minH="100vh">
+    <VStack align="stretch" spacing={6}>
       {/* Références fichiers */}
       <Box
-        bg="white" p={4} borderRadius="md" boxShadow="md" mb={8}
-        border="2px dashed" borderColor={isDragging ? activeColor : borderColor}
-        onDrop={onDrop} onDragOver={onDragOver} onDragLeave={onDragLeave}
+        bg={COL.surface}
+        p={{ base: 4, md: 5 }}
+        rounded="2xl"
+        border="1px solid"
+        borderColor={COL.border}
+        boxShadow={cardShadow}
       >
-        <HStack justify="space-between" align="start">
-          <Box>
-            <Text fontWeight="bold" fontSize="xl" color="gray.700" mb={1}>
+        <HStack justify="space-between" align="flex-start" spacing={6}>
+          <Box
+            flex="1"
+            border="2px dashed"
+            borderColor={isDragging ? activeColor : borderColor}
+            rounded="xl"
+            p={4}
+            onDrop={onDrop}
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            bg={isDragging ? COL.surfaceMuted : "transparent"}
+            transition="background-color 0.15s ease-out"
+          >
+            <Text fontWeight="semibold" fontSize="md" color={COL.textBody} mb={1}>
               Références de la compagnie (fichiers)
             </Text>
-            <Text color="gray.600" mb={3}>
+            <Text color={COL.textMuted} fontSize="sm" mb={3}>
               Glissez-déposez plusieurs fichiers ici, ou{" "}
-              <Button variant="link" colorScheme="yellow" onClick={() => document.getElementById(fileInputId)?.click()}>
+              <Button
+                variant="link"
+                color={COL.accent}
+                onClick={() => document.getElementById(fileInputId)?.click()}
+              >
                 cliquez pour parcourir
               </Button>
               . Seuls les <strong>noms</strong> des fichiers seront enregistrés.
             </Text>
 
             <input
-              id={fileInputId} type="file" multiple style={{ display: "none" }}
-              onChange={(e) => { const files = e.target.files; if (files && files.length) addFilenames(files); (e.currentTarget as HTMLInputElement).value = ""; }}
+              id={fileInputId}
+              type="file"
+              multiple
+              style={{ display: "none" }}
+              onChange={(e) => {
+                const files = e.target.files;
+                if (files && files.length) addFilenames(files);
+                (e.currentTarget as HTMLInputElement).value = "";
+              }}
             />
 
             {companyReferences.length > 0 ? (
               <>
-                <Text fontSize="sm" color="gray.500" mb={2}>
+                <Text fontSize="xs" color={COL.textMuted} mb={2}>
                   {companyReferences.length} référence(s)
                 </Text>
                 <Wrap>
                   {companyReferences.map((name) => (
                     <WrapItem key={name}>
-                      <Tag size="md" borderRadius="full" colorScheme="yellow" variant="subtle">
-                        <TagLabel maxW="320px" isTruncated title={name}>{name}</TagLabel>
+                      <Tag
+                        size="sm"
+                        borderRadius="full"
+                        bg={COL.surfaceMuted}
+                        color={COL.textBody}
+                      >
+                        <TagLabel maxW="260px" isTruncated title={name}>{name}</TagLabel>
                         <TagCloseButton onClick={() => removeReference(name)} />
                       </Tag>
                     </WrapItem>
@@ -421,295 +471,548 @@ export default function ProductionAndProductsPage() {
                 </Wrap>
               </>
             ) : (
-              <Box mt={2} px={4} py={6} borderRadius="md" bg="#f9fafb" border="1px dashed" borderColor={hoverColor} textAlign="center">
-                <Text color="gray.500">Aucune référence pour l’instant. Ajoutez des fichiers pour enregistrer leurs noms.</Text>
+              <Box
+                mt={3}
+                px={4}
+                py={5}
+                rounded="lg"
+                bg={COL.section ?? "#F8FAF8"}
+                border="1px dashed"
+                borderColor={hoverColor}
+                textAlign="center"
+              >
+                <Text fontSize="sm" color={COL.textMuted}>
+                  Aucune référence pour l’instant. Ajoutez des fichiers pour enregistrer leurs noms.
+                </Text>
               </Box>
             )}
           </Box>
 
-          <Button size="sm" variant="outline" onClick={() => setCompanyReferences([])} isDisabled={companyReferences.length === 0}>
-            Vider la liste
-          </Button>
+          <Box>
+            <Button
+              size="sm"
+              variant="outline"
+              borderColor={COL.border}
+              onClick={() => setCompanyReferences([])}
+              isDisabled={companyReferences.length === 0}
+            >
+              Vider la liste
+            </Button>
+          </Box>
         </HStack>
       </Box>
 
       {/* Lieux de production */}
-      <Box bg="white" p={4} borderRadius="md" boxShadow="md" mb={8}>
-        <HStack justify="space-between" mb={1}>
-          <Text fontWeight="bold" fontSize="xl" color="gray.700">Liste des lieux de production</Text>
-          <Button size="sm" colorScheme="yellow" onClick={addLieu}>Ajouter un lieu de production</Button>
+      <Box
+        bg={COL.surface}
+        p={{ base: 4, md: 5 }}
+        rounded="2xl"
+        border="1px solid"
+        borderColor={COL.border}
+        boxShadow={cardShadow}
+      >
+        <HStack justify="space-between" mb={3}>
+          <Text fontWeight="semibold" fontSize="md" color={COL.textBody}>
+            Lieux de production
+          </Text>
+          <Button
+            size="sm"
+            bg={COL.accent}
+            color="white"
+            _hover={{ bg: "#1f3b30" }}
+            onClick={addLieu}
+          >
+            Ajouter un lieu
+          </Button>
         </HStack>
-        <Table size="sm" variant="simple">
-          <Thead bg="yellow.200">
-            <Tr>
-              <Th>Nom du lieu</Th><Th>Description</Th><Th>Adresse</Th><Th w="40px"></Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {lieux.map((lieu, i) => (
-              <Tr key={`lieu-${i}`}>
-                <Td><Input value={lieu.nom || ""} onChange={e => updateLieu(i, "nom", e.target.value)} /></Td>
-                <Td><Input value={lieu.description || ""} onChange={e => updateLieu(i, "description", e.target.value)} /></Td>
-                <Td><Input value={lieu.adresse || ""} onChange={e => updateLieu(i, "adresse", e.target.value)} /></Td>
-                <Td><IconButton aria-label="Supprimer" icon={<CloseIcon boxSize="2" />} size="xs" onClick={() => removeRow(lieux, setLieux, i)} /></Td>
+        <Box overflowX="auto">
+          <Table size="sm" variant="simple">
+            <Thead bg={COL.surfaceMuted}>
+              <Tr>
+                <Th>Nom du lieu</Th>
+                <Th>Description</Th>
+                <Th>Adresse</Th>
+                <Th w="40px"></Th>
               </Tr>
-            ))}
-          </Tbody>
-        </Table>
+            </Thead>
+            <Tbody>
+              {lieux.map((lieu, i) => (
+                <Tr key={`lieu-${i}`}>
+                  <Td>
+                    <Input
+                      value={lieu.nom || ""}
+                      onChange={e => updateLieu(i, "nom", e.target.value)}
+                      size="sm"
+                    />
+                  </Td>
+                  <Td>
+                    <Input
+                      value={lieu.description || ""}
+                      onChange={e => updateLieu(i, "description", e.target.value)}
+                      size="sm"
+                    />
+                  </Td>
+                  <Td>
+                    <Input
+                      value={lieu.adresse || ""}
+                      onChange={e => updateLieu(i, "adresse", e.target.value)}
+                      size="sm"
+                    />
+                  </Td>
+                  <Td>
+                    <IconButton
+                      aria-label="Supprimer"
+                      icon={<CloseIcon boxSize="2" />}
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => removeRow(lieux, setLieux, i)}
+                    />
+                  </Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </Box>
       </Box>
 
       {/* Produits */}
-      <Box bg="white" p={4} borderRadius="md" boxShadow="md" mb={8}>
-        <HStack justify="space-between" mb={2}>
-          <Text fontWeight="bold">Produits</Text>
-          <Button size="sm" colorScheme="yellow" onClick={addProduct}>Ajouter un produit</Button>
+      <Box
+        bg={COL.surface}
+        p={{ base: 4, md: 5 }}
+        rounded="2xl"
+        border="1px solid"
+        borderColor={COL.border}
+        boxShadow={cardShadow}
+      >
+        <HStack justify="space-between" mb={3}>
+          <Text fontWeight="semibold" fontSize="md" color={COL.textBody}>
+            Produits
+          </Text>
+          <Button
+            size="sm"
+            bg={COL.accent}
+            color="white"
+            _hover={{ bg: "#1f3b30" }}
+            onClick={addProduct}
+          >
+            Ajouter un produit
+          </Button>
         </HStack>
-        <Table variant="simple" size="sm">
-          <Thead bg="yellow.200">
-            <Tr>
-              <Th>Nom du produit</Th><Th>Description</Th><Th>Quantité</Th><Th>Unité</Th><Th w="40px"></Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {products.map((prod, i) => (
-              <Tr key={`prod-${i}`}>
-                <Td><Input value={prod.nom || ""} onChange={e => updateProduct(i, "nom", e.target.value)} /></Td>
-                <Td><Input value={prod.description || ""} onChange={e => updateProduct(i, "description", e.target.value)} /></Td>
-                <Td><Input value={prod.quantite || ""} onChange={e => updateProduct(i, "quantite", e.target.value)} /></Td>
-                <Td>
-                  <Select placeholder="Choisir unité" value={prod.unite || ""} onChange={e => updateProduct(i, "unite", e.target.value)}>
-                    <option value="kg">kg</option><option value="lb">lb</option><option value="m">mètres</option>
-                    <option value="ft">pieds</option><option value="L">litres</option><option value="kWh">kWh</option><option value="t">tonnes</option>
-                  </Select>
-                </Td>
-                <Td><IconButton aria-label="Supprimer" icon={<CloseIcon boxSize="2" />} size="xs" onClick={() => removeRow(products, setProducts, i)} /></Td>
+        <Box overflowX="auto">
+          <Table variant="simple" size="sm">
+            <Thead bg={COL.surfaceMuted}>
+              <Tr>
+                <Th>Nom</Th>
+                <Th>Description</Th>
+                <Th>Quantité</Th>
+                <Th>Unité</Th>
+                <Th w="40px"></Th>
               </Tr>
-            ))}
-          </Tbody>
-        </Table>
+            </Thead>
+            <Tbody>
+              {products.map((prod, i) => (
+                <Tr key={`prod-${i}`}>
+                  <Td>
+                    <Input
+                      value={prod.nom || ""}
+                      onChange={e => updateProduct(i, "nom", e.target.value)}
+                      size="sm"
+                    />
+                  </Td>
+                  <Td>
+                    <Input
+                      value={prod.description || ""}
+                      onChange={e => updateProduct(i, "description", e.target.value)}
+                      size="sm"
+                    />
+                  </Td>
+                  <Td>
+                    <Input
+                      value={prod.quantite || ""}
+                      onChange={e => updateProduct(i, "quantite", e.target.value)}
+                      size="sm"
+                    />
+                  </Td>
+                  <Td>
+                    <Select
+                      placeholder="Unité"
+                      value={prod.unite || ""}
+                      onChange={e => updateProduct(i, "unite", e.target.value)}
+                      size="sm"
+                    >
+                      <option value="kg">kg</option>
+                      <option value="lb">lb</option>
+                      <option value="m">mètres</option>
+                      <option value="ft">pieds</option>
+                      <option value="L">litres</option>
+                      <option value="kWh">kWh</option>
+                      <option value="t">tonnes</option>
+                    </Select>
+                  </Td>
+                  <Td>
+                    <IconButton
+                      aria-label="Supprimer"
+                      icon={<CloseIcon boxSize="2" />}
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => removeRow(products, setProducts, i)}
+                    />
+                  </Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </Box>
       </Box>
 
       {/* Services */}
-      <Box bg="white" p={4} borderRadius="md" boxShadow="md" mb={8}>
-        <HStack justify="space-between" mb={2}>
-          <Text fontWeight="bold">Services</Text>
-          <Button size="sm" colorScheme="yellow" onClick={addService}>Ajouter un service</Button>
+      <Box
+        bg={COL.surface}
+        p={{ base: 4, md: 5 }}
+        rounded="2xl"
+        border="1px solid"
+        borderColor={COL.border}
+        boxShadow={cardShadow}
+      >
+        <HStack justify="space-between" mb={3}>
+          <Text fontWeight="semibold" fontSize="md" color={COL.textBody}>
+            Services
+          </Text>
+          <Button
+            size="sm"
+            bg={COL.accent}
+            color="white"
+            _hover={{ bg: "#1f3b30" }}
+            onClick={addService}
+          >
+            Ajouter un service
+          </Button>
         </HStack>
-        <Table variant="simple" size="sm">
-          <Thead bg="yellow.200">
-            <Tr>
-              <Th>Nom du service</Th><Th>Description</Th><Th>Quantité</Th><Th>Unité</Th><Th w="40px"></Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {services.map((svc, i) => (
-              <Tr key={`svc-${i}`}>
-                <Td><Input value={svc.nom || ""} onChange={e => updateService(i, "nom", e.target.value)} /></Td>
-                <Td><Input value={svc.description || ""} onChange={e => updateService(i, "description", e.target.value)} /></Td>
-                <Td><Input value={svc.quantite || ""} onChange={e => updateService(i, "quantite", e.target.value)} /></Td>
-                <Td><Input value={svc.unite || ""} onChange={e => updateService(i, "unite", e.target.value)} /></Td>
-                <Td><IconButton aria-label="Supprimer" icon={<CloseIcon boxSize="2" />} size="xs" onClick={() => removeRow(services, setServices, i)} /></Td>
+        <Box overflowX="auto">
+          <Table variant="simple" size="sm">
+            <Thead bg={COL.surfaceMuted}>
+              <Tr>
+                <Th>Nom</Th>
+                <Th>Description</Th>
+                <Th>Quantité</Th>
+                <Th>Unité</Th>
+                <Th w="40px"></Th>
               </Tr>
-            ))}
-          </Tbody>
-        </Table>
+            </Thead>
+            <Tbody>
+              {services.map((svc, i) => (
+                <Tr key={`svc-${i}`}>
+                  <Td>
+                    <Input
+                      value={svc.nom || ""}
+                      onChange={e => updateService(i, "nom", e.target.value)}
+                      size="sm"
+                    />
+                  </Td>
+                  <Td>
+                    <Input
+                      value={svc.description || ""}
+                      onChange={e => updateService(i, "description", e.target.value)}
+                      size="sm"
+                    />
+                  </Td>
+                  <Td>
+                    <Input
+                      value={svc.quantite || ""}
+                      onChange={e => updateService(i, "quantite", e.target.value)}
+                      size="sm"
+                    />
+                  </Td>
+                  <Td>
+                    <Input
+                      value={svc.unite || ""}
+                      onChange={e => updateService(i, "unite", e.target.value)}
+                      size="sm"
+                    />
+                  </Td>
+                  <Td>
+                    <IconButton
+                      aria-label="Supprimer"
+                      icon={<CloseIcon boxSize="2" />}
+                      size="xs"
+                      variant="ghost"
+                      onClick={() => removeRow(services, setServices, i)}
+                    />
+                  </Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </Box>
       </Box>
 
       {/* Flotte de véhicules */}
-      {/* Flotte de véhicules */}
-<Box
-  bg="white"
-  p={4}
-  borderRadius="md"
-  boxShadow="md"
-  // Keep left aligned with the wrapper, but let the right side go full-bleed
-  w="100%"
-  maxW="unset"
-  overflowX="auto"
-  sx={{ mr: "calc(50% - 50vw)" }}  // <- open to the right edge
->
-  <HStack justify="space-between" mb={2}>
-    <Text fontWeight="bold">Liste de la flotte de véhicule</Text>
-    <HStack spacing={4}>
-      <HStack>
-        <Switch isChecked={expandOnSave} onChange={(e) => setExpandOnSave(e.target.checked)} colorScheme="green" />
-        <Text fontSize="sm" color="gray.600">Dupliquer à l'enregistrement</Text>
-      </HStack>
-      <Button size="sm" colorScheme="yellow" onClick={addVehicle}>Ajouter un véhicule</Button>
-    </HStack>
-  </HStack>
+      <Box
+        bg={COL.surface}
+        p={{ base: 4, md: 5 }}
+        rounded="2xl"
+        border="1px solid"
+        borderColor={COL.border}
+        boxShadow={cardShadow}
+      >
+        <HStack justify="space-between" mb={3} align="center">
+          <Text fontWeight="semibold" fontSize="md" color={COL.textBody}>
+            Flotte de véhicules
+          </Text>
+          <HStack spacing={4}>
+            <HStack>
+              <Switch
+                isChecked={expandOnSave}
+                onChange={(e) => setExpandOnSave(e.target.checked)}
+                colorScheme="green"
+                size="sm"
+              />
+              <Text fontSize="xs" color={COL.textMuted}>
+                Dupliquer les lignes selon la quantité lors de l’enregistrement
+              </Text>
+            </HStack>
+            <Button
+              size="sm"
+              bg={COL.accent}
+              color="white"
+              _hover={{ bg: "#1f3b30" }}
+              onClick={addVehicle}
+            >
+              Ajouter un véhicule
+            </Button>
+          </HStack>
+        </HStack>
 
-        <Table variant="simple" size="sm">
-          <Thead bg="yellow.200">
-            <Tr>
-              <Th>QTÉ</Th>
-              <Th>DÉTAILS SUR LES VÉHICULES</Th>
-              <Th colSpan={3}>ANNÉE / MARQUE / MODÈLE</Th>
-              <Th>TRANSMISSION</Th>
-              <Th>TYPE ET CARBURANT</Th>
-              <Th>CONSO. [L/100KM]</Th>
-              <Th>ÉQUIPEMENT FRIGO</Th>
-              <Th>RÉFRIGÉRANT</Th>
-              <Th>CHARGE [lbs]</Th>
-              <Th>FUITES [lbs] (opt.)</Th>
-              <Th>CLIM</Th>
-              <Th w="40px"></Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {vehicles.map((veh, i) => {
-              const yearOptions = allYears;
-              const makeOptions = makesFor(veh.annee);
-              const modelOptions = modelsFor(veh.annee, veh.marque);
-              const isThisLoading = lookupLoadingIndex === i;
+        <Box overflowX="auto" mt={3}>
+          <Table variant="simple" size="sm">
+            <Thead bg={COL.surfaceMuted}>
+              <Tr>
+                <Th>QTÉ</Th>
+                <Th>Détails</Th>
+                <Th colSpan={3}>Année / Marque / Modèle</Th>
+                <Th>Transmission</Th>
+                <Th>Type / carburant</Th>
+                <Th>Conso. [L/100km]</Th>
+                <Th>Équipement frigo</Th>
+                <Th>Réfrigérant</Th>
+                <Th>Charge [lbs]</Th>
+                <Th>Fuites [lbs]</Th>
+                <Th>Clim</Th>
+                <Th w="40px"></Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {vehicles.map((veh, i) => {
+                const yearOptions = allYears;
+                const makeOptions = makesFor(veh.annee);
+                const modelOptions = modelsFor(veh.annee, veh.marque);
+                const isThisLoading = lookupLoadingIndex === i;
 
-              return (
-                <Tr key={`veh-${i}`}>
-                  {/* Quantity */}
-                  <Td>
-                    <NumberInput
-                      size="sm"
-                      min={1}
-                      max={9999}
-                      value={veh.qty ?? 1}
-                      onChange={(_, num) => updateVehicle(i, "qty", clampInt(num))}
-                      w="84px"
-                    >
-                      <NumberInputField />
-                      <NumberInputStepper>
-                        <NumberIncrementStepper />
-                        <NumberDecrementStepper />
-                      </NumberInputStepper>
-                    </NumberInput>
-                  </Td>
-
-                  <Td>
-                    <Input value={veh.details || ""} onChange={e => updateVehicle(i, "details", e.target.value)} placeholder="Plaque, usage, notes…" />
-                  </Td>
-
-                  {/* Cascading dropdowns */}
-                  <Td colSpan={3}>
-                    <HStack spacing={3} align="center" w="full">
-                      {/* Année */}
-                      <Select
-                        placeholder={loadingCatalog ? "Chargement..." : "Année"}
-                        isDisabled={loadingCatalog || !!catalogError}
-                        value={veh.annee || ""}
-                        onChange={(e) => {
-                          updateVehicle(i, "annee", e.target.value);
-                          updateVehicle(i, "marque", "");
-                          updateVehicle(i, "modele", "");
-                        }}
-                        size="lg"
-                        h="48px"
-                        w={{ base: "160px", md: "220px" }}
+                return (
+                  <Tr key={`veh-${i}`}>
+                    <Td>
+                      <NumberInput
+                        size="sm"
+                        min={1}
+                        max={9999}
+                        value={veh.qty ?? 1}
+                        onChange={(_, num) => updateVehicle(i, "qty", clampInt(num))}
+                        w="80px"
                       >
-                        {yearOptions.map(y => (
-                          <option key={y} value={y}>{y}</option>
+                        <NumberInputField />
+                        <NumberInputStepper>
+                          <NumberIncrementStepper />
+                          <NumberDecrementStepper />
+                        </NumberInputStepper>
+                      </NumberInput>
+                    </Td>
+
+                    <Td>
+                      <Input
+                        value={veh.details || ""}
+                        onChange={e => updateVehicle(i, "details", e.target.value)}
+                        size="sm"
+                        placeholder="Plaque, usage, notes…"
+                      />
+                    </Td>
+
+                    <Td colSpan={3}>
+                      <HStack spacing={2} align="center" w="full">
+                        <Select
+                          placeholder={loadingCatalog ? "Chargement..." : "Année"}
+                          isDisabled={loadingCatalog || !!catalogError}
+                          value={veh.annee || ""}
+                          onChange={(e) => {
+                            updateVehicle(i, "annee", e.target.value);
+                            updateVehicle(i, "marque", "");
+                            updateVehicle(i, "modele", "");
+                          }}
+                          size="sm"
+                          w="100px"
+                        >
+                          {yearOptions.map(y => (
+                            <option key={y} value={y}>{y}</option>
+                          ))}
+                        </Select>
+
+                        <Select
+                          placeholder={!veh.annee ? "Marque" : "Marque"}
+                          isDisabled={!veh.annee || loadingCatalog || !!catalogError}
+                          value={veh.marque || ""}
+                          onChange={(e) => {
+                            updateVehicle(i, "marque", e.target.value);
+                            updateVehicle(i, "modele", "");
+                          }}
+                          size="sm"
+                          w="150px"
+                        >
+                          {makeOptions.map(m => (
+                            <option key={m} value={m}>{m}</option>
+                          ))}
+                        </Select>
+
+                        <Select
+                          placeholder={!veh.marque ? "Modèle" : "Modèle"}
+                          isDisabled={!veh.annee || !veh.marque || loadingCatalog || !!catalogError}
+                          value={veh.modele || ""}
+                          onChange={(e) => {
+                            updateVehicle(i, "modele", e.target.value);
+                          }}
+                          size="sm"
+                          w="180px"
+                        >
+                          {modelOptions.map(md => (
+                            <option key={md} value={md}>{md}</option>
+                          ))}
+                        </Select>
+
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          colorScheme="green"
+                          onClick={() => fetchAndPrefillVehicle(i)}
+                          isDisabled={!veh.annee || !veh.marque || !veh.modele}
+                          isLoading={isThisLoading}
+                        >
+                          Rechercher
+                        </Button>
+                      </HStack>
+                    </Td>
+
+                    <Td>
+                      <Input
+                        value={veh.transmission || ""}
+                        onChange={e => updateVehicle(i, "transmission", e.target.value)}
+                        size="sm"
+                        placeholder="Manuelle / Auto"
+                      />
+                    </Td>
+
+                    <Td>
+                      <VehicleSelect
+                        value={veh.type_carburant || ""}
+                        onChange={(val: string) => updateVehicle(i, "type_carburant", val)}
+                      />
+                    </Td>
+
+                    <Td>
+                      <Input
+                        value={veh.conso_l_100km || ""}
+                        onChange={e => updateVehicle(i, "conso_l_100km", e.target.value)}
+                        size="sm"
+                        placeholder="ex: 7.2"
+                      />
+                    </Td>
+
+                    <Td>
+                      <Select
+                        placeholder="Sélectionner"
+                        value={veh.type_equipement_refrigeration || ""}
+                        onChange={e => updateVehicle(i, "type_equipement_refrigeration", e.target.value)}
+                        size="sm"
+                      >
+                        {REFRIG_EQUIP_OPTIONS.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
                         ))}
                       </Select>
+                    </Td>
 
-                      {/* Marque */}
+                    <Td>
                       <Select
-                        placeholder={!veh.annee ? "Choisir année d'abord" : "Marque"}
-                        isDisabled={!veh.annee || loadingCatalog || !!catalogError}
-                        value={veh.marque || ""}
-                        onChange={(e) => {
-                          updateVehicle(i, "marque", e.target.value);
-                          updateVehicle(i, "modele", "");
-                        }}
-                        size="lg"
-                        h="48px"
-                        w={{ base: "220px", md: "320px" }}
+                        placeholder="Sélectionner"
+                        value={veh.type_refrigerant || ""}
+                        onChange={e => updateVehicle(i, "type_refrigerant", e.target.value)}
+                        size="sm"
                       >
-                        {makeOptions.map(m => (
-                          <option key={m} value={m}>{m}</option>
+                        {REFRIGERANT_OPTIONS.map(opt => (
+                          <option key={opt} value={opt}>{opt}</option>
                         ))}
                       </Select>
+                    </Td>
 
-                      {/* Modèle */}
-                      <Select
-                        placeholder={!veh.marque ? "Choisir marque d'abord" : "Modèle"}
-                        isDisabled={!veh.annee || !veh.marque || loadingCatalog || !!catalogError}
-                        value={veh.modele || ""}
-                        onChange={(e) => {
-                          updateVehicle(i, "modele", e.target.value);
-                        }}
-                        size="lg"
-                        h="48px"
-                        w={{ base: "260px", md: "420px" }}
-                      >
-                        {modelOptions.map(md => (
-                          <option key={md} value={md}>{md}</option>
-                        ))}
-                      </Select>
+                    <Td>
+                      <Input
+                        type="number"
+                        step="any"
+                        value={veh.charge_lbs || ""}
+                        onChange={e => updateVehicle(i, "charge_lbs", e.target.value)}
+                        size="sm"
+                        placeholder="ex: 12.5"
+                      />
+                    </Td>
 
-                      {/* Bouton de recherche */}
-                      <Button
-                        colorScheme="yellow"
-                        onClick={() => fetchAndPrefillVehicle(i)}
-                        isDisabled={!veh.annee || !veh.marque || !veh.modele}
-                        isLoading={isThisLoading}
-                        h="48px"
-                        px={5}
-                      >
-                        Rechercher
-                      </Button>
-                    </HStack>
-                  </Td>
+                    <Td>
+                      <Input
+                        type="number"
+                        step="any"
+                        value={veh.fuites_lbs || ""}
+                        onChange={e => updateVehicle(i, "fuites_lbs", e.target.value)}
+                        size="sm"
+                        placeholder="ex: 0.3"
+                      />
+                    </Td>
 
-                  <Td>
-                    <Input value={veh.transmission || ""} onChange={e => updateVehicle(i, "transmission", e.target.value)} placeholder="Manuelle/Automatique" />
-                  </Td>
+                    <Td>
+                      <Switch
+                        isChecked={!!veh.climatisation}
+                        onChange={e => updateVehicle(i, "climatisation", e.target.checked as any)}
+                        colorScheme="green"
+                        size="sm"
+                      />
+                    </Td>
 
-                  <Td>
-                    <VehicleSelect value={veh.type_carburant || ""} onChange={(val: string) => updateVehicle(i, "type_carburant", val)} />
-                  </Td>
-
-                  <Td>
-                    <Input value={veh.conso_l_100km || ""} onChange={e => updateVehicle(i, "conso_l_100km", e.target.value)} placeholder="ex: 7.2" />
-                  </Td>
-
-                  <Td>
-                    <Select placeholder="(sélectionner)" value={veh.type_equipement_refrigeration || ""} onChange={e => updateVehicle(i, "type_equipement_refrigeration", e.target.value)}>
-                      {REFRIG_EQUIP_OPTIONS.map(opt => (<option key={opt} value={opt}>{opt}</option>))}
-                    </Select>
-                  </Td>
-                  <Td>
-                    <Select placeholder="(sélectionner)" value={veh.type_refrigerant || ""} onChange={e => updateVehicle(i, "type_refrigerant", e.target.value)}>
-                      {REFRIGERANT_OPTIONS.map(opt => (<option key={opt} value={opt}>{opt}</option>))}
-                    </Select>
-                  </Td>
-                  <Td>
-                    <Input type="number" step="any" value={veh.charge_lbs || ""} onChange={e => updateVehicle(i, "charge_lbs", e.target.value)} placeholder="ex: 12.5" />
-                  </Td>
-                  <Td>
-                    <Input type="number" step="any" value={veh.fuites_lbs || ""} onChange={e => updateVehicle(i, "fuites_lbs", e.target.value)} placeholder="ex: 0.3" />
-                  </Td>
-                  <Td>
-                    <Switch isChecked={!!veh.climatisation} onChange={e => updateVehicle(i, "climatisation", e.target.checked as any)} colorScheme="green" />
-                  </Td>
-
-                  <Td>
-                    <IconButton aria-label="Supprimer" icon={<CloseIcon boxSize="2" />} size="xs" onClick={() => removeRow(vehicles, setVehicles, i)} />
-                  </Td>
-                </Tr>
-              );
-            })}
-          </Tbody>
-        </Table>
+                    <Td>
+                      <IconButton
+                        aria-label="Supprimer"
+                        icon={<CloseIcon boxSize="2" />}
+                        size="xs"
+                        variant="ghost"
+                        onClick={() => removeRow(vehicles, setVehicles, i)}
+                      />
+                    </Td>
+                  </Tr>
+                );
+              })}
+            </Tbody>
+          </Table>
+        </Box>
       </Box>
 
       {/* Save Button */}
-      <Box textAlign="center" mt={8}>
-        <Button colorScheme="blue" onClick={handleSave} isLoading={saving}>
+      <Box textAlign="right">
+        <Button
+          bg={COL.accent}
+          color="white"
+          _hover={{ bg: "#1f3b30" }}
+          onClick={handleSave}
+          isLoading={saving}
+        >
           Sauvegarder
         </Button>
       </Box>
-    </Box>
+    </VStack>
   );
 }
-
 
 // // components/postes/entreprise.tsx
 // 'use client';
@@ -718,7 +1021,8 @@ export default function ProductionAndProductsPage() {
 // import {
 //   Box, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Text, Spinner,
 //   IconButton, HStack, useToast, Select, Tag, TagLabel, TagCloseButton, Wrap, WrapItem,
-//   useColorModeValue, Switch
+//   useColorModeValue, Switch, NumberInput, NumberInputField, NumberInputStepper,
+//   NumberIncrementStepper, NumberDecrementStepper
 // } from "@chakra-ui/react";
 // import { CloseIcon } from "@chakra-ui/icons";
 // import { supabase } from "../../lib/supabaseClient";
@@ -731,12 +1035,16 @@ export default function ProductionAndProductsPage() {
 //   return (s ?? "").trim();
 // }
 // function unique<T>(arr: T[]) { return Array.from(new Set(arr)); }
+// function clampInt(n: number, min = 1, max = 9999) { return Math.max(min, Math.min(max, Math.floor(n || 0))); }
 
 // type Lieu = { nom: string; description: string; adresse: string };
 // type ProductItem = { nom: string; description: string; quantite: string; unite: string };
 // type ServiceItem = { nom: string; description: string; quantite: string; unite: string };
 
 // type VehicleItem = {
+//   // NEW: quantity support
+//   qty: number;
+
 //   details: string; annee: string; marque: string; modele: string;
 //   transmission: string; distance_km: string; type_carburant: string; conso_l_100km: string;
 //   type_equipement_refrigeration: string; type_refrigerant: string; charge_lbs: string;
@@ -752,6 +1060,7 @@ export default function ProductionAndProductsPage() {
 // const emptyProduct: ProductItem = { nom: "", description: "", quantite: "", unite: "" };
 // const emptyService: ServiceItem = { nom: "", description: "", quantite: "", unite: "" };
 // const emptyVehicle: VehicleItem = {
+//   qty: 1, // NEW default quantity
 //   details: "", annee: "", marque: "", modele: "", transmission: "", distance_km: "",
 //   type_carburant: "", conso_l_100km: "",
 //   type_equipement_refrigeration: DEFAULT_EQUIP, // defaulted
@@ -779,6 +1088,9 @@ export default function ProductionAndProductsPage() {
 //   const [services, setServices] = useState<ServiceItem[]>([{ ...emptyService }]);
 //   const [vehicles, setVehicles] = useState<VehicleItem[]>([{ ...emptyVehicle }]);
 //   const [lookupLoadingIndex, setLookupLoadingIndex] = useState<number | null>(null);
+
+//   // NEW: control whether to expand duplicates on save
+//   const [expandOnSave, setExpandOnSave] = useState<boolean>(false);
 
 //   // Company references (file names only)
 //   const [companyReferences, setCompanyReferences] = useState<string[]>([]);
@@ -846,6 +1158,7 @@ export default function ProductionAndProductsPage() {
 //   function normalizeVehicles(arr: any[]): VehicleItem[] {
 //     if (!Array.isArray(arr) || arr.length === 0) return [{ ...emptyVehicle }];
 //     return arr.map((v: any) => ({
+//       qty: clampInt(Number(v?.qty) || 1), // NEW: bring forward existing qty or default 1
 //       details: v?.details ?? v?.nom ?? "",
 //       annee: v?.annee ?? "",
 //       marque: v?.marque ?? "",
@@ -856,7 +1169,6 @@ export default function ProductionAndProductsPage() {
 //       conso_l_100km: v?.conso_l_100km ?? "",
 //       // ---- apply defaults if missing/empty ----
 //       type_equipement_refrigeration: v?.type_equipement_refrigeration || DEFAULT_EQUIP,
-//       // accept both "R134a" and "R-134a" but store default if missing
 //       type_refrigerant: v?.type_refrigerant || DEFAULT_REFRIG,
 //       charge_lbs: (v?.charge_lbs != null && String(v?.charge_lbs) !== "") ? String(v?.charge_lbs) : DEFAULT_CHARGE,
 //       fuites_lbs: v?.fuites_lbs != null ? String(v?.fuites_lbs) : "",
@@ -959,7 +1271,7 @@ export default function ProductionAndProductsPage() {
 
 //     setLookupLoadingIndex(index);
 //     try {
-//       const resp = await fetch("https://vehiculecanada-592102073404.us-central1.run.app/vehicle", {
+//       const resp = await fetch("https://vehiculecanada-129138384907.us-central1.run.app//vehicle", {
 //         method: "POST",
 //         headers: { "Content-Type": "application/json" },
 //         body: JSON.stringify({
@@ -1023,6 +1335,18 @@ export default function ProductionAndProductsPage() {
 //     }
 //   }, [vehicles, toast]);
 
+//   // Helper to expand duplicates if requested
+//   function expandVehicles(list: VehicleItem[]): VehicleItem[] {
+//     const out: VehicleItem[] = [];
+//     for (const v of list) {
+//       const n = clampInt(v.qty || 1);
+//       for (let i = 0; i < n; i++) {
+//         out.push({ ...v, qty: 1 }); // each copy is qty 1
+//       }
+//     }
+//     return out;
+//   }
+
 //   // --- Save handler ---
 //   const handleSave = async () => {
 //     if (!companyId) {
@@ -1031,6 +1355,8 @@ export default function ProductionAndProductsPage() {
 //     }
 //     setSaving(true);
 //     try {
+//       const vehiclesPayload = expandOnSave ? expandVehicles(vehicles) : vehicles;
+
 //       const res = await fetch("/api/company-info", {
 //         method: "POST",
 //         headers: { "Content-Type": "application/json" },
@@ -1039,13 +1365,19 @@ export default function ProductionAndProductsPage() {
 //           production_sites: lieux,
 //           products,
 //           services,
-//           vehicle_fleet: vehicles,
+//           vehicle_fleet: vehiclesPayload,
 //           company_references: companyReferences,
 //         }),
 //       });
 //       const result = await res.json().catch(() => ({} as any));
 //       if (!res.ok) throw new Error(result?.error || "Erreur lors de la sauvegarde");
-//       toast({ status: "success", title: "Données sauvegardées avec succès !" });
+//       toast({
+//         status: "success",
+//         title: "Données sauvegardées avec succès !",
+//         description: expandOnSave
+//           ? "Les lignes ont été dupliquées selon les quantités."
+//           : "Les quantités ont été enregistrées sur chaque ligne.",
+//       });
 //     } catch (err: any) {
 //       console.error(err);
 //       toast({ status: "error", title: "Échec de la sauvegarde", description: err?.message ?? String(err) });
@@ -1200,15 +1532,33 @@ export default function ProductionAndProductsPage() {
 //       </Box>
 
 //       {/* Flotte de véhicules */}
-//       <Box bg="white" p={4} borderRadius="md" boxShadow="md">
-//         <HStack justify="space-between" mb={2}>
-//           <Text fontWeight="bold">Liste de la flotte de véhicule</Text>
-//           <Button size="sm" colorScheme="yellow" onClick={addVehicle}>Ajouter un véhicule</Button>
-//         </HStack>
+//       {/* Flotte de véhicules */}
+// <Box
+//   bg="white"
+//   p={4}
+//   borderRadius="md"
+//   boxShadow="md"
+//   // Keep left aligned with the wrapper, but let the right side go full-bleed
+//   w="100%"
+//   maxW="unset"
+//   overflowX="auto"
+//   sx={{ mr: "calc(50% - 50vw)" }}  // <- open to the right edge
+// >
+//   <HStack justify="space-between" mb={2}>
+//     <Text fontWeight="bold">Liste de la flotte de véhicule</Text>
+//     <HStack spacing={4}>
+//       <HStack>
+//         <Switch isChecked={expandOnSave} onChange={(e) => setExpandOnSave(e.target.checked)} colorScheme="green" />
+//         <Text fontSize="sm" color="gray.600">Dupliquer à l'enregistrement</Text>
+//       </HStack>
+//       <Button size="sm" colorScheme="yellow" onClick={addVehicle}>Ajouter un véhicule</Button>
+//     </HStack>
+//   </HStack>
 
 //         <Table variant="simple" size="sm">
 //           <Thead bg="yellow.200">
 //             <Tr>
+//               <Th>QTÉ</Th>
 //               <Th>DÉTAILS SUR LES VÉHICULES</Th>
 //               <Th colSpan={3}>ANNÉE / MARQUE / MODÈLE</Th>
 //               <Th>TRANSMISSION</Th>
@@ -1231,6 +1581,24 @@ export default function ProductionAndProductsPage() {
 
 //               return (
 //                 <Tr key={`veh-${i}`}>
+//                   {/* Quantity */}
+//                   <Td>
+//                     <NumberInput
+//                       size="sm"
+//                       min={1}
+//                       max={9999}
+//                       value={veh.qty ?? 1}
+//                       onChange={(_, num) => updateVehicle(i, "qty", clampInt(num))}
+//                       w="84px"
+//                     >
+//                       <NumberInputField />
+//                       <NumberInputStepper>
+//                         <NumberIncrementStepper />
+//                         <NumberDecrementStepper />
+//                       </NumberInputStepper>
+//                     </NumberInput>
+//                   </Td>
+
 //                   <Td>
 //                     <Input value={veh.details || ""} onChange={e => updateVehicle(i, "details", e.target.value)} placeholder="Plaque, usage, notes…" />
 //                   </Td>
@@ -1357,3 +1725,4 @@ export default function ProductionAndProductsPage() {
 //     </Box>
 //   );
 // }
+
