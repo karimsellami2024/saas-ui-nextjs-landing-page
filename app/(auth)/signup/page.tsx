@@ -13,48 +13,44 @@ import { Section } from '#components/section'
 import siteConfig from '#data/config'
 import { useEffect, useState } from 'react'
 import CompanyInfoForm from '../signup/CompanyInfoForm'
-import IntakeInterview from '../signup/IntakeInterview'   // <-- add this
+import { useRouter } from 'next/navigation'
 
-type Step = 'signup' | 'company' | 'intake';
+type Step = 'signup' | 'company'
 
 export default function SignUp() {
-  const [step, setStep]       = useState<Step>('signup')
-  const [userId, setUserId]   = useState<string | null>(null)
-  const [company, setCompany] = useState<{ name: string } | null>(null)
+  const router = useRouter()
+
+  const [step, setStep] = useState<Step>('signup')
+  const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
+      if (event === 'SIGNED_IN' && session?.user) {
         setUserId(session.user.id)
         setStep('company')
       }
     })
+
     supabase.auth.getUser().then(({ data }) => {
       if (data?.user) {
         setUserId(data.user.id)
         setStep('company')
       }
     })
+
     return () => subscription.unsubscribe()
   }, [])
 
-  // 1) After company info → switch to "intake"
+  // After "Valider" in CompanyInfoForm -> go to /agent
   function handleCompanyComplete(payload?: { companyName?: string }) {
-    const name = payload?.companyName || 'Entreprise';
-    setCompany({ name })
-    setStep('intake')
-  }
+    const companyName = payload?.companyName?.trim()
 
-  // 2) After intake → finish onboarding
-  function handleIntakeDone({ assessment }: { assessment: any }) {
-    // OPTIONAL: Save to Supabase (pseudo)
-    // await supabase.from('companies').update({
-    //   methodology_profile: assessment,                   // JSONB
-    //   selected_codes: assessment.selected_codes || []    // TEXT[]
-    // }).eq('user_id', userId)
+    // (optional) persist for later use on Agent page
+    if (companyName && typeof window !== 'undefined') {
+      window.localStorage.setItem('company_name', companyName)
+    }
 
-    // Redirect or thank-you
-    window.location.href = "/"
+    router.push('/agent')
   }
 
   return (
@@ -84,6 +80,7 @@ export default function SignUp() {
                 mb={{ base: 0, lg: 16 }}
               />
             </NextLink>
+
             <Features
               display={{ base: 'none', lg: 'flex' }}
               columns={1}
@@ -102,7 +99,7 @@ export default function SignUp() {
 
           <Center height="100%" flex="1">
             <Box width="container.sm" pt="8" px="8">
-              {step === "signup" && (
+              {step === 'signup' && (
                 <>
                   <Auth
                     supabaseClient={supabase}
@@ -113,6 +110,7 @@ export default function SignUp() {
                     redirectTo={undefined}
                     magicLink={false}
                   />
+
                   <Text color="gray.600" fontSize="sm" mt={2}>
                     By signing up you agree to our{' '}
                     <Link href={siteConfig.termsUrl} color="blue.500" isExternal>
@@ -123,6 +121,7 @@ export default function SignUp() {
                       Privacy Policy
                     </Link>
                   </Text>
+
                   <Text mt={2}>
                     Already have an account?{' '}
                     <Link href="/login" color="blue.500">
@@ -132,21 +131,11 @@ export default function SignUp() {
                 </>
               )}
 
-              {step === "company" && userId && (
+              {step === 'company' && userId && (
                 <CompanyInfoForm
                   userId={userId}
-                  // Make sure your CompanyInfoForm calls onComplete({ companyName })
-                  onComplete={handleCompanyComplete}
+                  onComplete={handleCompanyComplete} // <-- "Valider" triggers redirect now
                 />
-              )}
-
-              {step === "intake" && company?.name && (
-                <IntakeInterview
-  companyName={company.name}
-  apiBase="https://interview-129138384907.us-central1.run.app/api"
-  onDone={handleIntakeDone}
-/>
-
               )}
             </Box>
           </Center>
@@ -155,8 +144,6 @@ export default function SignUp() {
     </Section>
   )
 }
-
-
 
 // 'use client'
 
@@ -173,20 +160,22 @@ export default function SignUp() {
 // import siteConfig from '#data/config'
 // import { useEffect, useState } from 'react'
 // import CompanyInfoForm from '../signup/CompanyInfoForm'
+// import IntakeInterview from '../signup/IntakeInterview'   // <-- add this
+
+// type Step = 'signup' | 'company' | 'intake';
 
 // export default function SignUp() {
-//   const [step, setStep] = useState<'signup' | 'company'>('signup')
-//   const [userId, setUserId] = useState<string | null>(null)
+//   const [step, setStep]       = useState<Step>('signup')
+//   const [userId, setUserId]   = useState<string | null>(null)
+//   const [company, setCompany] = useState<{ name: string } | null>(null)
 
 //   useEffect(() => {
-//     // Listen to sign up and session
 //     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
 //       if (event === "SIGNED_IN" && session?.user) {
 //         setUserId(session.user.id)
 //         setStep('company')
 //       }
 //     })
-//     // If the user is already logged in (refresh case)
 //     supabase.auth.getUser().then(({ data }) => {
 //       if (data?.user) {
 //         setUserId(data.user.id)
@@ -196,9 +185,22 @@ export default function SignUp() {
 //     return () => subscription.unsubscribe()
 //   }, [])
 
-//   // After submitting company info
-//   function handleCompanyComplete() {
-//     // Redirect or show a thank you message, etc.
+//   // 1) After company info → switch to "intake"
+//   function handleCompanyComplete(payload?: { companyName?: string }) {
+//     const name = payload?.companyName || 'Entreprise';
+//     setCompany({ name })
+//     setStep('intake')
+//   }
+
+//   // 2) After intake → finish onboarding
+//   function handleIntakeDone({ assessment }: { assessment: any }) {
+//     // OPTIONAL: Save to Supabase (pseudo)
+//     // await supabase.from('companies').update({
+//     //   methodology_profile: assessment,                   // JSONB
+//     //   selected_codes: assessment.selected_codes || []    // TEXT[]
+//     // }).eq('user_id', userId)
+
+//     // Redirect or thank-you
 //     window.location.href = "/"
 //   }
 
@@ -211,9 +213,7 @@ export default function SignUp() {
 //         right="0"
 //         borderLeftWidth="1px"
 //         borderColor="gray.200"
-//         _dark={{
-//           borderColor: 'gray.700',
-//         }}
+//         _dark={{ borderColor: 'gray.700' }}
 //       />
 //       <PageTransition height="100%" display="flex" alignItems="center">
 //         <Stack
@@ -246,6 +246,7 @@ export default function SignUp() {
 //               }))}
 //             />
 //           </Box>
+
 //           <Center height="100%" flex="1">
 //             <Box width="container.sm" pt="8" px="8">
 //               {step === "signup" && (
@@ -256,7 +257,7 @@ export default function SignUp() {
 //                     providers={['google', 'github']}
 //                     view="sign_up"
 //                     showLinks={false}
-//                     redirectTo={undefined} // Don't redirect yet!
+//                     redirectTo={undefined}
 //                     magicLink={false}
 //                   />
 //                   <Text color="gray.600" fontSize="sm" mt={2}>
@@ -277,8 +278,22 @@ export default function SignUp() {
 //                   </Text>
 //                 </>
 //               )}
+
 //               {step === "company" && userId && (
-//                 <CompanyInfoForm userId={userId} onComplete={handleCompanyComplete} />
+//                 <CompanyInfoForm
+//                   userId={userId}
+//                   // Make sure your CompanyInfoForm calls onComplete({ companyName })
+//                   onComplete={handleCompanyComplete}
+//                 />
+//               )}
+
+//               {step === "intake" && company?.name && (
+//                 <IntakeInterview
+//   companyName={company.name}
+//   apiBase="https://interview-129138384907.us-central1.run.app/api"
+//   onDone={handleIntakeDone}
+// />
+
 //               )}
 //             </Box>
 //           </Center>
@@ -287,3 +302,5 @@ export default function SignUp() {
 //     </Section>
 //   )
 // }
+
+
