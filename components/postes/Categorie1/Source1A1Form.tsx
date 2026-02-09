@@ -1264,6 +1264,7 @@ function sumField(results: GesResult[], key: keyof GesResult): string {
   return Number(s).toLocaleString("fr-CA", { maximumFractionDigits: 3 });
 }
 
+
 // import React, { useEffect, useMemo, useRef, useState } from "react";
 // import {
 //   Box,

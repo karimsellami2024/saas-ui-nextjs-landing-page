@@ -1,37 +1,46 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Heading, Spinner, Text } from "@chakra-ui/react";
-import { Source1AForm, Source1ARow } from "../poste1/SourceA1Form";
 import { supabase } from "../../../lib/supabaseClient";
 
-const POSTE_LABEL = "1A1 – Chauffage des bâtiments et équipements fixes";
+// ✅ import your Category 3 source form
+import Source33A1Form, { Source33A1Row } from "./source3A1Transport";
 
-// Same brand green as 2A3
+const POSTE_LABEL = "3.3A1 – Navettage des employés";
+
+// Same brand green as your example
 const HIGHLIGHT = "#264a3b";
 const TABLE_BG = "#f3f6ef";
 
-export default function Poste1A1Page() {
-  const [rows, setRows] = useState<Source1ARow[]>([
+export default function Poste33A1Page() {
+  const [rows, setRows] = useState<Source33A1Row[]>([
     {
+      methodology: "Données réelles",
       equipment: "",
       description: "",
       date: "",
+      month: "",
       site: "",
       product: "",
       reference: "",
-      usageAndFuel: "",
-      qty: "",
-      unit: "",
+      transportMode: "",
+      oneWayDistanceKm: "",
+      workDaysPerYear: "",
+      employeesSameTrip: "",
     },
   ]);
+
   const [posteSourceId, setPosteSourceId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // results (optional, but useful for header / export later)
   const [gesResults, setGesResults] = useState<any[]>([]);
 
   useEffect(() => {
     (async () => {
       setLoading(true);
-      // 1. Get user
+
+      // 1) Get user
       const {
         data: { user },
       } = await supabase.auth.getUser();
@@ -41,25 +50,31 @@ export default function Poste1A1Page() {
       }
       setUserId(user.id);
 
-      // 2. Fetch source visibility config for this user
+      // 2) Fetch source visibility config for this user
       const res = await fetch(`/api/source-visibility?user_id=${user.id}`);
       const data = await res.json();
 
-      // 3. Find posteId for Poste 1 (label containing "1")
-      let poste1Id: string | null = null;
+      /**
+       * ✅ Adapted logic for category 3:
+       * We try to find the posteId whose label contains "3"
+       * (exact same logic as your Poste1 page, but for category 3)
+       */
+      let poste3Id: string | null = null;
       if (data.posteLabels) {
         for (const [id, label] of Object.entries(data.posteLabels)) {
-          if (typeof label === "string" && label.toLowerCase().includes("1")) {
-            poste1Id = id;
+          if (typeof label === "string" && label.toLowerCase().includes("3")) {
+            poste3Id = id;
             break;
           }
         }
       }
 
-      // 4. Find source.id for source_code "1A1" in Poste 1
-      if (poste1Id && data.sources?.[poste1Id]) {
-        const found = data.sources[poste1Id].find(
-          (src: any) => src.source_code === "1A1"
+      /**
+       * ✅ Find source.id for source_code "3.3A1" inside Poste 3
+       */
+      if (poste3Id && data.sources?.[poste3Id]) {
+        const found = data.sources[poste3Id].find(
+          (src: any) => src.source_code === "3.3A1"
         );
         if (found) setPosteSourceId(found.id);
       }
@@ -83,12 +98,7 @@ export default function Poste1A1Page() {
         </Heading>
 
         {loading ? (
-          <Box
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-            minH="50vh"
-          >
+          <Box display="flex" alignItems="center" justifyContent="center" minH="50vh">
             <Spinner color={HIGHLIGHT} size="xl" />
           </Box>
         ) : !posteSourceId || !userId ? (
@@ -102,7 +112,7 @@ export default function Poste1A1Page() {
             Source ou utilisateur introuvable.
           </Text>
         ) : (
-          <Source1AForm
+          <Source33A1Form
             rows={rows}
             setRows={setRows}
             highlight={HIGHLIGHT}

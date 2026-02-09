@@ -1,29 +1,30 @@
-// // components/nav/DirectSecondLevel.tsx
 // 'use client';
 // import React from "react";
 // import { VStack, Text } from "@chakra-ui/react";
 // import { Pill, ScrollRow } from "./Pills";
+// import type { IsoCategoryKey } from "./iso14906";
 
-// export type DirectItem = {
-//   key: string;
-//   label: string;
-//   active?: boolean;     // highlighted (dark green)
-//   selected?: boolean;   // shows ✓ (like your first screenshot)
+// export type CategoryItem = {
+//   key: IsoCategoryKey;
+//   label: string;       // "Catégorie 1"
+//   title: string;       // "Émissions directs"
+//   active?: boolean;
+//   selected?: boolean;  // si tu veux multi-select
 //   disabled?: boolean;
 // };
 
-// export default function DirectSecondLevel({
+// export default function CategorySecondLevel({
 //   items,
 //   onToggleSelect,
 //   onActivate,
 // }: {
-//   items: DirectItem[];
-//   onToggleSelect?: (key: string) => void;  // toggles ✓
-//   onActivate?: (key: string) => void;      // marks as active (dark)
+//   items: CategoryItem[];
+//   onToggleSelect?: (key: IsoCategoryKey) => void;
+//   onActivate?: (key: IsoCategoryKey) => void;
 // }) {
 //   return (
 //     <VStack align="start" spacing={2}>
-//       <Text fontWeight="800" fontSize="lg">Émissions directes</Text>
+//       <Text fontWeight="800" fontSize="lg">Catégories (ISO 14904)</Text>
 //       <ScrollRow>
 //         {items.map((it) => (
 //           <Pill
@@ -36,6 +37,10 @@
 //           />
 //         ))}
 //       </ScrollRow>
+//       {/* Optionnel: afficher le titre en dessous */}
+//       <Text fontSize="sm" color="gray.600">
+//         {items.find(i => i.active)?.title ?? ""}
+//       </Text>
 //     </VStack>
 //   );
 // }

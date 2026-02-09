@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
   Flex,
@@ -15,13 +15,24 @@ import {
   Tr,
   Th,
   Td,
+  IconButton,
+  Button,
+  Skeleton,
 } from "@chakra-ui/react";
+import { ChevronLeftIcon, ChevronRightIcon, InfoIcon } from "@chakra-ui/icons";
 import {
   PieChart,
   Pie,
   Cell,
   ResponsiveContainer,
   Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  LineChart,
+  Line,
 } from "recharts";
 
 // ===== Design tokens =====
@@ -36,6 +47,10 @@ const TOK = {
   rowStripe: "#F2F4F7",
   grayCard: "#F3F4F6",
   white: "#FFFFFF",
+
+  // Figma-like nav controls
+  navBg: "#F5F6F5",
+  navIcon: "#8F8F8F",
 };
 
 // ==== Category palette ====
@@ -64,19 +79,57 @@ export type PosteResult = {
   percent?: number;
   category?: string;
   color?: string;
+
+  // optional fields for other "formats"
+  location?: string;
+  site?: string;
+  production_site?: string;
+
   [key: string]: any;
 };
 
+export type EnergyPosteResult = {
+  poste: number;
+  label: string;
+  kwh: number; // canonical in kWh
+  percent?: number;
+  category?: string;
+  color?: string;
+  [key: string]: any;
+};
+
+type GesSummary = {
+  total_tCO2eq?: number | string;
+  co2?: number | string;
+  ch4?: number | string;
+  n2o?: number | string;
+  ges?: number | string;
+  [key: string]: any;
+};
+
+type EnergySummary = {
+  total_kwh?: number | string;
+  total_gj?: number | string;
+  [key: string]: any;
+};
+
+type EnergyTrendPoint = {
+  year: string | number;
+  kwh: number;
+};
+
 interface GesDashboardProps {
+  // GES (from your existing handler)
   posteResults?: PosteResult[];
-  summary?: {
-    total_tCO2eq?: number | string;
-    co2?: number | string;
-    ch4?: number | string;
-    n2o?: number | string;
-    ges?: number | string;
-    [key: string]: any;
-  };
+  summary?: GesSummary;
+
+  // ENERGY (new fields from updated handler)
+  energyResults?: EnergyPosteResult[];
+  energySummary?: EnergySummary;
+  energyTrend?: EnergyTrendPoint[];
+
+  // Optional: if you want to show a skeleton while parent fetches
+  isLoading?: boolean;
 }
 
 /* =========================
@@ -109,14 +162,17 @@ const POSTE_ALIASES: Record<number, string> = {
 };
 
 // ===== helpers =====
-const fmt = (v: unknown) => {
+const fmt = (v: unknown, maxFrac = 2) => {
   if (v === null || v === undefined || v === "-") return "-";
   const n = Number(v);
   if (!isFinite(n)) return String(v);
-  return Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n);
+  return Intl.NumberFormat(undefined, { maximumFractionDigits: maxFrac }).format(n);
 };
 
-const aggregateByCategory = (rows: PosteResult[]) => {
+const pickLocation = (r: PosteResult) =>
+  (r.location || r.production_site || r.site || "").trim();
+
+const aggregateByCategoryGes = (rows: PosteResult[]) => {
   const acc: Record<string, number> = {};
   rows.forEach(r => {
     const key = r.category ?? "Autres";
@@ -129,29 +185,181 @@ const aggregateByCategory = (rows: PosteResult[]) => {
   }));
 };
 
-/* -------------------------------------------------
-   Donut + legend (uses row.label -> now the alias)
-   ------------------------------------------------- */
-function DonutPanel({ data }: { data: PosteResult[] }) {
-  const [hovered, setHovered] = useState<number | null>(null);
-  const hasData = data.length > 0;
-  const catAgg = useMemo(() => aggregateByCategory(data), [data]);
+const aggregateByLocationGes = (rows: PosteResult[]) => {
+  const acc: Record<string, number> = {};
+  rows.forEach(r => {
+    const loc = pickLocation(r) || "Localisation";
+    acc[loc] = (acc[loc] ?? 0) + (Number(r.tCO2eq) || 0);
+  });
+  const entries = Object.entries(acc).map(([name, value], i) => ({
+    name,
+    value,
+    color: SLICE_COLORS[i % SLICE_COLORS.length],
+  }));
+  entries.sort((a, b) => b.value - a.value);
+  return entries;
+};
 
-  const colorOf = (row: PosteResult, i: number) =>
+const computePercent = (value: number, total: number) =>
+  total > 0 ? (value / total) * 100 : 0;
+
+type ChartMode = "poste" | "lieu" | "croissant";
+const MODE_ORDER: ChartMode[] = ["poste", "lieu", "croissant"];
+
+const MODE_TITLE_GES: Record<ChartMode, string> = {
+  poste: "Émissions de GES par poste d’émission [tCO²e]",
+  lieu: "Émissions de GES par lieu de production [tCO²e]",
+  croissant: "Émissions de GES par poste d’émission en ordre croissant [tCO²e]",
+};
+
+const NavBtn = ({
+  ariaLabel,
+  onClick,
+  icon,
+}: {
+  ariaLabel: string;
+  onClick: () => void;
+  icon: React.ReactElement;
+}) => (
+  <IconButton
+    aria-label={ariaLabel}
+    onClick={onClick}
+    icon={icon}
+    size="sm"
+    w="28px"
+    h="28px"
+    minW="28px"
+    bg={TOK.navBg}
+    borderRadius="8px"
+    _hover={{ bg: "#ECEEEB" }}
+    _active={{ bg: "#E4E7E2" }}
+    color={TOK.navIcon}
+    border="0"
+    sx={{ svg: { width: "18px", height: "18px" } }}
+  />
+);
+
+/* -------------------------------------------------
+   GES Donut / Lieu / Croissant + arrows
+   ------------------------------------------------- */
+function GesDonutPanel({ data }: { data: PosteResult[] }) {
+  const [modeIndex, setModeIndex] = useState(0);
+  const mode: ChartMode = MODE_ORDER[modeIndex];
+  const hasData = data.length > 0;
+
+  const [hovered, setHovered] = useState<number | null>(null);
+  const [activeLoc, setActiveLoc] = useState<string | null>(null);
+
+  const catAgg = useMemo(() => aggregateByCategoryGes(data), [data]);
+  const locAgg = useMemo(() => aggregateByLocationGes(data), [data]);
+
+  const colorOfPoste = (row: PosteResult, i: number) =>
     row.color ||
     (row.category ? CATEGORY_COLORS[row.category] : undefined) ||
     SLICE_COLORS[i % SLICE_COLORS.length];
 
+  const goPrev = () => setModeIndex((i) => (i - 1 + MODE_ORDER.length) % MODE_ORDER.length);
+  const goNext = () => setModeIndex((i) => (i + 1) % MODE_ORDER.length);
+
   return (
     <Box bg={TOK.surface} rounded="24px" border="1px solid" borderColor={TOK.border} p={6}>
-      <Text fontWeight="800" fontSize="16px" color={TOK.heading} mb={2}>
-        Émissions de GES par poste d’émission [tCO²e]
-      </Text>
+      <Flex align="center" gap={3} mb={2}>
+        <NavBtn ariaLabel="Précédent" onClick={goPrev} icon={<ChevronLeftIcon />} />
+        <Box flex="1">
+          <Text fontWeight="800" fontSize="16px" color={TOK.heading} textAlign="center" lineHeight="1.2">
+            {MODE_TITLE_GES[mode]}
+          </Text>
+        </Box>
+        <NavBtn ariaLabel="Suivant" onClick={goNext} icon={<ChevronRightIcon />} />
+      </Flex>
 
       <Flex gap={6} align="center" direction={{ base: "column", md: "row" }}>
         <Box flex="0 0 360px" w={{ base: "100%", md: "360px" }} h="320px">
           <ResponsiveContainer width="100%" height="100%">
-            {hasData ? (
+            {!hasData ? (
+              <Flex w="100%" h="100%" align="center" justify="center">
+                <Text color={TOK.subtle}>Aucune donnée</Text>
+              </Flex>
+            ) : mode === "croissant" ? (
+              <BarChart
+                data={[...data]
+                  .map((r) => ({
+                    name: `Poste ${r.poste}`,
+                    value: Number(r.tCO2eq) || 0,
+                  }))
+                  .sort((a, b) => a.value - b.value)}
+                layout="vertical"
+                margin={{ top: 10, right: 12, bottom: 10, left: 48 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" vertical />
+                <XAxis type="number" tick={{ fontSize: 12, fill: TOK.subtle }} axisLine={false} tickLine={false} />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  width={72}
+                  tick={{ fontSize: 12, fill: TOK.subtle }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  formatter={(v: any) => [fmt(v), "tCO²e"]}
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: `1px solid ${TOK.border}`,
+                    boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
+                    fontSize: 12,
+                  }}
+                />
+                <Bar dataKey="value" radius={[6, 6, 6, 6]}>
+                  {data.map((r, i) => (
+                    <Cell
+                      key={`bar-${i}`}
+                      fill={r.category ? CATEGORY_COLORS[r.category] : SLICE_COLORS[i % SLICE_COLORS.length]}
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            ) : mode === "lieu" ? (
+              <PieChart>
+                <Pie
+                  data={locAgg}
+                  dataKey="value"
+                  nameKey="name"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={85}
+                  outerRadius={120}
+                  paddingAngle={1.5}
+                  onMouseLeave={() => setHovered(null)}
+                >
+                  {locAgg.map((row, i) => {
+                    const dim =
+                      activeLoc && row.name !== activeLoc ? 0.35 : hovered === i || hovered === null ? 1 : 0.45;
+                    return <Cell key={`l-${i}`} fill={row.color} opacity={dim} onMouseEnter={() => setHovered(i)} />;
+                  })}
+                </Pie>
+
+                <Pie
+                  data={[{ v: 1 }]}
+                  dataKey="v"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={0}
+                  outerRadius={55}
+                  fill={TOK.surface}
+                  isAnimationActive={false}
+                />
+                <Tooltip
+                  formatter={(v: any) => [fmt(v), "tCO²e"]}
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: `1px solid ${TOK.border}`,
+                    boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
+                    fontSize: 12,
+                  }}
+                />
+              </PieChart>
+            ) : (
               <PieChart>
                 <Pie
                   data={data}
@@ -167,7 +375,7 @@ function DonutPanel({ data }: { data: PosteResult[] }) {
                   {data.map((row, i) => (
                     <Cell
                       key={`p-${i}`}
-                      fill={colorOf(row, i)}
+                      fill={colorOfPoste(row, i)}
                       opacity={hovered === i || hovered === null ? 1 : 0.45}
                       onMouseEnter={() => setHovered(i)}
                     />
@@ -199,59 +407,104 @@ function DonutPanel({ data }: { data: PosteResult[] }) {
                   fill={TOK.surface}
                   isAnimationActive={false}
                 />
-                <Tooltip />
+                <Tooltip
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: `1px solid ${TOK.border}`,
+                    boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
+                    fontSize: 12,
+                  }}
+                />
               </PieChart>
-            ) : (
-              <Flex w="100%" h="100%" align="center" justify="center">
-                <Text color={TOK.subtle}>Aucune donnée</Text>
-              </Flex>
             )}
           </ResponsiveContainer>
         </Box>
 
-        {/* Legend uses the alias via row.label */}
         <Box flex="1" maxW={{ md: "360px" }}>
-          <Box border="1px solid" borderColor={TOK.border} rounded="16px" overflow="hidden">
-            {data.map((row, i) => (
-              <Flex
-                key={i}
-                px={3}
-                py={2}
-                align="center"
-                bg={i % 2 ? TOK.rowStripe : TOK.white}
-                onMouseEnter={() => setHovered(i)}
-                onMouseLeave={() => setHovered(null)}
-                cursor="default"
-              >
-                <Box w="10px" h="10px" rounded="full"
-                     bg={row.category ? CATEGORY_COLORS[row.category] : SLICE_COLORS[i % SLICE_COLORS.length]}
-                     mr={3}
-                />
-                <Text flex="1" fontSize="13px">
-                  {row.label}
-                </Text>
-                <Text fontWeight="700" fontSize="13px">
-                  {fmt(row.tCO2eq)}
-                </Text>
+          {mode === "poste" ? (
+            <>
+              <Box border="1px solid" borderColor={TOK.border} rounded="16px" overflow="hidden">
+                {data.map((row, i) => (
+                  <Flex
+                    key={i}
+                    px={3}
+                    py={2}
+                    align="center"
+                    bg={i % 2 ? TOK.rowStripe : TOK.white}
+                    onMouseEnter={() => setHovered(i)}
+                    onMouseLeave={() => setHovered(null)}
+                    cursor="default"
+                  >
+                    <Box w="10px" h="10px" rounded="full" bg={colorOfPoste(row, i)} mr={3} />
+                    <Text flex="1" fontSize="13px">
+                      {row.label}
+                    </Text>
+                    <Text fontWeight="700" fontSize="13px">
+                      {fmt(row.tCO2eq)}
+                    </Text>
+                  </Flex>
+                ))}
+              </Box>
+              <Text mt={3} fontSize="12px" color={TOK.subtle} textAlign="center">
+                Appuyez sur une section du graphique pour voir le résultat.
+              </Text>
+            </>
+          ) : mode === "lieu" ? (
+            <>
+              <Text fontSize="12px" color={TOK.subtle} mb={2} textAlign="center">
+                Sélectionnez une localisation
+              </Text>
+              <Flex justify="center">
+                <HStack spacing={2} wrap="wrap">
+                  {locAgg.slice(0, 6).map((l) => {
+                    const isActive = activeLoc === l.name;
+                    return (
+                      <Button
+                        key={l.name}
+                        size="xs"
+                        px={3}
+                        h="22px"
+                        rounded="999px"
+                        bg={isActive ? TOK.primary : TOK.navBg}
+                        color={isActive ? "#fff" : "#2F2F2F"}
+                        fontWeight={600}
+                        _hover={{ bg: isActive ? TOK.primary : "#ECEEEB" }}
+                        onClick={() => setActiveLoc((cur) => (cur === l.name ? null : l.name))}
+                      >
+                        {l.name}
+                      </Button>
+                    );
+                  })}
+                </HStack>
               </Flex>
-            ))}
-          </Box>
-
-          <Text mt={3} fontSize="12px" color={TOK.subtle} textAlign="center">
-            Appuyez sur une section du graphique pour voir le résultat.
-          </Text>
+              <Text mt={3} fontSize="12px" color={TOK.subtle} textAlign="center">
+                Appuyez sur une section du graphique pour voir le résultat.
+              </Text>
+            </>
+          ) : (
+            <Text mt={1} fontSize="12px" color={TOK.subtle} textAlign="center">
+              Appuyez sur une section du graphique pour voir le résultat.
+            </Text>
+          )}
         </Box>
       </Flex>
 
-      {/* Chips */}
       <Box mt={4} p={3} bg={TOK.grayCard} rounded="16px" border="1px solid" borderColor={TOK.border}>
         <Text fontSize="12px" color={TOK.subtle} mb={2}>
           Catégorie d’émissions
         </Text>
         <HStack spacing={3} wrap="wrap">
           {Object.entries(CATEGORY_COLORS).map(([name, color]) => (
-            <HStack key={name} spacing={2} bg="#fff" border="1px solid" borderColor={TOK.border}
-                    rounded="12px" px={2} py="4px">
+            <HStack
+              key={name}
+              spacing={2}
+              bg="#fff"
+              border="1px solid"
+              borderColor={TOK.border}
+              rounded="12px"
+              px={2}
+              py="4px"
+            >
               <Box w="10px" h="10px" rounded="full" bg={color} />
               <Text fontSize="12px">{name}</Text>
             </HStack>
@@ -263,14 +516,14 @@ function DonutPanel({ data }: { data: PosteResult[] }) {
 }
 
 /* -------------------------------------------------
-   Detailed table (shows alias in the label column)
+   GES Table
    ------------------------------------------------- */
-function DetailedTable({
+function GesDetailedTable({
   rows,
   summary,
 }: {
   rows: PosteResult[];
-  summary?: GesDashboardProps["summary"];
+  summary?: GesSummary;
 }) {
   const head = [
     { key: "index", label: "" },
@@ -286,7 +539,7 @@ function DetailedTable({
       <Table size="sm" variant="simple">
         <Thead bg={TOK.grayCard}>
           <Tr>
-            {head.map(h => (
+            {head.map((h) => (
               <Th key={h.key as string} fontSize="12px" color={TOK.subtle} fontWeight="700">
                 {h.label}
               </Th>
@@ -305,17 +558,20 @@ function DetailedTable({
                     bg={r.category ? CATEGORY_COLORS[r.category] : SLICE_COLORS[i % SLICE_COLORS.length]}
                     mr={2}
                   />
-                  <Text fontSize="12px" color={TOK.subtle}>{r.poste ?? i + 1}</Text>
+                  <Text fontSize="12px" color={TOK.subtle}>
+                    {r.poste ?? i + 1}
+                  </Text>
                 </Flex>
               </Td>
               <Td>
-                {/* Alias already injected into r.label */}
                 <Text fontSize="14px">{r.label}</Text>
               </Td>
               <Td isNumeric>{fmt(r.co2 ?? 0)}</Td>
               <Td isNumeric>{fmt(r.ch4 ?? 0)}</Td>
               <Td isNumeric>{fmt(r.n2o ?? 0)}</Td>
-              <Td isNumeric fontWeight="700">{fmt(r.tCO2eq ?? 0)}</Td>
+              <Td isNumeric fontWeight="700">
+                {fmt(r.tCO2eq ?? 0)}
+              </Td>
             </Tr>
           ))}
           <Tr bg={TOK.grayCard} fontWeight="bold">
@@ -331,65 +587,465 @@ function DetailedTable({
   );
 }
 
-/* ---------------------------------------------
-   SINGLE FULL-SCREEN DASHBOARD (Feuille 1 only)
-   --------------------------------------------- */
-export default function GesDashboard({ posteResults = [], summary = {} }: GesDashboardProps) {
-  // Inject aliases: if the incoming label is missing or looks like "Poste X", replace it
-  const dataWithAliases = useMemo<PosteResult[]>(
+/* -------------------------------------------------
+   ENERGY Donut panel (Distribution + unit toggle)
+   ------------------------------------------------- */
+function EnergyDonutPanel({
+  rows,
+  unit,
+  onToggleUnit,
+}: {
+  rows: EnergyPosteResult[];
+  unit: "kwh" | "gj";
+  onToggleUnit: () => void;
+}) {
+  const hasData = rows.length > 0;
+
+  const totalKwh = useMemo(() => rows.reduce((s, r) => s + (Number(r.kwh) || 0), 0), [rows]);
+
+  const displayValue = (kwh: number) => (unit === "kwh" ? kwh : kwh * 0.0036);
+  const unitLabel = unit === "kwh" ? "KWh" : "Gigajoule";
+
+  return (
+    <Box bg={TOK.surface} rounded="24px" border="1px solid" borderColor={TOK.border} p={6}>
+      <Flex align="center" justify="space-between" mb={2}>
+        <Flex align="center" gap={3} flex="1">
+          <NavBtn ariaLabel="Précédent" onClick={() => {}} icon={<ChevronLeftIcon />} />
+          <Box flex="1">
+            <Text fontWeight="800" fontSize="16px" color={TOK.heading} textAlign="center" lineHeight="1.2">
+              Distribution de l’énergie par poste d’émission [{unitLabel}]
+            </Text>
+          </Box>
+          <NavBtn ariaLabel="Suivant" onClick={() => {}} icon={<ChevronRightIcon />} />
+        </Flex>
+
+        <HStack spacing={2} ml={3}>
+          <Text fontSize="12px" color={TOK.subtle}>
+            {unitLabel}
+          </Text>
+          <Switch
+            size="sm"
+            isChecked={unit === "gj"}
+            onChange={onToggleUnit}
+            colorScheme="green"
+            aria-label="Basculer unité énergie"
+          />
+        </HStack>
+      </Flex>
+
+      <Flex gap={6} align="center" direction={{ base: "column", md: "row" }}>
+        <Box flex="0 0 360px" w={{ base: "100%", md: "360px" }} h="320px">
+          <ResponsiveContainer width="100%" height="100%">
+            {!hasData ? (
+              <Flex w="100%" h="100%" align="center" justify="center">
+                <Text color={TOK.subtle}>Aucune donnée</Text>
+              </Flex>
+            ) : (
+              <PieChart>
+                <Pie
+                  data={rows}
+                  dataKey={(d: any) => displayValue(Number(d.kwh) || 0)}
+                  nameKey="label"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={95}
+                  outerRadius={120}
+                  paddingAngle={1.5}
+                >
+                  {rows.map((r, i) => (
+                    <Cell
+                      key={`e-${i}`}
+                      fill={r.color || (r.category ? CATEGORY_COLORS[r.category] : SLICE_COLORS[i % SLICE_COLORS.length])}
+                    />
+                  ))}
+                </Pie>
+                <Pie
+                  data={[{ v: 1 }]}
+                  dataKey="v"
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={0}
+                  outerRadius={55}
+                  fill={TOK.surface}
+                  isAnimationActive={false}
+                />
+                <Tooltip
+                  formatter={(v: any) => [fmt(v, 0), unitLabel]}
+                  contentStyle={{
+                    borderRadius: 12,
+                    border: `1px solid ${TOK.border}`,
+                    boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
+                    fontSize: 12,
+                  }}
+                />
+              </PieChart>
+            )}
+          </ResponsiveContainer>
+        </Box>
+
+        <Box flex="1" maxW={{ md: "440px" }}>
+          <Box border="1px solid" borderColor={TOK.border} rounded="16px" overflow="hidden">
+            {rows.map((r, i) => {
+              const p = r.percent ?? computePercent(Number(r.kwh) || 0, totalKwh);
+              return (
+                <Flex key={i} px={3} py={2} align="center" bg={i % 2 ? TOK.rowStripe : TOK.white}>
+                  <Box
+                    w="10px"
+                    h="10px"
+                    rounded="full"
+                    bg={r.color || (r.category ? CATEGORY_COLORS[r.category] : SLICE_COLORS[i % SLICE_COLORS.length])}
+                    mr={3}
+                  />
+                  <Text flex="1" fontSize="13px">
+                    {r.label}
+                  </Text>
+                  <Text fontWeight="600" fontSize="13px" w="130px" textAlign="right">
+                    {fmt(displayValue(Number(r.kwh) || 0), 0)}
+                  </Text>
+                  <Text fontWeight="700" fontSize="13px" w="56px" textAlign="right">
+                    {fmt(p, 0)} %
+                  </Text>
+                </Flex>
+              );
+            })}
+          </Box>
+
+          <Text mt={3} fontSize="12px" color={TOK.subtle} textAlign="center">
+            Appuyez sur une section du graphique pour voir le résultat.
+          </Text>
+        </Box>
+      </Flex>
+
+      <Box mt={4} p={3} bg={TOK.grayCard} rounded="16px" border="1px solid" borderColor={TOK.border}>
+        <Text fontSize="12px" color={TOK.subtle} mb={2}>
+          Catégorie d’émissions
+        </Text>
+        <HStack spacing={3} wrap="wrap">
+          {Object.entries(CATEGORY_COLORS).map(([name, color]) => (
+            <HStack
+              key={name}
+              spacing={2}
+              bg="#fff"
+              border="1px solid"
+              borderColor={TOK.border}
+              rounded="12px"
+              px={2}
+              py="4px"
+            >
+              <Box w="10px" h="10px" rounded="full" bg={color} />
+              <Text fontSize="12px">{name}</Text>
+            </HStack>
+          ))}
+        </HStack>
+      </Box>
+    </Box>
+  );
+}
+
+/* -------------------------------------------------
+   ENERGY Table
+   ------------------------------------------------- */
+function EnergyDetailedTable({
+  rows,
+  unit,
+}: {
+  rows: EnergyPosteResult[];
+  unit: "kwh" | "gj";
+}) {
+  const totalKwh = useMemo(() => rows.reduce((s, r) => s + (Number(r.kwh) || 0), 0), [rows]);
+  const display = (kwh: number) => (unit === "kwh" ? kwh : kwh * 0.0036);
+  const unitLabel = unit === "kwh" ? "KWh" : "Gigajoule";
+
+  const head = [
+    { key: "index", label: "" },
+    { key: "poste", label: "Poste d’émission" },
+    { key: "value", label: unitLabel },
+    { key: "percent", label: "%" },
+  ] as const;
+
+  return (
+    <Box bg={TOK.surface} rounded="24px" border="1px solid" borderColor={TOK.border} p={0} overflow="hidden">
+      <Table size="sm" variant="simple">
+        <Thead bg={TOK.grayCard}>
+          <Tr>
+            {head.map((h) => (
+              <Th key={h.key as string} fontSize="12px" color={TOK.subtle} fontWeight="700">
+                {h.label}
+              </Th>
+            ))}
+          </Tr>
+        </Thead>
+        <Tbody>
+          {rows.map((r, i) => {
+            const val = Number(r.kwh) || 0;
+            const p = r.percent ?? computePercent(val, totalKwh);
+            return (
+              <Tr key={i} bg={i % 2 ? TOK.rowStripe : TOK.white}>
+                <Td w="28px">
+                  <Flex align="center">
+                    <Box
+                      w="10px"
+                      h="10px"
+                      rounded="full"
+                      bg={r.color || (r.category ? CATEGORY_COLORS[r.category] : SLICE_COLORS[i % SLICE_COLORS.length])}
+                      mr={2}
+                    />
+                    <Text fontSize="12px" color={TOK.subtle}>
+                      {r.poste ?? i + 1}
+                    </Text>
+                  </Flex>
+                </Td>
+                <Td>
+                  <Text fontSize="14px">{r.label}</Text>
+                </Td>
+                <Td isNumeric fontWeight="600">
+                  {fmt(display(val), 0)}
+                </Td>
+                <Td isNumeric fontWeight="700">
+                  {fmt(p, 0)} %
+                </Td>
+              </Tr>
+            );
+          })}
+          <Tr bg={TOK.grayCard} fontWeight="bold">
+            <Td colSpan={2}>Totaux</Td>
+            <Td isNumeric>{fmt(unit === "kwh" ? totalKwh : totalKwh * 0.0036, 0)}</Td>
+            <Td isNumeric>100 %</Td>
+          </Tr>
+        </Tbody>
+      </Table>
+    </Box>
+  );
+}
+
+/* -------------------------------------------------
+   ENERGY Trend card
+   ------------------------------------------------- */
+function EnergyTrendCard({
+  points,
+  unit,
+}: {
+  points: EnergyTrendPoint[];
+  unit: "kwh" | "gj";
+}) {
+  const display = (kwh: number) => (unit === "kwh" ? kwh : kwh * 0.0036);
+  const unitLabel = unit === "kwh" ? "KWh" : "Gigajoule";
+
+  const data = useMemo(
     () =>
-      posteResults.map((r) => {
+      (points || []).map((p) => ({
+        year: String(p.year),
+        value: display(Number(p.kwh) || 0),
+      })),
+    [points, unit]
+  );
+
+  return (
+    <Box bg={TOK.surface} rounded="24px" border="1px solid" borderColor={TOK.border} p={6}>
+      <Text fontWeight="800" fontSize="16px" color={TOK.heading} textAlign="center" mb={2}>
+        Évolution des besoins énergétiques [{unitLabel}]
+      </Text>
+
+      <Box w="100%" h="180px">
+        <ResponsiveContainer width="100%" height="100%">
+          <LineChart data={data} margin={{ top: 10, right: 12, bottom: 5, left: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis dataKey="year" tick={{ fontSize: 12, fill: TOK.subtle }} axisLine={false} tickLine={false} />
+            <YAxis tick={{ fontSize: 12, fill: TOK.subtle }} axisLine={false} tickLine={false} />
+            <Tooltip
+              formatter={(v: any) => [fmt(v, 0), unitLabel]}
+              contentStyle={{
+                borderRadius: 12,
+                border: `1px solid ${TOK.border}`,
+                boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
+                fontSize: 12,
+              }}
+            />
+            <Line type="monotone" dataKey="value" strokeWidth={2} dot={{ r: 3 }} />
+          </LineChart>
+        </ResponsiveContainer>
+      </Box>
+
+      {/* year chips like screenshot */}
+      <Flex mt={2} justify="space-between" color={TOK.subtle} fontSize="12px" gap={3} wrap="wrap">
+        {data.slice(0, 5).map((d) => (
+          <Box key={d.year} textAlign="center" minW="92px">
+            <Text fontWeight="700" color={TOK.heading}>
+              {d.year}
+            </Text>
+            <Text>{fmt(d.value, 0)}</Text>
+            <Text>{unitLabel}</Text>
+          </Box>
+        ))}
+      </Flex>
+    </Box>
+  );
+}
+
+/* ---------------------------------------------
+   MAIN DASHBOARD (supports both bilans)
+   --------------------------------------------- */
+export default function GesDashboard({
+  posteResults = [],
+  summary = {},
+  energyResults = [],
+  energySummary = {},
+  energyTrend = [],
+  isLoading = false,
+}: GesDashboardProps) {
+  // Tabs
+  type TabKey = "resume" | "ges" | "energie" | "progression";
+  const [activeTab, setActiveTab] = useState<TabKey>("ges");
+
+  // Energy unit toggle (kWh vs GJ)
+  const [energyUnit, setEnergyUnit] = useState<"kwh" | "gj">("kwh");
+
+  // ✅ Inject aliases (GES)
+  const gesRows = useMemo<PosteResult[]>(
+    () =>
+      (posteResults || []).map((r) => {
         const current = (r.label || "").trim();
         const looksLikeGeneric =
           /^poste\s*\d+$/i.test(current) || current === "" || current.toLowerCase().startsWith("poste ");
         const alias = POSTE_ALIASES[r.poste];
         return {
           ...r,
-          label: looksLikeGeneric && alias ? alias : (alias || current || `Poste ${r.poste}`),
+          label: looksLikeGeneric && alias ? alias : alias || current || `Poste ${r.poste}`,
         };
       }),
     [posteResults]
   );
 
+  // ✅ Inject aliases (Energy)
+  const energyRows = useMemo<EnergyPosteResult[]>(
+    () =>
+      (energyResults || []).map((r) => {
+        const current = (r.label || "").trim();
+        const looksLikeGeneric =
+          /^poste\s*\d+$/i.test(current) || current === "" || current.toLowerCase().startsWith("poste ");
+        const alias = POSTE_ALIASES[r.poste];
+        return {
+          ...r,
+          label: looksLikeGeneric && alias ? alias : alias || current || `Poste ${r.poste}`,
+        };
+      }),
+    [energyResults]
+  );
+
+  // Titles
+  const pageTitle = activeTab === "energie" ? "Bilan énergétique" : "Bilan GES";
+  const sectionTitle = activeTab === "energie" ? "Voici vos besoins énergétiques" : "Voici vos émissions de GES";
+
+  const topTabs: Array<{ key: TabKey; label: string }> = [
+    { key: "resume", label: "Résumé du bilan" },
+    { key: "ges", label: "Bilan GES" },
+    { key: "energie", label: "Bilan énergétique" },
+    { key: "progression", label: "Votre progression" },
+  ];
+
+  // When switching to energy, default to kWh (like screenshot)
+  useEffect(() => {
+    if (activeTab === "energie") setEnergyUnit("kwh");
+  }, [activeTab]);
+
   return (
     <Box bg={TOK.bg} minH="100vh" w="100%" p={{ base: 4, md: 6 }}>
       {/* Header */}
       <Flex align="center" mb={4} wrap="wrap" gap={3}>
-        <Text fontWeight="800" fontSize="26px" color={TOK.heading}>Bilan GES</Text>
+        <Text fontWeight="800" fontSize="26px" color={TOK.heading}>
+          {pageTitle}
+        </Text>
+
         <Spacer />
+
+        {/* Tabs pill */}
         <HStack spacing={2} bg={TOK.pillBg} p="4px" rounded="999px">
-          {["Résumé du bilan", "Bilan GES", "Bilan énergétique", "Votre progression"].map((t, i) => (
-            <Box
-              key={t}
-              as="button"
-              px={4}
-              h="34px"
-              rounded="999px"
-              bg={i === 1 ? TOK.primary : "transparent"}
-              color={i === 1 ? "#fff" : "#334155"}
-              fontWeight={i === 1 ? 700 : 500}
-            >
-              {t}
-            </Box>
-          ))}
+          {topTabs.map((t) => {
+            const isActive = activeTab === t.key || (t.key === "ges" && activeTab === "ges");
+            return (
+              <Box
+                key={t.key}
+                as="button"
+                px={4}
+                h="34px"
+                rounded="999px"
+                bg={isActive ? TOK.primary : "transparent"}
+                color={isActive ? "#fff" : "#334155"}
+                fontWeight={isActive ? 700 : 500}
+                onClick={() => setActiveTab(t.key)}
+              >
+                {t.label}
+              </Box>
+            );
+          })}
         </HStack>
+
         <Spacer />
+
+        {/* Right-side controls */}
         <HStack spacing={3}>
-          <Text fontSize="13px" color={TOK.subtle}>Format GHG protocol</Text>
+          <Text fontSize="13px" color={TOK.subtle}>
+            Format GHG protocol
+          </Text>
           <Switch size="md" colorScheme="green" />
+          <IconButton aria-label="Aide" icon={<InfoIcon />} size="sm" variant="ghost" color={TOK.subtle} />
         </HStack>
       </Flex>
 
       {/* Section title */}
       <Text fontWeight="700" fontSize="18px" color={TOK.heading} mb={3}>
-        Voici vos émissions de GES
+        {sectionTitle}
       </Text>
 
-      {/* Main grid */}
-      <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={5}>
-        <DonutPanel data={dataWithAliases} />
-        <DetailedTable rows={dataWithAliases} summary={summary} />
-      </SimpleGrid>
+      {isLoading ? (
+        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={5}>
+          <Box bg={TOK.surface} rounded="24px" border="1px solid" borderColor={TOK.border} p={6}>
+            <Skeleton height="20px" mb={4} />
+            <Skeleton height="320px" mb={4} />
+            <Skeleton height="120px" />
+          </Box>
+          <Box bg={TOK.surface} rounded="24px" border="1px solid" borderColor={TOK.border} p={6}>
+            <Skeleton height="20px" mb={4} />
+            <Skeleton height="360px" />
+          </Box>
+        </SimpleGrid>
+      ) : activeTab === "energie" ? (
+        <>
+          <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={5} mb={5}>
+            <EnergyDonutPanel
+              rows={energyRows}
+              unit={energyUnit}
+              onToggleUnit={() => setEnergyUnit((u) => (u === "kwh" ? "gj" : "kwh"))}
+            />
+            <EnergyDetailedTable rows={energyRows} unit={energyUnit} />
+          </SimpleGrid>
+
+          {/* Trend (only show when provided) */}
+          {energyTrend && energyTrend.length > 0 ? (
+            <EnergyTrendCard points={energyTrend} unit={energyUnit} />
+          ) : (
+            <Box bg={TOK.surface} rounded="24px" border="1px solid" borderColor={TOK.border} p={6}>
+              <Text fontWeight="800" fontSize="16px" color={TOK.heading} textAlign="center" mb={2}>
+                Évolution des besoins énergétiques [{energyUnit === "kwh" ? "KWh" : "Gigajoule"}]
+              </Text>
+              <Text color={TOK.subtle} textAlign="center" fontSize="13px">
+                Aucune donnée d’évolution disponible.
+              </Text>
+            </Box>
+          )}
+        </>
+      ) : activeTab === "ges" ? (
+        <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={5}>
+          <GesDonutPanel data={gesRows} />
+          <GesDetailedTable rows={gesRows} summary={summary} />
+        </SimpleGrid>
+      ) : (
+        <Box bg={TOK.surface} rounded="24px" border="1px solid" borderColor={TOK.border} p={6}>
+          <Text color={TOK.subtle}>
+            Onglet « {topTabs.find((t) => t.key === activeTab)?.label} » — à implémenter.
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 }
@@ -397,49 +1053,72 @@ export default function GesDashboard({ posteResults = [], summary = {} }: GesDas
 export { GesDashboard };
 
 
+// 'use client';
 
-// import React, { useState } from "react";
+// import React, { useMemo, useState } from "react";
 // import {
 //   Box,
 //   Flex,
 //   Text,
-//   Stat,
-//   StatLabel,
-//   StatNumber,
 //   SimpleGrid,
-//   useColorModeValue,
+//   HStack,
+//   Switch,
+//   Spacer,
 //   Table,
 //   Thead,
 //   Tbody,
 //   Tr,
 //   Th,
 //   Td,
-//   Tabs,
-//   TabList,
-//   TabPanels,
-//   Tab,
-//   TabPanel,
 //   IconButton,
+//   Button,
 // } from "@chakra-ui/react";
-// import { AddIcon } from "@chakra-ui/icons";
+// import { ChevronLeftIcon, ChevronRightIcon } from "@chakra-ui/icons";
 // import {
 //   PieChart,
 //   Pie,
 //   Cell,
 //   ResponsiveContainer,
+//   Tooltip,
 //   BarChart,
 //   Bar,
 //   XAxis,
 //   YAxis,
-//   Tooltip,
 //   CartesianGrid,
-//   Sector,
 // } from "recharts";
-// import Example from "../postes/bardashboard"; // Or your file path
 
-// // ---- COLORS ----
-// const COLORS = [
-//   "#0088FE", "#00C49F", "#FFBB28", "#FF8042", "red", "pink", "#265B7B", "#319795",
+// // ===== Design tokens =====
+// const TOK = {
+//   bg: "#F6F7FB",
+//   surface: "#FFFFFF",
+//   border: "#E5E7EB",
+//   subtle: "#6B7280",
+//   heading: "#111827",
+//   primary: "#264a3b",
+//   pillBg: "#EEF2F1",
+//   rowStripe: "#F2F4F7",
+//   grayCard: "#F3F4F6",
+//   white: "#FFFFFF",
+
+//   // Figma-like nav controls
+//   navBg: "#F5F6F5",
+//   navIcon: "#8F8F8F",
+// };
+
+// // ==== Category palette ====
+// const CATEGORY_COLORS: Record<string, string> = {
+//   "Directes": "#6E56CF",
+//   "Ind. liés à l'énergie": "#3BAEAD",
+//   "Ind. liés aux transports": "#57A1F6",
+//   "Ind. en amont": "#F5A524",
+//   "Ind. en aval": "#9CCC65",
+//   "Autres indirectes": "#F87171",
+// };
+
+// // ==== Fallback slice colors ====
+// const SLICE_COLORS = [
+//   "#57A1F6", "#9CCC65", "#F5A524", "#6E56CF", "#3BAEAD",
+//   "#F87171", "#265B7B", "#00C49F", "#FFBB28", "#FF8042",
 // ];
 
 // export type PosteResult = {
@@ -449,11 +1128,18 @@ export { GesDashboard };
 //   co2?: number;
 //   ch4?: number;
 //   n2o?: number;
-//   error?: number;
 //   percent?: number;
-//   results?: any[];
+//   category?: string;
+//   color?: string;
+
+//   // optional fields for other "formats"
+//   location?: string; // lieu de production
+//   site?: string;
+//   production_site?: string;
+
 //   [key: string]: any;
 // };
+
 // interface GesDashboardProps {
 //   posteResults?: PosteResult[];
 //   summary?: {
@@ -466,263 +1152,505 @@ export { GesDashboard };
 //   };
 // }
 
-// // ---- ADVANCED PIECHART FOR FEUILLE 2 ----
-// const pieData = [
-//   { name: 'Group A', value: 400 },
-//   { name: 'Group B', value: 300 },
-//   { name: 'Group C', value: 300 },
-//   { name: 'Group D', value: 200 },
-// ];
-// const renderActiveShape = (props: any) => {
-//   const RADIAN = Math.PI / 180;
-//   const {
-//     cx, cy, midAngle, innerRadius, outerRadius,
-//     startAngle, endAngle, fill, payload, percent, value,
-//   } = props;
-//   const sin = Math.sin(-RADIAN * midAngle);
-//   const cos = Math.cos(-RADIAN * midAngle);
-//   const sx = cx + (outerRadius + 10) * cos;
-//   const sy = cy + (outerRadius + 10) * sin;
-//   const mx = cx + (outerRadius + 30) * cos;
-//   const my = cy + (outerRadius + 30) * sin;
-//   const ex = mx + (cos >= 0 ? 1 : -1) * 22;
-//   const ey = my;
-//   const textAnchor = cos >= 0 ? 'start' : 'end';
-
-//   return (
-//     <g>
-//       <text x={cx} y={cy} dy={8} textAnchor="middle" fill={fill}>
-//         {payload.name}
-//       </text>
-//       <Sector
-//         cx={cx}
-//         cy={cy}
-//         innerRadius={innerRadius}
-//         outerRadius={outerRadius}
-//         startAngle={startAngle}
-//         endAngle={endAngle}
-//         fill={fill}
-//       />
-//       <Sector
-//         cx={cx}
-//         cy={cy}
-//         startAngle={startAngle}
-//         endAngle={endAngle}
-//         innerRadius={outerRadius + 6}
-//         outerRadius={outerRadius + 10}
-//         fill={fill}
-//       />
-//       <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke={fill} fill="none" />
-//       <circle cx={ex} cy={ey} r={2} fill={fill} stroke="none" />
-//       <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} textAnchor={textAnchor} fill="#333">{`PV ${value}`}</text>
-//       <text x={ex + (cos >= 0 ? 1 : -1) * 12} y={ey} dy={18} textAnchor={textAnchor} fill="#999">
-//         {`(Rate ${(percent * 100).toFixed(2)}%)`}
-//       </text>
-//     </g>
-//   );
+// /* =========================
+//    OFFICIAL POSTE ALIASES
+//    ========================= */
+// const POSTE_ALIASES: Record<number, string> = {
+//   1:  "Combustions fixes",
+//   2:  "Combustions mobiles",
+//   3:  "Procédés et élevages d’animaux",
+//   4:  "Réfrigérants",
+//   5:  "Sols et forêts",
+//   6:  "Consommation d’électricités",
+//   7:  "Consommation autres énergies",
+//   8:  "Production et distribution d’énergies",
+//   9:  "Achat de biens et de services",
+//   10: "Biens immobiliers",
+//   11: "Génération de déchets",
+//   12: "Transport et distribution en amont",
+//   13: "Déplacements d’affaires",
+//   14: "Location d’actif en amont",
+//   15: "Investissements",
+//   16: "Clients et visiteurs",
+//   17: "Transport et distribution en aval",
+//   18: "Usages des produits vendus",
+//   19: "Fin de vie des produits",
+//   20: "Franchises en aval",
+//   21: "Location d’actif en aval",
+//   22: "Navettages des employés",
+//   23: "Autres sources",
 // };
 
-// function Feuille2PieChart() {
-//   const [activeIndex, setActiveIndex] = useState(0);
+// // ===== helpers =====
+// const fmt = (v: unknown) => {
+//   if (v === null || v === undefined || v === "-") return "-";
+//   const n = Number(v);
+//   if (!isFinite(n)) return String(v);
+//   return Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(n);
+// };
 
-//   return (
-    
-// <Box h="770px" bg="white" rounded="2xl" boxShadow="md" p={4} m={4} overflow="hidden">
-//   <Text fontWeight="bold" mb={4}>Exemple: PieChart interactif</Text>
-//   <ResponsiveContainer width="100%" height="55%">
-//     <PieChart>
-//       {/* @ts-ignore */}
-//       <Pie
-//         // activeIndex={activeIndex}
-//         activeShape={renderActiveShape}
-//         data={pieData}
-//         cx="50%"
-//         cy="50%"
-//         innerRadius={60}
-//         outerRadius={80}
-//         fill="#8884d8"
-//         dataKey="value"
-//         onMouseEnter={(_, index) => setActiveIndex(index)}
-//       />
-//     </PieChart>
-//   </ResponsiveContainer>
-//   <Box mt={4} h="300px" overflow="auto">
-//     <Example />
-//   </Box>
-// </Box>
+// const aggregateByCategory = (rows: PosteResult[]) => {
+//   const acc: Record<string, number> = {};
+//   rows.forEach(r => {
+//     const key = r.category ?? "Autres";
+//     acc[key] = (acc[key] ?? 0) + (Number(r.tCO2eq) || 0);
+//   });
+//   return Object.entries(acc).map(([name, value]) => ({
+//     name,
+//     value,
+//     color: CATEGORY_COLORS[name] ?? "#D1D5DB",
+//   }));
+// };
 
+// const pickLocation = (r: PosteResult) =>
+//   (r.location || r.production_site || r.site || "").trim();
 
+// const aggregateByLocation = (rows: PosteResult[]) => {
+//   const acc: Record<string, number> = {};
+//   rows.forEach(r => {
+//     const loc = pickLocation(r) || "Localisation";
+//     acc[loc] = (acc[loc] ?? 0) + (Number(r.tCO2eq) || 0);
+//   });
+//   const entries = Object.entries(acc).map(([name, value], i) => ({
+//     name,
+//     value,
+//     color: SLICE_COLORS[i % SLICE_COLORS.length],
+//   }));
+//   // stable ordering: highest first
+//   entries.sort((a, b) => b.value - a.value);
+//   return entries;
+// };
 
+// type ChartMode = "poste" | "lieu" | "croissant";
 
-    
+// const MODE_ORDER: ChartMode[] = ["poste", "lieu", "croissant"];
+
+// const MODE_TITLE: Record<ChartMode, string> = {
+//   poste: "Émissions de GES par poste d’émission [tCO²e]",
+//   lieu: "Émissions de GES par lieu de production [tCO²e]",
+//   croissant: "Émissions de GES par poste d’émission en ordre croissant [tCO²e]",
+// };
+
+// /* -------------------------------------------------
+//    Donut / Lieu / Croissant + arrows (Figma-like)
+//    ------------------------------------------------- */
+// function DonutPanel({ data }: { data: PosteResult[] }) {
+//   const [modeIndex, setModeIndex] = useState(0);
+//   const mode: ChartMode = MODE_ORDER[modeIndex];
+
+//   const hasData = data.length > 0;
+
+//   // hover states
+//   const [hovered, setHovered] = useState<number | null>(null);
+//   const [activeLoc, setActiveLoc] = useState<string | null>(null);
+
+//   const catAgg = useMemo(() => aggregateByCategory(data), [data]);
+//   const locAgg = useMemo(() => aggregateByLocation(data), [data]);
+
+//   const colorOfPoste = (row: PosteResult, i: number) =>
+//     row.color ||
+//     (row.category ? CATEGORY_COLORS[row.category] : undefined) ||
+//     SLICE_COLORS[i % SLICE_COLORS.length];
+
+//   const goPrev = () => setModeIndex((i) => (i - 1 + MODE_ORDER.length) % MODE_ORDER.length);
+//   const goNext = () => setModeIndex((i) => (i + 1) % MODE_ORDER.length);
+
+//   const NavBtn = ({
+//     "aria-label": ariaLabel,
+//     onClick,
+//     icon,
+//     rotation,
+//   }: {
+//     "aria-label": string;
+//     onClick: () => void;
+//     icon: React.ReactElement;
+//     rotation?: number;
+//   }) => (
+//     <IconButton
+//       aria-label={ariaLabel}
+//       onClick={onClick}
+//       icon={icon}
+//       size="sm"
+//       w="28px"
+//       h="28px"
+//       minW="28px"
+//       bg={TOK.navBg}
+//       borderRadius="8px"
+//       _hover={{ bg: "#ECEEEB" }}
+//       _active={{ bg: "#E4E7E2" }}
+//       color={TOK.navIcon}
+//       border="0"
+//       sx={{
+//         svg: {
+//           width: "18px",
+//           height: "18px",
+//           transform: rotation ? `rotate(${rotation}rad)` : undefined,
+//         },
+//       }}
+//     />
 //   );
-// }
 
-// // ---- GES DASHBOARD CONTENT ----
-// function GesDashboardContent({ posteResults = [], summary = {} }: GesDashboardProps) {
-//   const sortedResults = [...posteResults].sort((a, b) => (b.tCO2eq || 0) - (a.tCO2eq || 0));
 //   return (
-//     <Box p={8} bg={useColorModeValue("#f4f7f9", "#181c1f")}>
-//       <SimpleGrid columns={5} spacing={4} mb={8}>
-//         <Stat>
-//           <StatLabel>Total tCO2e</StatLabel>
-//           <StatNumber>{summary?.total_tCO2eq ?? "-"}</StatNumber>
-//         </Stat>
-//         <Stat>
-//           <StatLabel>CO₂</StatLabel>
-//           <StatNumber>{summary?.co2 ?? "-"}</StatNumber>
-//         </Stat>
-//         <Stat>
-//           <StatLabel>CH₄</StatLabel>
-//           <StatNumber>{summary?.ch4 ?? "-"}</StatNumber>
-//         </Stat>
-//         <Stat>
-//           <StatLabel>N₂O</StatLabel>
-//           <StatNumber>{summary?.n2o ?? "-"}</StatNumber>
-//         </Stat>
-//         <Stat>
-//           <StatLabel>Total GES</StatLabel>
-//           <StatNumber>{summary?.ges ?? "-"}</StatNumber>
-//         </Stat>
-//       </SimpleGrid>
-//       <Flex gap={8} flexWrap="wrap">
-//         <Box flex={1} minW="350px" bg="white" p={4} rounded="2xl" boxShadow="md">
-//           <Text fontWeight="bold" mb={2}>
-//             Émissions de GES par poste d'émission [tCO₂éq]
+//     <Box bg={TOK.surface} rounded="24px" border="1px solid" borderColor={TOK.border} p={6}>
+//       {/* Header with arrows + centered title (like figma component set) */}
+//       <Flex align="center" gap={3} mb={2}>
+//         <NavBtn aria-label="Précédent" onClick={goPrev} icon={<ChevronLeftIcon />} />
+//         <Box flex="1">
+//           <Text
+//             fontWeight="800"
+//             fontSize="16px"
+//             color={TOK.heading}
+//             textAlign="center"
+//             lineHeight="1.2"
+//           >
+//             {MODE_TITLE[mode]}
 //           </Text>
-//           <ResponsiveContainer width="100%" height={260}>
-//             <PieChart>
-//               <Pie
-//                 data={posteResults}
-//                 dataKey="tCO2eq"
-//                 nameKey="label"
-//                 cx="50%"
-//                 cy="50%"
-//                 innerRadius={60}
-//                 outerRadius={100}
-//                 paddingAngle={2}
-//                 label
+//         </Box>
+//         <NavBtn aria-label="Suivant" onClick={goNext} icon={<ChevronRightIcon />} />
+//       </Flex>
+
+//       <Flex gap={6} align="center" direction={{ base: "column", md: "row" }}>
+//         {/* LEFT: chart area */}
+//         <Box flex="0 0 360px" w={{ base: "100%", md: "360px" }} h="320px">
+//           <ResponsiveContainer width="100%" height="100%">
+//             {!hasData ? (
+//               <Flex w="100%" h="100%" align="center" justify="center">
+//                 <Text color={TOK.subtle}>Aucune donnée</Text>
+//               </Flex>
+//             ) : mode === "croissant" ? (
+//               <BarChart
+//                 data={[...data]
+//                   .map((r) => ({
+//                     name: `Poste ${r.poste}`,
+//                     value: Number(r.tCO2eq) || 0,
+//                     color: r.category ? CATEGORY_COLORS[r.category] : undefined,
+//                   }))
+//                   .sort((a, b) => a.value - b.value)}
+//                 layout="vertical"
+//                 margin={{ top: 10, right: 12, bottom: 10, left: 48 }}
 //               >
-//                 {posteResults.map((entry, index) => (
-//                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-//                 ))}
-//               </Pie>
-//             </PieChart>
+//                 <CartesianGrid strokeDasharray="3 3" vertical />
+//                 <XAxis
+//                   type="number"
+//                   tick={{ fontSize: 12, fill: TOK.subtle }}
+//                   axisLine={false}
+//                   tickLine={false}
+//                 />
+//                 <YAxis
+//                   type="category"
+//                   dataKey="name"
+//                   width={72}
+//                   tick={{ fontSize: 12, fill: TOK.subtle }}
+//                   axisLine={false}
+//                   tickLine={false}
+//                 />
+//                 <Tooltip
+//                   formatter={(v: any) => [fmt(v), "tCO²e"]}
+//                   contentStyle={{
+//                     borderRadius: 12,
+//                     border: `1px solid ${TOK.border}`,
+//                     boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
+//                     fontSize: 12,
+//                   }}
+//                 />
+//                 <Bar dataKey="value" radius={[6, 6, 6, 6]}>
+//                   {data
+//                     .map((r, i) => ({
+//                       key: `bar-${i}`,
+//                       fill: r.category ? CATEGORY_COLORS[r.category] : SLICE_COLORS[i % SLICE_COLORS.length],
+//                     }))
+//                     // bar order matches the sorted data above; keep it simple: just fallback sequence
+//                     .map((c) => (
+//                       <Cell key={c.key} fill={c.fill} />
+//                     ))}
+//                 </Bar>
+//               </BarChart>
+//             ) : mode === "lieu" ? (
+//               <PieChart>
+//                 <Pie
+//                   data={locAgg}
+//                   dataKey="value"
+//                   nameKey="name"
+//                   cx="50%"
+//                   cy="50%"
+//                   innerRadius={85}
+//                   outerRadius={120}
+//                   paddingAngle={1.5}
+//                   onMouseLeave={() => setHovered(null)}
+//                 >
+//                   {locAgg.map((row, i) => {
+//                     const dim =
+//                       activeLoc && row.name !== activeLoc ? 0.35 : hovered === i || hovered === null ? 1 : 0.45;
+//                     return (
+//                       <Cell
+//                         key={`l-${i}`}
+//                         fill={row.color}
+//                         opacity={dim}
+//                         onMouseEnter={() => setHovered(i)}
+//                       />
+//                     );
+//                   })}
+//                 </Pie>
+
+//                 {/* center cap */}
+//                 <Pie
+//                   data={[{ v: 1 }]}
+//                   dataKey="v"
+//                   cx="50%"
+//                   cy="50%"
+//                   innerRadius={0}
+//                   outerRadius={55}
+//                   fill={TOK.surface}
+//                   isAnimationActive={false}
+//                 />
+//                 <Tooltip
+//                   formatter={(v: any) => [fmt(v), "tCO²e"]}
+//                   contentStyle={{
+//                     borderRadius: 12,
+//                     border: `1px solid ${TOK.border}`,
+//                     boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
+//                     fontSize: 12,
+//                   }}
+//                 />
+//               </PieChart>
+//             ) : (
+//               // mode === "poste"
+//               <PieChart>
+//                 <Pie
+//                   data={data}
+//                   dataKey="tCO2eq"
+//                   nameKey="label"
+//                   cx="50%"
+//                   cy="50%"
+//                   innerRadius={95}
+//                   outerRadius={120}
+//                   paddingAngle={1.5}
+//                   onMouseLeave={() => setHovered(null)}
+//                 >
+//                   {data.map((row, i) => (
+//                     <Cell
+//                       key={`p-${i}`}
+//                       fill={colorOfPoste(row, i)}
+//                       opacity={hovered === i || hovered === null ? 1 : 0.45}
+//                       onMouseEnter={() => setHovered(i)}
+//                     />
+//                   ))}
+//                 </Pie>
+
+//                 {/* inner ring by category */}
+//                 <Pie
+//                   data={catAgg}
+//                   dataKey="value"
+//                   nameKey="name"
+//                   cx="50%"
+//                   cy="50%"
+//                   innerRadius={65}
+//                   outerRadius={90}
+//                   paddingAngle={1}
+//                 >
+//                   {catAgg.map((c, i) => (
+//                     <Cell key={`c-${i}`} fill={c.color} opacity={0.9} />
+//                   ))}
+//                 </Pie>
+
+//                 {/* center cap */}
+//                 <Pie
+//                   data={[{ v: 1 }]}
+//                   dataKey="v"
+//                   cx="50%"
+//                   cy="50%"
+//                   innerRadius={0}
+//                   outerRadius={55}
+//                   fill={TOK.surface}
+//                   isAnimationActive={false}
+//                 />
+//                 <Tooltip
+//                   contentStyle={{
+//                     borderRadius: 12,
+//                     border: `1px solid ${TOK.border}`,
+//                     boxShadow: "0 10px 20px rgba(0,0,0,0.08)",
+//                     fontSize: 12,
+//                   }}
+//                 />
+//               </PieChart>
+//             )}
 //           </ResponsiveContainer>
 //         </Box>
-//         <Box flex={1} minW="350px" bg="white" p={4} rounded="2xl" boxShadow="md">
-//           <Text fontWeight="bold" mb={2}>
-//             Émissions de GES par poste d'émission <br /> Incluant l'incertitude
-//           </Text>
-//           <ResponsiveContainer width="100%" height={260}>
-//             <BarChart
-//               data={posteResults}
-//               margin={{ top: 24, right: 24, left: 24, bottom: 24 }}
-//             >
-//               <XAxis
-//                 dataKey="label"
-//                 angle={-15}
-//                 textAnchor="end"
-//                 interval={0}
-//                 height={50}
-//                 label={{
-//                   value: "Poste d'émission",
-//                   position: "insideBottom",
-//                   offset: -10,
-//                 }}
-//               />
-//               <YAxis
-//                 label={{
-//                   value: "tCO₂e",
-//                   angle: -90,
-//                   position: "insideLeft",
-//                   offset: 10,
-//                 }}
-//                 domain={[0, "dataMax + 2"]}
-//               />
-//               <Tooltip />
-//               <Bar dataKey="tCO2eq" fill="#5A9FD5" />
-//             </BarChart>
-//           </ResponsiveContainer>
+
+//         {/* RIGHT: legend / controls depending on mode */}
+//         <Box flex="1" maxW={{ md: "360px" }}>
+//           {mode === "poste" ? (
+//             <>
+//               <Box border="1px solid" borderColor={TOK.border} rounded="16px" overflow="hidden">
+//                 {data.map((row, i) => (
+//                   <Flex
+//                     key={i}
+//                     px={3}
+//                     py={2}
+//                     align="center"
+//                     bg={i % 2 ? TOK.rowStripe : TOK.white}
+//                     onMouseEnter={() => setHovered(i)}
+//                     onMouseLeave={() => setHovered(null)}
+//                     cursor="default"
+//                   >
+//                     <Box
+//                       w="10px"
+//                       h="10px"
+//                       rounded="full"
+//                       bg={colorOfPoste(row, i)}
+//                       mr={3}
+//                     />
+//                     <Text flex="1" fontSize="13px">
+//                       {row.label}
+//                     </Text>
+//                     <Text fontWeight="700" fontSize="13px">
+//                       {fmt(row.tCO2eq)}
+//                     </Text>
+//                   </Flex>
+//                 ))}
+//               </Box>
+
+//               <Text mt={3} fontSize="12px" color={TOK.subtle} textAlign="center">
+//                 Appuyez sur une section du graphique pour voir le résultat.
+//               </Text>
+//             </>
+//           ) : mode === "lieu" ? (
+//             <>
+//               <Text fontSize="12px" color={TOK.subtle} mb={2} textAlign="center">
+//                 Sélectionnez une localisation
+//               </Text>
+
+//               <Flex justify="center">
+//                 <HStack spacing={2} wrap="wrap">
+//                   {locAgg.slice(0, 6).map((l) => {
+//                     const isActive = activeLoc === l.name;
+//                     return (
+//                       <Button
+//                         key={l.name}
+//                         size="xs"
+//                         px={3}
+//                         h="22px"
+//                         rounded="999px"
+//                         bg={isActive ? TOK.primary : TOK.navBg}
+//                         color={isActive ? "#fff" : "#2F2F2F"}
+//                         fontWeight={600}
+//                         _hover={{ bg: isActive ? TOK.primary : "#ECEEEB" }}
+//                         onClick={() => setActiveLoc((cur) => (cur === l.name ? null : l.name))}
+//                       >
+//                         {l.name}
+//                       </Button>
+//                     );
+//                   })}
+//                 </HStack>
+//               </Flex>
+
+//               <Text mt={3} fontSize="12px" color={TOK.subtle} textAlign="center">
+//                 Appuyez sur une section du graphique pour voir le résultat.
+//               </Text>
+//             </>
+//           ) : (
+//             // mode === "croissant"
+//             <Text mt={1} fontSize="12px" color={TOK.subtle} textAlign="center">
+//               Appuyez sur une section du graphique pour voir le résultat.
+//             </Text>
+//           )}
 //         </Box>
 //       </Flex>
-//       <Box mt={8} bg="white" p={4} rounded="2xl" boxShadow="md">
-//         <Text fontWeight="bold" mb={2}>
-//           Émissions de GES par poste d'émission en ordre décroissant [tCO₂éq]
-//         </Text>
-//         <ResponsiveContainer width="100%" height={300}>
-//           <BarChart data={sortedResults}>
-//             <XAxis dataKey="label" />
-//             <YAxis />
-//             <Tooltip />
-//             <Bar dataKey="tCO2eq" fill="#265B7B" />
-//           </BarChart>
-//         </ResponsiveContainer>
-//       </Box>
-//       <GesSummaryTable posteResults={posteResults} summary={summary} />
-//       <Example />
+
+//       {/* Chips (keep only for "poste" view like your current desktop design) */}
+//       {mode === "poste" && (
+//         <Box mt={4} p={3} bg={TOK.grayCard} rounded="16px" border="1px solid" borderColor={TOK.border}>
+//           <Text fontSize="12px" color={TOK.subtle} mb={2}>
+//             Catégorie d’émissions
+//           </Text>
+//           <HStack spacing={3} wrap="wrap">
+//             {Object.entries(CATEGORY_COLORS).map(([name, color]) => (
+//               <HStack
+//                 key={name}
+//                 spacing={2}
+//                 bg="#fff"
+//                 border="1px solid"
+//                 borderColor={TOK.border}
+//                 rounded="12px"
+//                 px={2}
+//                 py="4px"
+//               >
+//                 <Box w="10px" h="10px" rounded="full" bg={color} />
+//                 <Text fontSize="12px">{name}</Text>
+//               </HStack>
+//             ))}
+//           </HStack>
+//         </Box>
+//       )}
 //     </Box>
 //   );
 // }
 
-// // ---- DYNAMIC SUMMARY TABLE ----
-// function GesSummaryTable({
-//   posteResults,
+// /* -------------------------------------------------
+//    Detailed table (shows alias in the label column)
+//    ------------------------------------------------- */
+// function DetailedTable({
+//   rows,
 //   summary,
-// }: { posteResults: PosteResult[], summary: GesDashboardProps["summary"] }) {
-//   const staticCols = [
-//     { key: "poste", label: "Poste" },
-//     { key: "label", label: "Description" },
-//     { key: "co2", label: "CO₂" },
-//     { key: "ch4", label: "CH₄" },
-//     { key: "n2o", label: "N₂O" },
-//     { key: "tCO2eq", label: "tCO₂e" },
-//     { key: "percent", label: "%" },
-//   ];
+// }: {
+//   rows: PosteResult[];
+//   summary?: GesDashboardProps["summary"];
+// }) {
+//   const head = [
+//     { key: "index", label: "" },
+//     { key: "poste", label: "Poste d’émission" },
+//     { key: "co2", label: "CO² [tCO²e]" },
+//     { key: "ch4", label: "CH⁴ [tCO²e]" },
+//     { key: "n2o", label: "N²O [tCO²e]" },
+//     { key: "tCO2eq", label: "tCO²e" },
+//   ] as const;
 
 //   return (
-//     <Box mt={10} bg="white" p={4} rounded="2xl" boxShadow="md">
-//       <Text fontWeight="bold" mb={2} fontSize="lg">
-//         Bilan global (Détaillé)
-//       </Text>
-//       <Table size="sm" variant="striped">
-//         <Thead>
+//     <Box bg={TOK.surface} rounded="24px" border="1px solid" borderColor={TOK.border} p={0} overflow="hidden">
+//       <Table size="sm" variant="simple">
+//         <Thead bg={TOK.grayCard}>
 //           <Tr>
-//             {staticCols.map((col) => (
-//               <Th key={col.key} isNumeric={["co2", "ch4", "n2o", "tCO2eq", "percent"].includes(col.key)}>
-//                 {col.label}
+//             {head.map((h) => (
+//               <Th key={h.key as string} fontSize="12px" color={TOK.subtle} fontWeight="700">
+//                 {h.label}
 //               </Th>
 //             ))}
 //           </Tr>
 //         </Thead>
 //         <Tbody>
-//           {posteResults.map((row, idx) => (
-//             <Tr key={row.poste || idx}>
-//               <Td>{row.poste}</Td>
-//               <Td>{row.label}</Td>
-//               <Td isNumeric>{row.co2 ?? "-"}</Td>
-//               <Td isNumeric>{row.ch4 ?? "-"}</Td>
-//               <Td isNumeric>{row.n2o ?? "-"}</Td>
-//               <Td isNumeric>{row.tCO2eq ?? "-"}</Td>
-//               <Td isNumeric>
-//                 {row.percent !== undefined ? (
-//                   <Box display="flex" alignItems="center">
-//                     <Text mr={2}>{row.percent}%</Text>
-//                     <Box w={Math.max(row.percent, 5) + "%"} h="8px" bg="teal.400" borderRadius="md" />
-//                   </Box>
-//                 ) : (
-//                   "-"
-//                 )}
+//           {rows.map((r, i) => (
+//             <Tr key={i} bg={i % 2 ? TOK.rowStripe : TOK.white}>
+//               <Td w="28px">
+//                 <Flex align="center">
+//                   <Box
+//                     w="10px"
+//                     h="10px"
+//                     rounded="full"
+//                     bg={r.category ? CATEGORY_COLORS[r.category] : SLICE_COLORS[i % SLICE_COLORS.length]}
+//                     mr={2}
+//                   />
+//                   <Text fontSize="12px" color={TOK.subtle}>
+//                     {r.poste ?? i + 1}
+//                   </Text>
+//                 </Flex>
+//               </Td>
+//               <Td>
+//                 <Text fontSize="14px">{r.label}</Text>
+//               </Td>
+//               <Td isNumeric>{fmt(r.co2 ?? 0)}</Td>
+//               <Td isNumeric>{fmt(r.ch4 ?? 0)}</Td>
+//               <Td isNumeric>{fmt(r.n2o ?? 0)}</Td>
+//               <Td isNumeric fontWeight="700">
+//                 {fmt(r.tCO2eq ?? 0)}
 //               </Td>
 //             </Tr>
 //           ))}
-//           <Tr fontWeight="bold" bg="#f7fafc">
+//           <Tr bg={TOK.grayCard} fontWeight="bold">
 //             <Td colSpan={2}>Totaux</Td>
-//             <Td isNumeric>{summary?.co2 ?? "-"}</Td>
-//             <Td isNumeric>{summary?.ch4 ?? "-"}</Td>
-//             <Td isNumeric>{summary?.n2o ?? "-"}</Td>
-//             <Td isNumeric>{summary?.total_tCO2eq ?? "-"}</Td>
-//             <Td />
+//             <Td isNumeric>{fmt(summary?.co2 ?? 0)}</Td>
+//             <Td isNumeric>{fmt(summary?.ch4 ?? 0)}</Td>
+//             <Td isNumeric>{fmt(summary?.n2o ?? 0)}</Td>
+//             <Td isNumeric>{fmt(summary?.total_tCO2eq ?? summary?.ges ?? 0)}</Td>
 //           </Tr>
 //         </Tbody>
 //       </Table>
@@ -730,53 +1658,71 @@ export { GesDashboard };
 //   );
 // }
 
-// // ---- MAIN MULTI-SHEET DASHBOARD ----
-// export function GesDashboard({ posteResults = [], summary = {} }: GesDashboardProps) {
-//   const [sheets, setSheets] = useState([{ name: "Feuille 1" }, { name: "Feuille 2" }]);
-//   const [tabIndex, setTabIndex] = useState(0);
-
-//   const handleAddSheet = () => {
-//     setSheets((prev) => [...prev, { name: `Feuille ${prev.length + 1}` }]);
-//     setTabIndex(sheets.length); // Switch to the new tab
-//   };
+// /* ---------------------------------------------
+//    SINGLE FULL-SCREEN DASHBOARD
+//    --------------------------------------------- */
+// export default function GesDashboard({ posteResults = [], summary = {} }: GesDashboardProps) {
+//   // Inject aliases: if the incoming label is missing or looks like "Poste X", replace it
+//   const dataWithAliases = useMemo<PosteResult[]>(
+//     () =>
+//       posteResults.map((r) => {
+//         const current = (r.label || "").trim();
+//         const looksLikeGeneric =
+//           /^poste\s*\d+$/i.test(current) || current === "" || current.toLowerCase().startsWith("poste ");
+//         const alias = POSTE_ALIASES[r.poste];
+//         return {
+//           ...r,
+//           label: looksLikeGeneric && alias ? alias : alias || current || `Poste ${r.poste}`,
+//         };
+//       }),
+//     [posteResults]
+//   );
 
 //   return (
-//     <Box p={0}>
-//       <Tabs index={tabIndex} onChange={setTabIndex} variant="enclosed" isLazy>
-//         <Flex align="center">
-//           <TabList>
-//             {sheets.map((sheet, idx) => (
-//               <Tab key={idx} fontWeight="bold" fontSize="md" borderRadius="md" px={5}>
-//                 {sheet.name}
-//               </Tab>
-//             ))}
-//             <IconButton
-//               icon={<AddIcon />}
-//               aria-label="Ajouter une feuille"
-//               size="sm"
-//               ml={2}
-//               variant="outline"
-//               onClick={handleAddSheet}
-//             />
-//           </TabList>
-//         </Flex>
-//         <TabPanels>
-//           {/* Feuille 1: Main Dashboard */}
-//           <TabPanel p={0}>
-//             <GesDashboardContent posteResults={posteResults} summary={summary} />
-//           </TabPanel>
-//           {/* Feuille 2: Custom Pie Chart */}
-//           <TabPanel p={0}>
-//             <Feuille2PieChart />
-//           </TabPanel>
-//           {/* More sheets: Empty */}
-//           {sheets.slice(2).map((_, idx) => (
-//             <TabPanel key={idx + 2} p={8}>
-//               <Text>Nouvelle feuille vide #{idx + 3}</Text>
-//             </TabPanel>
+//     <Box bg={TOK.bg} minH="100vh" w="100%" p={{ base: 4, md: 6 }}>
+//       {/* Header */}
+//       <Flex align="center" mb={4} wrap="wrap" gap={3}>
+//         <Text fontWeight="800" fontSize="26px" color={TOK.heading}>
+//           Bilan GES
+//         </Text>
+//         <Spacer />
+//         <HStack spacing={2} bg={TOK.pillBg} p="4px" rounded="999px">
+//           {["Résumé du bilan", "Bilan GES", "Bilan énergétique", "Votre progression"].map((t, i) => (
+//             <Box
+//               key={t}
+//               as="button"
+//               px={4}
+//               h="34px"
+//               rounded="999px"
+//               bg={i === 1 ? TOK.primary : "transparent"}
+//               color={i === 1 ? "#fff" : "#334155"}
+//               fontWeight={i === 1 ? 700 : 500}
+//             >
+//               {t}
+//             </Box>
 //           ))}
-//         </TabPanels>
-//       </Tabs>
+//         </HStack>
+//         <Spacer />
+//         <HStack spacing={3}>
+//           <Text fontSize="13px" color={TOK.subtle}>
+//             Format GHG protocol
+//           </Text>
+//           <Switch size="md" colorScheme="green" />
+//         </HStack>
+//       </Flex>
+
+//       {/* Section title */}
+//       <Text fontWeight="700" fontSize="18px" color={TOK.heading} mb={3}>
+//         Voici vos émissions de GES
+//       </Text>
+
+//       {/* Main grid */}
+//       <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={5}>
+//         <DonutPanel data={dataWithAliases} />
+//         <DetailedTable rows={dataWithAliases} summary={summary} />
+//       </SimpleGrid>
 //     </Box>
 //   );
 // }
+
+// export { GesDashboard };
