@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
   HStack,
@@ -9,21 +9,30 @@ import {
   Button,
   Icon,
   Input,
-  useColorModeValue,
   Spinner,
+  Badge,
+  Flex,
+  IconButton,
 } from "@chakra-ui/react";
-import { Plus, Trash2, Copy, Lock, Calendar } from "lucide-react";
+import { keyframes } from "@emotion/react";
+import { AddIcon, DeleteIcon, CopyIcon, ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
+import { Lock, Calendar, Truck, MapPin, Hash } from "lucide-react";
 import VehicleSelect from "#components/vehicleselect/VehicleSelect";
 import { usePrefillPosteSource } from "components/postes/HookForGetDataSource";
 import { supabase } from "../../../lib/supabaseClient";
 
+/** =======================
+ * Poste 2 · Source 2A3
+ * SAME DESIGN (cards + header bar + pill inputs + results cards)
+ * ======================= */
+
 export type A3Row = {
   vehicle: string;
-  type: string;        // M82 (lookup key)
+  type: string; // lookup key
   date: string;
-  cost: string;        // reused as "Nom du site"
-  avgPrice: string;    // reused as "Commentaires"
-  estimateQty: string; // W82 (quantity = distance)
+  cost: string; // "Nom du site"
+  avgPrice: string; // "Commentaires"
+  estimateQty: string; // distance
   reference: string;
 };
 
@@ -46,9 +55,11 @@ export interface Source2A3FormProps {
   userId: string;
   gesResults?: GesResult[];
   setGesResults: (results: GesResult[]) => void;
-  highlight?: string;
-  tableBg?: string;
+  highlight?: string; // kept for compatibility (not used)
+  tableBg?: string; // kept for compatibility (not used)
 }
+
+/* ---------------- helpers ---------------- */
 
 const toNum = (x: any, fallback = 0) => {
   if (x === "" || x == null) return fallback;
@@ -72,7 +83,7 @@ type MobileEF = {
   ch4_g_unite: number;
   n2o_g_unite: number;
   co2eq_g_unite: number;
-  conversion_kwh_unite: number; // ✅ energy factor
+  conversion_kwh_unite: number; // energy factor
   carburant: string;
   unite: string;
   type_vehicule: string;
@@ -86,6 +97,30 @@ type Refs = {
   prpN2O: number;
 };
 
+/* ---------------- animations + figma tokens ---------------- */
+
+const fadeInUp = keyframes`
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const FIGMA = {
+  bg: "#F5F6F5",
+  green: "#344E41",
+  greenLight: "#588157",
+  greenSoft: "#DDE5E0",
+  border: "#E4E4E4",
+  text: "#404040",
+  muted: "#8F8F8F",
+  inputShadow: "0px 1px 6px 2px rgba(0,0,0,0.05)",
+  buttonShadow: "0px 1px 6px 2px rgba(0,0,0,0.25)",
+  cardShadow: "0 4px 16px rgba(0,0,0,0.08)",
+  hoverShadow: "0 8px 24px rgba(0,0,0,0.12)",
+};
+
+const fmt = (n: any, max = 3) =>
+  Number(toNum(n, 0)).toLocaleString("fr-CA", { maximumFractionDigits: max });
+
 export function Source2A3Form({
   a3Rows = [],
   setA3Rows,
@@ -96,18 +131,10 @@ export function Source2A3Form({
   userId,
   gesResults = [],
   setGesResults,
-  highlight = "#245a7c",
-  tableBg = "#f3f6ef",
 }: Source2A3FormProps) {
   const [loading, setLoading] = useState(false);
   const [refs, setRefs] = useState<Refs | null>(null);
-
-  const inputBorder = useColorModeValue("#E8ECE7", "#2f3a36");
-  const faintLine = useColorModeValue(
-    "rgba(0,0,0,0.12)",
-    "rgba(255,255,255,0.12)"
-  );
-  const headerFg = "white";
+  const [collapsed, setCollapsed] = useState(false);
 
   const {
     loading: prefillLoading,
@@ -116,7 +143,7 @@ export function Source2A3Form({
     results: prefillResults,
   } = usePrefillPosteSource(userId, 2, "2A3", { rows: [] });
 
-  // ✅ load refs like 2A1
+  // Load refs (PRP + equipements_mobiles)
   useEffect(() => {
     (async () => {
       try {
@@ -175,12 +202,18 @@ export function Source2A3Form({
         setRefs({ byTypeVehicule, byCarburant, prpCO2, prpCH4, prpN2O });
       } catch (e) {
         console.error("2A3 refs load error:", e);
-        setRefs({ byTypeVehicule: {}, byCarburant: {}, prpCO2: 1, prpCH4: 0, prpN2O: 0 });
+        setRefs({
+          byTypeVehicule: {},
+          byCarburant: {},
+          prpCO2: 1,
+          prpCH4: 0,
+          prpN2O: 0,
+        });
       }
     })();
   }, []);
 
-  // prefill
+  // Prefill hydrate
   useEffect(() => {
     if (Array.isArray((prefillData as any)?.rows) && (prefillData as any).rows.length) {
       setA3Rows((prefillData as any).rows as A3Row[]);
@@ -195,36 +228,31 @@ export function Source2A3Form({
   const validateData = (rows: A3Row[]) =>
     rows.length > 0 && rows.every((row) => row.vehicle && row.type && row.date && row.estimateQty);
 
-  // ✅ Excel replica calc
-  // CO2 = IF(M=0,"", VLOOKUP(M,FÉ,8)*W*PRP_CO2)
-  // CH4 = col9*W*PRP_CH4
-  // N2O = col10*W*PRP_N2O
-  // total gCO2e = sum
-  // tCO2e = /1e6
-  // energy = VLOOKUP(M,FÉ,7)*W
+  // Excel replica calc
   const computeResults = (rows: A3Row[], rf: Refs | null): GesResult[] => {
     if (!rf) return [];
 
     return (rows || []).map((row) => {
-      const keyRaw = String(row.type ?? "").trim(); // M82
-      const qty = toNum(row.estimateQty, 0);        // W82 (distance)
-
+      const keyRaw = String(row.type ?? "").trim();
+      const qty = toNum(row.estimateQty, 0);
       const k = norm(keyRaw);
 
       const ef =
         rf.byTypeVehicule[k] ||
         rf.byCarburant[k] ||
         (() => {
-          const tvKey = Object.keys(rf.byTypeVehicule).find((kk) => kk === k || kk.includes(k) || k.includes(kk));
+          const tvKey = Object.keys(rf.byTypeVehicule).find(
+            (kk) => kk === k || kk.includes(k) || k.includes(kk)
+          );
           if (tvKey) return rf.byTypeVehicule[tvKey];
-          const cKey = Object.keys(rf.byCarburant).find((kk) => kk === k || kk.includes(k) || k.includes(kk));
+          const cKey = Object.keys(rf.byCarburant).find(
+            (kk) => kk === k || kk.includes(k) || k.includes(kk)
+          );
           return cKey ? rf.byCarburant[cKey] : undefined;
         })();
 
       if (!keyRaw || qty === 0 || !ef) {
-        if (keyRaw && qty !== 0 && !ef) {
-          console.warn("2A3: lookup failed for type =", keyRaw);
-        }
+        if (keyRaw && qty !== 0 && !ef) console.warn("2A3: lookup failed for type =", keyRaw);
         return {
           total_co2_gco2e: 0,
           total_ges_ch4_gco2e: 0,
@@ -244,7 +272,7 @@ export function Source2A3Form({
       const ch4 = hasGas ? ef.ch4_g_unite * qty * toNum(rf.prpCH4, 0) : 0;
       const n2o = hasGas ? ef.n2o_g_unite * qty * toNum(rf.prpN2O, 0) : 0;
 
-      const total_g = hasGas ? (co2 + ch4 + n2o) : (ef.co2eq_g_unite * qty);
+      const total_g = hasGas ? co2 + ch4 + n2o : ef.co2eq_g_unite * qty;
       const total_t = total_g / 1e6;
 
       const energy_kwh = ef.conversion_kwh_unite * qty;
@@ -260,14 +288,14 @@ export function Source2A3Form({
     });
   };
 
-  // recompute live (like 4B2)
+  // Live recompute
   useEffect(() => {
     const res = computeResults(a3Rows, refs);
     setGesResults(res);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [a3Rows, refs]);
 
-  // ✅ submit = compute + save (no Cloud Run)
+  // Submit (compute + save)
   const handle2A3Submit = async () => {
     if (!posteSourceId || !userId) {
       alert("Missing required fields (posteSourceId or userId)");
@@ -288,7 +316,6 @@ export function Source2A3Form({
       ...row,
       site: row.cost,
       commentaires: row.avgPrice,
-      // keep original strings too, but ensure numeric qty saved
       estimateQty: toNum(row.estimateQty, 0),
     }));
 
@@ -323,171 +350,424 @@ export function Source2A3Form({
     setLoading(false);
   };
 
+  const totals = useMemo(() => {
+    const sum = (k: keyof GesResult) =>
+      (gesResults || []).reduce((acc, r) => acc + toNum((r as any)?.[k], 0), 0);
+
+    return {
+      total_co2_gco2e: sum("total_co2_gco2e"),
+      total_ges_ch4_gco2e: sum("total_ges_ch4_gco2e"),
+      total_ges_n2o_gco2e: sum("total_ges_n2o_gco2e"),
+      total_ges_gco2e: sum("total_ges_gco2e"),
+      total_ges_tco2e: sum("total_ges_tco2e"),
+      total_energie_kwh: sum("total_energie_kwh"),
+    };
+  }, [gesResults]);
+
   return (
-    <VStack align="stretch" spacing={3}>
-      <HStack justify="flex-end" spacing={3}>
-        {prefillLoading && (
-          <HStack spacing={2} color="gray.500">
-            <Spinner size="sm" /> <Text fontSize="sm">Chargement…</Text>
-          </HStack>
-        )}
-        {prefillError && (
-          <Text fontSize="sm" color="red.500">Préchargement: {String(prefillError)}</Text>
-        )}
-      </HStack>
-
-      <Grid
-        templateColumns="2fr 1.6fr 1.6fr 1.2fr 1.2fr 1.2fr 96px"
-        bg={highlight}
-        color="white"
-        fontWeight={600}
-        fontSize="sm"
-        alignItems="center"
-        px={4}
-        py={3}
-        rounded="lg"
-      >
-        <GridItem>Véhicule</GridItem>
-        <GridItem>Nom du site</GridItem>
-        <GridItem>Type de véhicule</GridItem>
-        <GridItem>Distance</GridItem>
-        <GridItem>Référence</GridItem>
-        <GridItem>Date</GridItem>
-        <GridItem textAlign="right">Actions</GridItem>
-      </Grid>
-
-      <VStack
-        spacing={0}
-        bg={tableBg}
-        rounded="xl"
-        border="1px solid"
-        borderColor={inputBorder}
-        overflow="hidden"
-      >
-        {(a3Rows || []).map((row, idx) => (
-          <Box key={idx} bg="transparent" px={{ base: 2, md: 3 }} pt={3}>
-            <Grid
-              templateColumns="2fr 1.6fr 1.6fr 1.2fr 1.2fr 1.2fr 96px"
-              gap={3}
-              alignItems="center"
-              px={1}
-            >
-              <GridItem>
-                <PillInput placeholder="Véhicule" value={row.vehicle} onChange={(v) => updateA3Row(idx, "vehicle", v)} inputBorder={inputBorder} />
-              </GridItem>
-              <GridItem>
-                <PillInput placeholder="Nom du site" value={row.cost} onChange={(v) => updateA3Row(idx, "cost", v)} inputBorder={inputBorder} />
-              </GridItem>
-              <GridItem>
-                <PillVehicleSelect value={row.type} onChange={(v) => updateA3Row(idx, "type", v)} inputBorder={inputBorder} />
-              </GridItem>
-              <GridItem>
-                <PillInput placeholder="Distance" value={row.estimateQty} onChange={(v) => updateA3Row(idx, "estimateQty", v)} inputBorder={inputBorder} />
-              </GridItem>
-              <GridItem>
-                <PillInput placeholder="Référence" value={row.reference} onChange={(v) => updateA3Row(idx, "reference", v)} inputBorder={inputBorder} />
-              </GridItem>
-              <GridItem>
-                <PillDate value={row.date} onChange={(v) => updateA3Row(idx, "date", v)} inputBorder={inputBorder} />
-              </GridItem>
-              <GridItem>
-                <HStack spacing={2} justify="flex-end" pr={1}>
-                  <MiniIconBtn icon={Lock} ariaLabel="Verrouiller" />
-                  <MiniIconBtn icon={Copy} ariaLabel="Dupliquer" onClick={() => setA3Rows((prev) => { const copy = [...prev]; copy.splice(idx + 1, 0, { ...row }); return copy; })} />
-                  <MiniIconBtn icon={Trash2} ariaLabel="Supprimer" onClick={() => removeA3Row(idx)} />
-                </HStack>
-              </GridItem>
-            </Grid>
-
-            <HStack spacing={3} align="center" px={1} py={3}>
-              <PillInput placeholder="Commentaires" value={row.avgPrice} onChange={(v) => updateA3Row(idx, "avgPrice", v)} inputBorder={inputBorder} full />
-              <Text ml="auto" fontSize="sm" color="gray.600">
-                <strong>{formatResult(gesResults[idx])}</strong>
-              </Text>
+    <Box bg={FIGMA.bg} p={{ base: 4, md: 6 }} rounded="2xl" animation={`${fadeInUp} 0.6s ease-out`}>
+      {/* Header card */}
+      <Box bg="white" p={6} rounded="xl" mb={6} boxShadow={FIGMA.cardShadow}>
+        <Flex justify="space-between" align="center" flexWrap="wrap" gap={4}>
+          <VStack align="flex-start" spacing={2}>
+            <HStack spacing={2}>
+              <Box w="4px" h="24px" bg={FIGMA.green} borderRadius="full" />
+              <Badge
+                bg={FIGMA.greenSoft}
+                color={FIGMA.green}
+                fontSize="xs"
+                px={3}
+                py={1}
+                rounded="full"
+                textTransform="uppercase"
+                letterSpacing="wide"
+              >
+                Poste 2 · Source 2A3
+              </Badge>
             </HStack>
-            <Box h="2px" bg={faintLine} mx={2} rounded="full" />
-          </Box>
-        ))}
 
-        {(!a3Rows || a3Rows.length === 0) && (
-          <Box p={4} textAlign="center" color="gray.500">
-            Aucune ligne. Cliquez sur “Ajouter une ligne” pour commencer.
-          </Box>
-        )}
-      </VStack>
+            <Text fontFamily="Inter" fontWeight={700} fontSize={{ base: "xl", md: "2xl" }} color={FIGMA.text}>
+              Déplacements & distance (2A3)
+            </Text>
 
-      <HStack pt={3} spacing={3}>
-        <Button
-          leftIcon={<Icon as={Plus} boxSize={4} />}
-          bg={highlight}
-          color="white"
-          rounded="full"
-          px={6}
-          h="44px"
-          _hover={{ opacity: 0.95 }}
-          onClick={addA3Row}
-        >
-          Ajouter une ligne
-        </Button>
-        <Button
-          colorScheme="blue"
-          rounded="full"
-          px={6}
-          h="44px"
-          onClick={handle2A3Submit}
-          isLoading={loading}
-        >
-          Soumettre
-        </Button>
-      </HStack>
+            <HStack spacing={3} flexWrap="wrap">
+              <Text fontSize="sm" fontFamily="Montserrat" color={FIGMA.muted}>
+                {a3Rows?.length || 0} ligne(s)
+              </Text>
+              {prefillError && (
+                <Text fontSize="sm" color="red.500">
+                  Préchargement: {String(prefillError)}
+                </Text>
+              )}
+            </HStack>
+          </VStack>
 
-      {Array.isArray(gesResults) && gesResults.length > 0 && (
-        <Box mt={4} bg="#e5f2fa" rounded="xl" p={4} boxShadow="sm">
-          <Text fontWeight="bold" color={highlight} mb={2}>
-            Calculs et résultats (récapitulatif)
+          <HStack spacing={3} align="center">
+            {prefillLoading && (
+              <HStack spacing={2} color={FIGMA.muted}>
+                <Spinner size="sm" />
+                <Text fontSize="sm" fontFamily="Montserrat">
+                  Chargement…
+                </Text>
+              </HStack>
+            )}
+
+            <IconButton
+              aria-label={collapsed ? "Développer" : "Réduire"}
+              icon={collapsed ? <ChevronDownIcon /> : <ChevronUpIcon />}
+              variant="ghost"
+              color={FIGMA.muted}
+              size="sm"
+              _hover={{ color: FIGMA.green, bg: FIGMA.greenSoft }}
+              onClick={() => setCollapsed((v) => !v)}
+            />
+          </HStack>
+        </Flex>
+      </Box>
+
+      {/* Main card */}
+      <Box bg="white" rounded="xl" p={6} boxShadow={FIGMA.cardShadow}>
+        {collapsed ? (
+          <Text color={FIGMA.muted} fontFamily="Montserrat">
+            Section réduite.
           </Text>
-          <Grid templateColumns="repeat(6, 1fr)" gap={3} fontSize="sm">
-            <ResultPill label="CO₂ [gCO₂e]" value={sumField(gesResults, "total_co2_gco2e")} />
-            <ResultPill label="CH₄ [gCO₂e]" value={sumField(gesResults, "total_ges_ch4_gco2e")} />
-            <ResultPill label="N₂O [gCO₂e]" value={sumField(gesResults, "total_ges_n2o_gco2e")} />
-            <ResultPill label="Total GES [gCO₂e]" value={sumField(gesResults, "total_ges_gco2e")} />
-            <ResultPill label="Total GES [tCO₂e]" value={sumField(gesResults, "total_ges_tco2e")} />
-            <ResultPill label="Énergie [kWh]" value={sumField(gesResults, "total_energie_kwh")} />
+        ) : (
+          <VStack align="stretch" spacing={5}>
+            {/* Header bar */}
+            <Box
+              bg={`linear-gradient(135deg, ${FIGMA.green} 0%, ${FIGMA.greenLight} 100%)`}
+              color="white"
+              h="50px"
+              rounded="xl"
+              px={6}
+              display={{ base: "none", lg: "flex" }}
+              alignItems="center"
+              boxShadow="0 2px 8px rgba(52, 78, 65, 0.2)"
+            >
+              <Grid
+                w="full"
+                templateColumns="1.4fr 1.2fr 1.2fr 1.0fr 1.0fr 1.0fr 140px"
+                columnGap={6}
+                alignItems="center"
+              >
+                <HStack justify="center" spacing={2}>
+                  <Icon as={Truck} boxSize={4} />
+                  <Text fontFamily="Montserrat" fontWeight={600} fontSize="14px">
+                    Véhicule
+                  </Text>
+                </HStack>
+                <HStack justify="center" spacing={2}>
+                  <Icon as={MapPin} boxSize={4} />
+                  <Text fontFamily="Montserrat" fontWeight={600} fontSize="14px">
+                    Nom du site
+                  </Text>
+                </HStack>
+                <HStack justify="center" spacing={2}>
+                  <Icon as={Truck} boxSize={4} />
+                  <Text fontFamily="Montserrat" fontWeight={600} fontSize="14px">
+                    Type
+                  </Text>
+                </HStack>
+                <HStack justify="center" spacing={2}>
+                  <Icon as={Hash} boxSize={4} />
+                  <Text fontFamily="Montserrat" fontWeight={600} fontSize="14px">
+                    Distance
+                  </Text>
+                </HStack>
+                <HStack justify="center" spacing={2}>
+                  <Icon as={Hash} boxSize={4} />
+                  <Text fontFamily="Montserrat" fontWeight={600} fontSize="14px">
+                    Référence
+                  </Text>
+                </HStack>
+                <HStack justify="center" spacing={2}>
+                  <Icon as={Calendar} boxSize={4} />
+                  <Text fontFamily="Montserrat" fontWeight={600} fontSize="14px">
+                    Date
+                  </Text>
+                </HStack>
+                <Box textAlign="right">
+                  <Text fontFamily="Montserrat" fontWeight={600} fontSize="14px">
+                    Actions
+                  </Text>
+                </Box>
+              </Grid>
+            </Box>
+
+            {/* Rows */}
+            <VStack align="stretch" spacing={4}>
+              {(a3Rows || []).map((row, idx) => (
+                <Box
+                  key={idx}
+                  bg={FIGMA.bg}
+                  rounded="xl"
+                  p={4}
+                  border="2px solid"
+                  borderColor={FIGMA.border}
+                  transition="all 0.3s"
+                  _hover={{ borderColor: FIGMA.green }}
+                >
+                  <Grid
+                    templateColumns={{
+                      base: "1fr",
+                      lg: "1.4fr 1.2fr 1.2fr 1.0fr 1.0fr 1.0fr 140px",
+                    }}
+                    columnGap={4}
+                    rowGap={3}
+                    alignItems="center"
+                  >
+                    <GridItem>
+                      <FigmaInput
+                        value={row.vehicle}
+                        onChange={(v) => updateA3Row(idx, "vehicle", v)}
+                        placeholder="Véhicule"
+                      />
+                    </GridItem>
+
+                    <GridItem>
+                      <FigmaInput
+                        value={row.cost}
+                        onChange={(v) => updateA3Row(idx, "cost", v)}
+                        placeholder="Nom du site"
+                      />
+                    </GridItem>
+
+                    <GridItem>
+                      <FigmaVehicleSelect
+                        value={row.type}
+                        onChange={(v: string) => updateA3Row(idx, "type", v)}
+                      />
+                    </GridItem>
+
+                    <GridItem>
+                      <FigmaInput
+                        type="number"
+                        value={row.estimateQty}
+                        onChange={(v) => updateA3Row(idx, "estimateQty", v)}
+                        placeholder="Distance"
+                        center
+                      />
+                    </GridItem>
+
+                    <GridItem>
+                      <FigmaInput
+                        value={row.reference}
+                        onChange={(v) => updateA3Row(idx, "reference", v)}
+                        placeholder="Référence"
+                      />
+                    </GridItem>
+
+                    <GridItem>
+                      <FigmaDate
+                        value={row.date}
+                        onChange={(v) => updateA3Row(idx, "date", v)}
+                      />
+                    </GridItem>
+
+                    <GridItem>
+                      <HStack justify="flex-end" spacing={1}>
+                        <IconButton
+                          aria-label="Verrouiller"
+                          icon={<Icon as={Lock} boxSize={4} />}
+                          variant="ghost"
+                          color={FIGMA.muted}
+                          size="sm"
+                          _hover={{ bg: FIGMA.greenSoft, color: FIGMA.green }}
+                        />
+                        <IconButton
+                          aria-label="Dupliquer"
+                          icon={<CopyIcon />}
+                          variant="ghost"
+                          color={FIGMA.muted}
+                          size="sm"
+                          _hover={{ bg: FIGMA.greenSoft, color: FIGMA.green }}
+                          onClick={() =>
+                            setA3Rows((prev) => {
+                              const copy = [...prev];
+                              copy.splice(idx + 1, 0, { ...row });
+                              return copy;
+                            })
+                          }
+                        />
+                        <IconButton
+                          aria-label="Supprimer"
+                          icon={<DeleteIcon />}
+                          variant="ghost"
+                          color={FIGMA.muted}
+                          size="sm"
+                          _hover={{ bg: "red.50", color: "red.500" }}
+                          onClick={() => removeA3Row(idx)}
+                        />
+                      </HStack>
+                    </GridItem>
+                  </Grid>
+
+                  {/* Commentaires + inline row result */}
+                  <HStack spacing={3} mt={3} flexWrap="wrap">
+                    <Box flex={1} minW={{ base: "100%", md: "420px" }}>
+                      <FigmaInput
+                        value={row.avgPrice}
+                        onChange={(v) => updateA3Row(idx, "avgPrice", v)}
+                        placeholder="Commentaires"
+                      />
+                    </Box>
+
+                    <Box
+                      ml="auto"
+                      px={4}
+                      py={2}
+                      rounded="full"
+                      bg="white"
+                      border="1px solid"
+                      borderColor={FIGMA.border}
+                      boxShadow={FIGMA.inputShadow}
+                    >
+                      <Text fontFamily="Montserrat" fontSize="sm" color={FIGMA.text}>
+                        Total ligne (tCO₂e):{" "}
+                        <b>{fmt((gesResults?.[idx] as any)?.total_ges_tco2e ?? 0, 6)}</b>
+                      </Text>
+                    </Box>
+                  </HStack>
+                </Box>
+              ))}
+
+              {(!a3Rows || a3Rows.length === 0) && (
+                <Box p={4} textAlign="center" color={FIGMA.muted}>
+                  Aucune ligne. Cliquez sur “Ajouter une ligne” pour commencer.
+                </Box>
+              )}
+            </VStack>
+
+            {/* Footer actions */}
+            <HStack pt={2} spacing={4} flexWrap="wrap">
+              <Button
+                leftIcon={<AddIcon />}
+                variant="outline"
+                borderColor={FIGMA.green}
+                color={FIGMA.green}
+                rounded="full"
+                h="44px"
+                px={6}
+                onClick={addA3Row}
+                fontFamily="Inter"
+                fontWeight={600}
+                _hover={{ bg: FIGMA.greenSoft, borderColor: FIGMA.green }}
+              >
+                Ajouter une ligne
+              </Button>
+
+              <Button
+                bg={FIGMA.green}
+                color="white"
+                rounded="full"
+                h="44px"
+                px={8}
+                boxShadow={FIGMA.buttonShadow}
+                _hover={{ bg: FIGMA.greenLight, transform: "translateY(-2px)", boxShadow: FIGMA.hoverShadow }}
+                _active={{ transform: "translateY(0)" }}
+                onClick={handle2A3Submit}
+                isLoading={loading}
+                loadingText="Sauvegarde…"
+                fontFamily="Inter"
+                fontWeight={600}
+              >
+                Calculer et soumettre
+              </Button>
+            </HStack>
+          </VStack>
+        )}
+      </Box>
+
+      {/* Results summary */}
+      <Box mt={6} bg="white" rounded="xl" p={6} boxShadow={FIGMA.cardShadow} animation={`${fadeInUp} 0.6s ease-out`}>
+        <Text fontFamily="Inter" fontWeight={700} color={FIGMA.text} fontSize="lg" mb={4}>
+          Calculs et résultats (récapitulatif)
+        </Text>
+
+        {gesResults && gesResults.length > 0 ? (
+          <Grid templateColumns={{ base: "1fr", md: "repeat(auto-fit, minmax(220px, 1fr))" }} gap={6}>
+            <ResultCard label="CO₂ [gCO₂e]" value={fmt(totals.total_co2_gco2e)} />
+            <ResultCard label="CH₄ [gCO₂e]" value={fmt(totals.total_ges_ch4_gco2e)} />
+            <ResultCard label="N₂O [gCO₂e]" value={fmt(totals.total_ges_n2o_gco2e)} />
+            <ResultCard label="Total [gCO₂e]" value={fmt(totals.total_ges_gco2e)} />
+            <ResultCard label="Total [tCO₂e]" value={fmt(totals.total_ges_tco2e, 6)} />
+            <ResultCard label="Énergie [kWh]" value={fmt(totals.total_energie_kwh)} />
           </Grid>
+        ) : (
+          <Text color={FIGMA.muted} fontFamily="Montserrat">
+            Aucun résultat à afficher.
+          </Text>
+        )}
+      </Box>
+
+      {prefillError && (
+        <Box mt={4}>
+          <Text fontSize="sm" color="red.500">
+            Erreur de préchargement : {String(prefillError)}
+          </Text>
         </Box>
       )}
-    </VStack>
+    </Box>
   );
 }
 
-/* ===== UI helpers ===== */
-function PillInput({ value, onChange, placeholder, inputBorder, full }: any) {
+/* ================= UI helpers ================= */
+
+function FigmaInput({
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  center,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  center?: boolean;
+}) {
   return (
     <Input
+      type={type}
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
+      h="42px"
+      rounded="lg"
       bg="white"
-      border="1px solid"
-      borderColor={inputBorder}
-      rounded="xl"
-      h="36px"
-      boxShadow="0 2px 4px rgba(0,0,0,0.06)"
-      fontSize="sm"
-      flex={full ? 1 : undefined}
+      borderColor={FIGMA.border}
+      boxShadow={FIGMA.inputShadow}
+      fontFamily="Montserrat"
+      fontSize="14px"
+      color={FIGMA.text}
+      textAlign={center ? "center" : "left"}
+      _placeholder={{ color: FIGMA.muted }}
+      _focus={{
+        borderColor: FIGMA.green,
+        boxShadow: `0 0 0 1px ${FIGMA.green}`,
+      }}
+      transition="all 0.2s"
     />
   );
 }
-function PillDate({ value, onChange, inputBorder }: any) {
+
+function FigmaDate({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <HStack
+      h="42px"
+      rounded="lg"
       bg="white"
       border="1px solid"
-      borderColor={inputBorder}
-      rounded="xl"
+      borderColor={FIGMA.border}
+      boxShadow={FIGMA.inputShadow}
       px={3}
-      h="36px"
-      boxShadow="0 2px 4px rgba(0,0,0,0.06)"
+      spacing={2}
       justify="space-between"
     >
       <Input
@@ -495,86 +775,66 @@ function PillDate({ value, onChange, inputBorder }: any) {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         variant="unstyled"
-        fontSize="sm"
-        h="100%"
+        fontFamily="Montserrat"
+        fontSize="14px"
+        color={FIGMA.text}
         p={0}
+        h="100%"
       />
-      <Icon as={Calendar} boxSize={4} color="gray.500" />
+      <Icon as={Calendar} boxSize={4} color={FIGMA.muted} />
     </HStack>
   );
 }
-function PillVehicleSelect({ value, onChange, inputBorder }: any) {
+
+function FigmaVehicleSelect({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
   return (
     <Box
+      h="42px"
+      rounded="lg"
       bg="white"
       border="1px solid"
-      borderColor={inputBorder}
-      rounded="xl"
+      borderColor={FIGMA.border}
+      boxShadow={FIGMA.inputShadow}
       px={2}
-      h="36px"
-      boxShadow="0 2px 4px rgba(0,0,0,0.06)"
       display="flex"
       alignItems="center"
     >
-      <VehicleSelect value={value} onChange={onChange} />
+      <Box w="full">
+        <VehicleSelect value={value} onChange={onChange} />
+      </Box>
     </Box>
-  );
-}
-function MiniIconBtn({ icon, ariaLabel, onClick }: any) {
-  return (
-    <Box
-      as="button"
-      aria-label={ariaLabel}
-      p="6px"
-      rounded="md"
-      color="gray.600"
-      _hover={{ bg: "#eef2ee" }}
-      border="1px solid"
-      borderColor="transparent"
-      onClick={onClick}
-    >
-      <Icon as={icon} boxSize={4} />
-    </Box>
-  );
-}
-function ResultPill({ label, value }: { label: string; value: string }) {
-  return (
-    <VStack
-      bg="white"
-      border="1px solid"
-      borderColor="#E8ECE7"
-      rounded="xl"
-      p={3}
-      spacing={1}
-      align="stretch"
-    >
-      <Text fontSize="xs" color="gray.600">
-        {label}
-      </Text>
-      <Text fontWeight="bold">{value}</Text>
-    </VStack>
   );
 }
 
-/* ===== Utils ===== */
-function sumField(results: GesResult[], key: keyof GesResult): string {
-  const s = results.reduce((acc, r) => acc + (toNumLocal((r as any)[key]) || 0), 0);
-  return formatNumber(s);
+function ResultCard({ label, value }: { label: string; value: string }) {
+  return (
+    <Box
+      bg={FIGMA.bg}
+      p={4}
+      rounded="lg"
+      border="2px solid"
+      borderColor={FIGMA.border}
+      transition="all 0.3s"
+      _hover={{ borderColor: FIGMA.green, transform: "translateY(-2px)" }}
+    >
+      <Text fontSize="xs" color={FIGMA.muted} fontFamily="Montserrat" mb={2} textTransform="uppercase">
+        {label}
+      </Text>
+      <Text fontSize="2xl" fontWeight={700} color={FIGMA.green} fontFamily="Inter">
+        {value}
+      </Text>
+    </Box>
+  );
 }
-function toNumLocal(v: unknown): number {
-  const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
-  return isFinite(n) ? n : 0;
-}
-function formatNumber(n: number): string {
-  return Number(n).toLocaleString("fr-CA", { maximumFractionDigits: 3 });
-}
-function formatResult(r?: GesResult): string {
-  if (!r) return "-";
-  const t = r.total_ges_tco2e ?? r.total_ges_gco2e ?? r.total_co2_gco2e ?? "-";
-  if (t === "-") return "-";
-  const n = toNumLocal(t as any);
-  return formatNumber(n);
-}
+
+export default Source2A3Form;
+
 
 // import React, { useEffect, useState } from 'react';
 // import {

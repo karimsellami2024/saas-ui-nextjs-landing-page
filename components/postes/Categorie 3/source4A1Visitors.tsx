@@ -15,7 +15,7 @@ import {
   Badge,
   Icon,
   IconButton,
-  Stack, // ✅ important (you asked: avoid Stack error)
+  Stack,
 } from "@chakra-ui/react";
 import { keyframes } from "@emotion/react";
 import {
@@ -31,11 +31,12 @@ import { supabase } from "../../../lib/supabaseClient";
 import { usePrefillPosteSource } from "components/postes/HookForGetDataSource";
 
 /** =======================
- * Poste 3.3A1 – Navettage
- * SAME DESIGN as Source4B1 (Figma card / pills / results cards)
+ * Poste 3.4A1 – Déplacements des visiteurs en voiture
+ * SAME DESIGN as Source33A1 / Source4B1
+ * DB-DRIVEN TRANSPORT OPTIONS from emission_factors
  * ======================= */
 
-export type Source33A1Row = {
+export type Source34A1Row = {
   methodology: string;
   equipment: string;
   description: string;
@@ -45,13 +46,15 @@ export type Source33A1Row = {
   product: string;
   reference: string;
 
-  transportMode: string;
-  oneWayDistanceKm: string;
-  workDaysPerYear: string;
-  employeesSameTrip: string;
+  event: string; // (facultatif)
+  transportMode: string; // MUST match emission_factors.label
+  consumptionLPer100Km: string; // [L/100km] (si connu) - facultatif
+  distanceKm: string; // [km] distance pour 1 déplacement
+  fuelKnownL: string; // [L] si connu (par déplacement) - facultatif
+  identicalTrips: string; // nombre de déplacements identiques - facultatif
 };
 
-export type GesResult33A1 = {
+export type GesResult34A1 = {
   distance_km?: string | number;
   fuel_qty_l?: string | number;
 
@@ -68,37 +71,45 @@ export type GesResult33A1 = {
   energy_kwh?: string | number;
 };
 
-export interface Source33A1FormProps {
-  rows?: Source33A1Row[];
-  setRows?: React.Dispatch<React.SetStateAction<Source33A1Row[]>>;
+export interface Source34A1FormProps {
+  rows?: Source34A1Row[];
+  setRows?: React.Dispatch<React.SetStateAction<Source34A1Row[]>>;
 
   posteSourceId: string | null;
   userId?: string | null;
 
-  gesResults?: GesResult33A1[];
-  setGesResults?: (results: GesResult33A1[]) => void;
+  gesResults?: GesResult34A1[];
+  setGesResults?: (results: GesResult34A1[]) => void;
 }
 
 /* ================== constants ================== */
 
 const METHODOLOGY_OPTIONS = ["Données réelles", "Estimation", "Valeur par défaut"];
-const TRANSPORT_OPTIONS = ["Voiture", "Autobus", "Marche ou vélo"];
 
-// Defaults to reproduce Excel rows
-const DEFAULT_FUEL_L_PER_KM: Record<string, number> = {
-  Voiture: 0.097,
-  Autobus: 0.0244333333333,
-  "Marche ou vélo": 0,
+/**
+ * Fallbacks (shown if DB has no matching factors yet)
+ * IMPORTANT: these labels should match your emission_factors.label when you start populating.
+ */
+const FALLBACK_TRANSPORT_OPTIONS = [
+  "Voiture légère - Essence [L]",
+  "Voiture légère - Diesel [L]",
+  "Camion léger - Essence [L]",
+  "Camion léger - Diesel [L]",
+  "Camion lourd - Essence [L]",
+  "Camion lourd - Diesel [L]",
+];
+
+// Excel-like default consumption [L/100km] when not provided by user
+const DEFAULT_CONS_L_PER_100KM: Record<string, number> = {
+  "Voiture légère - Essence [L]": 8.5,
+  "Voiture légère - Diesel [L]": 7.0,
+  "Camion léger - Essence [L]": 12.0,
+  "Camion léger - Diesel [L]": 10.0,
+  "Camion lourd - Essence [L]": 30.0,
+  "Camion lourd - Diesel [L]": 28.0,
 };
 
-// MUST match emission_factors.label in DB
-const EF_LABEL_BY_MODE: Record<string, string> = {
-  Voiture: "Navettage - Voiture [L]",
-  Autobus: "Navettage - Autobus [L]",
-  "Marche ou vélo": "",
-};
-
-const DEFAULT_ROWS: Source33A1Row[] = [
+const DEFAULT_ROWS: Source34A1Row[] = [
   {
     methodology: "Données réelles",
     equipment: "",
@@ -108,10 +119,12 @@ const DEFAULT_ROWS: Source33A1Row[] = [
     site: "",
     product: "",
     reference: "",
+    event: "",
     transportMode: "",
-    oneWayDistanceKm: "",
-    workDaysPerYear: "",
-    employeesSameTrip: "",
+    consumptionLPer100Km: "",
+    distanceKm: "",
+    fuelKnownL: "",
+    identicalTrips: "",
   },
 ];
 
@@ -134,7 +147,7 @@ type Refs = {
   prpN2O: number;
 };
 
-function buildEmptyResult(): GesResult33A1 {
+function buildEmptyResult(): GesResult34A1 {
   return {
     distance_km: 0,
     fuel_qty_l: 0,
@@ -149,49 +162,54 @@ function buildEmptyResult(): GesResult33A1 {
   };
 }
 
-function computeResults(rws: Source33A1Row[], rf: Refs | null): GesResult33A1[] {
+function computeResults(rws: Source34A1Row[], rf: Refs | null): GesResult34A1[] {
   if (!rf) return [];
 
   return (rws || []).map((row) => {
     const mode = String(row.transportMode || "").trim();
-    const oneWayKm = toNum(row.oneWayDistanceKm, 0);
-    const days = toNum(row.workDaysPerYear, 0);
-    const employees = Math.max(1, toNum(row.employeesSameTrip, 1));
+    const dKm = toNum(row.distanceKm, 0);
+    const trips = Math.max(1, toNum(row.identicalTrips, 1));
 
-    if (!mode || oneWayKm === 0 || days === 0) return buildEmptyResult();
+    if (!mode || dKm === 0) return buildEmptyResult();
 
-    const distanceKm = oneWayKm * days * 2 * employees;
+    const distanceTotal = dKm * trips;
 
-    const lPerKm = DEFAULT_FUEL_L_PER_KM[mode] ?? 0;
-    const fuelL = distanceKm * lPerKm;
+    const fuelKnownPerTrip = toNum(row.fuelKnownL, 0);
+    const consUser = toNum(row.consumptionLPer100Km, 0);
+    const consDefault = DEFAULT_CONS_L_PER_100KM[mode] ?? 0;
+    const cons = consUser > 0 ? consUser : consDefault;
 
-    const efLabel = EF_LABEL_BY_MODE[mode] ?? "";
+    const fuelTotal =
+      fuelKnownPerTrip > 0
+        ? fuelKnownPerTrip * trips
+        : (cons / 100) * dKm * trips;
 
-    const gco2_per_unit = efLabel ? toNum(rf.gco2ByLabel[efLabel], 0) : 0;
-    const gch4_per_unit = efLabel ? toNum(rf.gch4ByLabel[efLabel], 0) : 0;
-    const gn2o_per_unit = efLabel ? toNum(rf.gn2oByLabel[efLabel], 0) : 0;
-    const kwh_per_unit = efLabel ? toNum(rf.kwhByLabel[efLabel], 0) : 0;
-    const gco2e_bio_per_unit = efLabel ? toNum(rf.gco2eBioByLabel[efLabel], 0) : 0;
+    // Pull EF by label=transportMode
+    const gco2_per_unit = toNum(rf.gco2ByLabel[mode], 0);
+    const gch4_per_unit = toNum(rf.gch4ByLabel[mode], 0);
+    const gn2o_per_unit = toNum(rf.gn2oByLabel[mode], 0);
+    const kwh_per_unit = toNum(rf.kwhByLabel[mode], 0);
+    const gco2e_bio_per_unit = toNum(rf.gco2eBioByLabel[mode], 0);
 
     const prpCO2 = toNum(rf.prpCO2, 1);
     const prpCH4 = toNum(rf.prpCH4, 0);
     const prpN2O = toNum(rf.prpN2O, 0);
 
-    const co2 = gco2_per_unit * fuelL * prpCO2;
-    const ch4 = gch4_per_unit * fuelL * prpCH4;
-    const n2o = gn2o_per_unit * fuelL * prpN2O;
+    const co2 = gco2_per_unit * fuelTotal * prpCO2;
+    const ch4 = gch4_per_unit * fuelTotal * prpCH4;
+    const n2o = gn2o_per_unit * fuelTotal * prpN2O;
 
     const total = co2 + ch4 + n2o;
     const totalT = total / 1e6;
 
-    const co2Bio = gco2e_bio_per_unit * fuelL;
+    const co2Bio = gco2e_bio_per_unit * fuelTotal;
     const co2BioT = co2Bio / 1e6;
 
-    const energy = kwh_per_unit * fuelL;
+    const energy = kwh_per_unit * fuelTotal;
 
     return {
-      distance_km: distanceKm,
-      fuel_qty_l: mode === "Marche ou vélo" ? 0 : fuelL,
+      distance_km: distanceTotal,
+      fuel_qty_l: fuelTotal,
       co2_gco2e: co2,
       ch4_gco2e: ch4,
       n2o_gco2e: n2o,
@@ -204,7 +222,7 @@ function computeResults(rws: Source33A1Row[], rf: Refs | null): GesResult33A1[] 
   });
 }
 
-/* ================== animations (same style) ================== */
+/* ================== animations ================== */
 
 const fadeInUp = keyframes`
   from { opacity: 0; transform: translateY(20px); }
@@ -221,24 +239,23 @@ const pulse = keyframes`
 
 /* ================== component ================== */
 
-export function Source33A1Form({
+export function Source34A1Form({
   rows: propRows,
   setRows: propSetRows,
   posteSourceId,
   userId: propUserId,
   gesResults: propGesResults,
   setGesResults: propSetGesResults,
-}: Source33A1FormProps) {
-  // ✅ same safety as you asked previously
-  const [localRows, setLocalRows] = useState<Source33A1Row[]>(DEFAULT_ROWS);
+}: Source34A1FormProps) {
+  const [localRows, setLocalRows] = useState<Source34A1Row[]>(DEFAULT_ROWS);
   const rows = propRows ?? localRows;
   const setRows = propSetRows ?? setLocalRows;
 
-  const [localGes, setLocalGes] = useState<GesResult33A1[]>([]);
+  const [localGes, setLocalGes] = useState<GesResult34A1[]>([]);
   const gesResults = propGesResults ?? localGes;
   const setGesResults = propSetGesResults ?? setLocalGes;
 
-  // FIGMA tokens (same palette as your “Figma design” component)
+  // FIGMA tokens
   const FIGMA = {
     bg: "#F5F6F5",
     green: "#344E41",
@@ -268,9 +285,19 @@ export function Source33A1Form({
   const [productOptions, setProductOptions] = useState<string[]>([]);
   const [referenceOptions, setReferenceOptions] = useState<string[]>([]);
 
+  // ✅ DB-driven transport options
+  const [transportOptions, setTransportOptions] = useState<string[]>([]);
+  const [transportMetaByLabel, setTransportMetaByLabel] = useState<
+    Record<string, { unit?: string; fuel?: string; usage?: string; category_code?: string }>
+  >({});
+
   // Prefill
-  const { loading: prefillLoading, error: prefillError, data: prefillData, results: prefillResults } =
-    usePrefillPosteSource((userId ?? "") as string, 3, "3.3A1", { rows: DEFAULT_ROWS });
+  const {
+    loading: prefillLoading,
+    error: prefillError,
+    data: prefillData,
+    results: prefillResults,
+  } = usePrefillPosteSource((userId ?? "") as string, 3, "3.4A1", { rows: DEFAULT_ROWS });
 
   const isPristine = useMemo(() => {
     if (!rows || rows.length === 0) return true;
@@ -285,14 +312,16 @@ export function Source33A1Form({
       !r.site &&
       !r.product &&
       !r.reference &&
+      !r.event &&
       !r.transportMode &&
-      !r.oneWayDistanceKm &&
-      !r.workDaysPerYear &&
-      !r.employeesSameTrip
+      !r.consumptionLPer100Km &&
+      !r.distanceKm &&
+      !r.fuelKnownL &&
+      !r.identicalTrips
     );
   }, [rows]);
 
-  /* ===== load refs ===== */
+  /* ===== load PRP + EF refs ===== */
   useEffect(() => {
     (async () => {
       try {
@@ -311,9 +340,12 @@ export function Source33A1Form({
         const prpCH4 = Number.isFinite(prpMap["CH4"]) ? prpMap["CH4"] : 0;
         const prpN2O = Number.isFinite(prpMap["N2O"]) ? prpMap["N2O"] : 0;
 
+        // Grab all EF columns we need for computing + some meta
         const { data: efRows, error: efErr } = await supabase
           .from("emission_factors")
-          .select("label, energy_kwh_per_unit, gco2_per_unit, gch4_per_unit, gn2o_per_unit, gco2e_biogenic_per_unit");
+          .select(
+            "label, category_code, usage, fuel, unit, energy_kwh_per_unit, gco2_per_unit, gch4_per_unit, gn2o_per_unit, gco2eq_biogenic_per_unit, gco2e_biogenic_per_unit"
+          );
         if (efErr) throw efErr;
 
         const gco2ByLabel: Record<string, number> = {};
@@ -321,20 +353,66 @@ export function Source33A1Form({
         const gn2oByLabel: Record<string, number> = {};
         const kwhByLabel: Record<string, number> = {};
         const gco2eBioByLabel: Record<string, number> = {};
+        const metaByLabel: Record<string, { unit?: string; fuel?: string; usage?: string; category_code?: string }> = {};
 
         (efRows ?? []).forEach((r: any) => {
           const key = String(r?.label ?? "").trim();
           if (!key) return;
+
+          metaByLabel[key] = {
+            unit: r?.unit ?? undefined,
+            fuel: r?.fuel ?? undefined,
+            usage: r?.usage ?? undefined,
+            category_code: r?.category_code ?? undefined,
+          };
+
           if (r?.gco2_per_unit != null) gco2ByLabel[key] = Number(r.gco2_per_unit);
           if (r?.gch4_per_unit != null) gch4ByLabel[key] = Number(r.gch4_per_unit);
           if (r?.gn2o_per_unit != null) gn2oByLabel[key] = Number(r.gn2o_per_unit);
           if (r?.energy_kwh_per_unit != null) kwhByLabel[key] = Number(r.energy_kwh_per_unit);
-          if (r?.gco2e_biogenic_per_unit != null) gco2eBioByLabel[key] = Number(r.gco2e_biogenic_per_unit);
+
+          // ✅ supports both possible column names (your DB screenshot may differ)
+          const bio =
+            r?.gco2eq_biogenic_per_unit ??
+            r?.gco2e_biogenic_per_unit ??
+            null;
+          if (bio != null) gco2eBioByLabel[key] = Number(bio);
         });
 
         setRefs({ gco2ByLabel, gch4ByLabel, gn2oByLabel, kwhByLabel, gco2eBioByLabel, prpCO2, prpCH4, prpN2O });
+        setTransportMetaByLabel(metaByLabel);
+
+        // ✅ Filter transport options to the relevant set:
+        // - category_code starts with "3.4" OR usage contains "visiteur" OR fuel unit is "L"
+        // We keep it permissive so it works even if category_code naming differs.
+        const labels = (efRows ?? [])
+          .map((r: any) => String(r?.label ?? "").trim())
+          .filter(Boolean);
+
+        const filtered = (efRows ?? [])
+          .filter((r: any) => {
+            const label = String(r?.label ?? "").toLowerCase();
+            const cat = String(r?.category_code ?? "").toLowerCase();
+            const usage = String(r?.usage ?? "").toLowerCase();
+            const unit = String(r?.unit ?? "").toLowerCase();
+            const fuel = String(r?.fuel ?? "").toLowerCase();
+
+            const looksLike34 = cat.includes("3.4") || usage.includes("visiteur") || usage.includes("visiteurs");
+            const isLiters = unit === "l" || unit === "[l]" || unit.includes("l");
+            const hasFuel = fuel.length > 0;
+
+            // Keep only rows that can be used as "per L" factor (recommended)
+            return looksLike34 || (isLiters && hasFuel) || label.includes("[l]");
+          })
+          .map((r: any) => String(r.label).trim())
+          .filter(Boolean);
+
+        const uniq = (arr: string[]) => Array.from(new Set(arr));
+        const finalOptions = uniq(filtered.length ? filtered : labels);
+
+        setTransportOptions(finalOptions.length ? finalOptions : FALLBACK_TRANSPORT_OPTIONS);
       } catch (e) {
-        console.error("3.3A1 refs load error:", e);
+        console.error("3.4A1 refs load error:", e);
         setRefs({
           gco2ByLabel: {},
           gch4ByLabel: {},
@@ -345,6 +423,8 @@ export function Source33A1Form({
           prpCH4: 0,
           prpN2O: 0,
         });
+        setTransportOptions(FALLBACK_TRANSPORT_OPTIONS);
+        setTransportMetaByLabel({});
       }
     })();
   }, []);
@@ -406,10 +486,12 @@ export function Source33A1Form({
                 site: r.site ?? "",
                 product: r.product ?? "",
                 reference: r.reference ?? "",
+                event: r.event ?? "",
                 transportMode: r.transportMode ?? "",
-                oneWayDistanceKm: String(r.oneWayDistanceKm ?? ""),
-                workDaysPerYear: String(r.workDaysPerYear ?? ""),
-                employeesSameTrip: String(r.employeesSameTrip ?? ""),
+                consumptionLPer100Km: String(r.consumptionLPer100Km ?? ""),
+                distanceKm: String(r.distanceKm ?? ""),
+                fuelKnownL: String(r.fuelKnownL ?? ""),
+                identicalTrips: String(r.identicalTrips ?? ""),
               }))
             );
           } else if (!rows?.length) {
@@ -417,7 +499,7 @@ export function Source33A1Form({
           }
 
           if (Array.isArray(poste.results)) {
-            setGesResults(poste.results as GesResult33A1[]);
+            setGesResults(poste.results as GesResult34A1[]);
           }
         } else if (!rows?.length) {
           setRows(DEFAULT_ROWS);
@@ -445,7 +527,7 @@ export function Source33A1Form({
 
     if (prefillResults) {
       const normalized = Array.isArray(prefillResults) ? prefillResults : [prefillResults];
-      setGesResults(normalized as GesResult33A1[]);
+      setGesResults(normalized as GesResult34A1[]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillData, prefillResults, prefillLoading, loading, isPristine]);
@@ -491,9 +573,9 @@ export function Source33A1Form({
   }, [userId]);
 
   /* ===== validation ===== */
-  const validateData = (rws: Source33A1Row[]) =>
+  const validateData = (rws: Source34A1Row[]) =>
     rws.length > 0 &&
-    rws.every((row) => row.methodology && row.site && row.transportMode && row.oneWayDistanceKm !== "" && row.workDaysPerYear !== "");
+    rws.every((row) => row.methodology && row.site && row.transportMode && row.distanceKm !== "");
 
   /* ===== live compute ===== */
   useEffect(() => {
@@ -506,7 +588,7 @@ export function Source33A1Form({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedJSONRef = useRef<string>("");
 
-  const makeSanitizedRows = (rws: Source33A1Row[]) =>
+  const makeSanitizedRows = (rws: Source34A1Row[]) =>
     rws.map((row) => ({
       methodology: row.methodology,
       equipment: row.equipment,
@@ -516,10 +598,13 @@ export function Source33A1Form({
       site: row.site,
       product: row.product,
       reference: row.reference,
+
+      event: row.event,
       transportMode: row.transportMode,
-      oneWayDistanceKm: toNum(row.oneWayDistanceKm, 0),
-      workDaysPerYear: toNum(row.workDaysPerYear, 0),
-      employeesSameTrip: Math.max(1, toNum(row.employeesSameTrip, 1)),
+      consumptionLPer100Km: toNum(row.consumptionLPer100Km, 0),
+      distanceKm: toNum(row.distanceKm, 0),
+      fuelKnownL: toNum(row.fuelKnownL, 0),
+      identicalTrips: Math.max(1, toNum(row.identicalTrips, 1)),
     }));
 
   const saveDraft = async () => {
@@ -536,7 +621,7 @@ export function Source33A1Form({
       user_id: userId,
       poste_source_id: posteSourceId,
       poste_num: 3,
-      source_code: "3.3A1",
+      source_code: "3.4A1",
       data: { rows: makeSanitizedRows(rows) },
       results: computeResults(rows, refs),
     };
@@ -593,13 +678,22 @@ export function Source33A1Form({
       return;
     }
 
+    // warn if EF missing
+    const missing = rows
+      .map((r) => String(r.transportMode || "").trim())
+      .filter(Boolean)
+      .filter((label) => !refs.gco2ByLabel[label] && !refs.gch4ByLabel[label] && !refs.gn2oByLabel[label]);
+    if (missing.length) {
+      console.warn("3.4A1: labels not found in emission_factors (will compute 0):", Array.from(new Set(missing)));
+    }
+
     setSubmitting(true);
 
     const payload = {
       user_id: userId,
       poste_source_id: posteSourceId,
       poste_num: 3,
-      source_code: "3.3A1",
+      source_code: "3.4A1",
       data: { rows: makeSanitizedRows(rows) },
       results: computeResults(rows, refs),
     };
@@ -616,7 +710,7 @@ export function Source33A1Form({
       } else {
         setGesResults(payload.results);
         lastSavedJSONRef.current = JSON.stringify(rows);
-        alert("Données 3.3A1 calculées et sauvegardées avec succès!");
+        alert("Données 3.4A1 calculées et sauvegardées avec succès!");
       }
     } catch {
       alert("Erreur inattendue lors de la sauvegarde en base.");
@@ -638,10 +732,12 @@ export function Source33A1Form({
         site: "",
         product: "",
         reference: "",
+        event: "",
         transportMode: "",
-        oneWayDistanceKm: "",
-        workDaysPerYear: "",
-        employeesSameTrip: "",
+        consumptionLPer100Km: "",
+        distanceKm: "",
+        fuelKnownL: "",
+        identicalTrips: "",
       },
     ]);
 
@@ -654,7 +750,7 @@ export function Source33A1Form({
 
   const removeRow = (idx: number) => setRows((prev) => prev.filter((_, i) => i !== idx));
 
-  const updateRowField = (idx: number, key: keyof Source33A1Row, value: string) => {
+  const updateRowField = (idx: number, key: keyof Source34A1Row, value: string) => {
     setRows((prev) => {
       const copy = [...prev];
       copy[idx] = { ...copy[idx], [key]: value };
@@ -664,7 +760,8 @@ export function Source33A1Form({
 
   /* ===== results display ===== */
   const totals = useMemo(() => {
-    const sum = (k: keyof GesResult33A1) => (gesResults || []).reduce((acc, r) => acc + toNum((r as any)?.[k], 0), 0);
+    const sum = (k: keyof GesResult34A1) =>
+      (gesResults || []).reduce((acc, r) => acc + toNum((r as any)?.[k], 0), 0);
     return {
       distance_km: sum("distance_km"),
       fuel_qty_l: sum("fuel_qty_l"),
@@ -678,7 +775,8 @@ export function Source33A1Form({
     };
   }, [gesResults]);
 
-  const fmt = (n: any, max = 3) => Number(toNum(n, 0)).toLocaleString("fr-CA", { maximumFractionDigits: max });
+  const fmt = (n: any, max = 3) =>
+    Number(toNum(n, 0)).toLocaleString("fr-CA", { maximumFractionDigits: max });
 
   if (loading || prefillLoading) {
     return (
@@ -718,12 +816,12 @@ export function Source33A1Form({
                 textTransform="uppercase"
                 letterSpacing="wide"
               >
-                Poste 3 · Source 3.3A1
+                Poste 3 · Source 3.4A1
               </Badge>
             </HStack>
 
             <Heading as="h2" fontFamily="Inter" fontWeight={700} fontSize={{ base: "xl", md: "2xl" }} color={FIGMA.text}>
-              Navettage des employés
+              Déplacements des visiteurs en voiture
             </Heading>
 
             <HStack spacing={3} flexWrap="wrap">
@@ -798,7 +896,7 @@ export function Source33A1Form({
             >
               <Grid
                 w="full"
-                templateColumns="1.1fr 1.1fr 1.3fr 1.0fr 0.8fr 1.1fr 1.1fr 1.1fr 1.2fr 1.2fr 1.0fr 1.0fr 44px"
+                templateColumns="1.0fr 1.0fr 1.2fr 1.0fr 0.7fr 1.0fr 1.0fr 1.0fr 1.1fr 1.2fr 1.0fr 1.0fr 1.0fr 0.9fr 44px"
                 columnGap={6}
                 alignItems="center"
               >
@@ -811,10 +909,12 @@ export function Source33A1Form({
                   { label: "Site", icon: FiMapPin },
                   { label: "Produit", icon: FiFileText },
                   { label: "Réf.", icon: FiFileText },
-                  { label: "Transport", icon: FiTruck },
-                  { label: "Distance (km)", icon: FiTruck },
-                  { label: "Jours/an", icon: FiCalendar },
-                  { label: "Employés", icon: FiUsers },
+                  { label: "Événement", icon: FiUsers },
+                  { label: "Mode transport", icon: FiTruck },
+                  { label: "Conso [L/100]", icon: FiTruck },
+                  { label: "Distance [km]", icon: FiTruck },
+                  { label: "Carburant [L]", icon: FiTruck },
+                  { label: "# déplacements", icon: FiUsers },
                 ].map(({ label, icon }) => (
                   <HStack key={label} justify="center" spacing={2}>
                     <Icon as={icon} boxSize={4} />
@@ -829,130 +929,172 @@ export function Source33A1Form({
 
             {/* Rows */}
             <Stack spacing={4}>
-              {(rows || []).map((row, idx) => (
-                <Box
-                  key={idx}
-                  bg={FIGMA.bg}
-                  rounded="xl"
-                  p={4}
-                  border="2px solid"
-                  borderColor={FIGMA.border}
-                  transition="all 0.3s"
-                  _hover={{ borderColor: FIGMA.green }}
-                  animation={`${fadeInUp} 0.35s ease-out ${idx * 0.05}s both`}
-                >
-                  <Grid
-                    templateColumns={{
-                      base: "1fr",
-                      lg: "1.1fr 1.1fr 1.3fr 1.0fr 0.8fr 1.1fr 1.1fr 1.1fr 1.2fr 1.2fr 1.0fr 1.0fr 44px",
-                    }}
-                    columnGap={4}
-                    rowGap={3}
-                    alignItems="center"
+              {(rows || []).map((row, idx) => {
+                const meta = transportMetaByLabel[String(row.transportMode || "").trim()] || {};
+                const metaLine =
+                  row.transportMode && (meta.unit || meta.fuel || meta.usage)
+                    ? [meta.usage, meta.fuel, meta.unit].filter(Boolean).join(" · ")
+                    : "";
+
+                return (
+                  <Box
+                    key={idx}
+                    bg={FIGMA.bg}
+                    rounded="xl"
+                    p={4}
+                    border="2px solid"
+                    borderColor={FIGMA.border}
+                    transition="all 0.3s"
+                    _hover={{ borderColor: FIGMA.green }}
+                    animation={`${fadeInUp} 0.35s ease-out ${idx * 0.05}s both`}
                   >
-                    <GridItem>
-                      <FigmaSelect
-                        FIGMA={FIGMA}
-                        value={row.methodology}
-                        onChange={(v) => updateRowField(idx, "methodology", v)}
-                        placeholder="(Sélectionner)"
-                        options={METHODOLOGY_OPTIONS}
-                      />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaInput FIGMA={FIGMA} value={row.equipment} onChange={(v) => updateRowField(idx, "equipment", v)} placeholder="(Facultatif)" />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaInput FIGMA={FIGMA} value={row.description} onChange={(v) => updateRowField(idx, "description", v)} placeholder="(Facultatif)" />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaInput FIGMA={FIGMA} type="date" value={row.date} onChange={(v) => updateRowField(idx, "date", v)} />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaInput FIGMA={FIGMA} value={row.month} onChange={(v) => updateRowField(idx, "month", v)} placeholder="01..12" center />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaSelect
-                        FIGMA={FIGMA}
-                        value={row.site}
-                        onChange={(v) => updateRowField(idx, "site", v)}
-                        placeholder={siteOptions.length ? "Sélectionner" : "Site"}
-                        options={siteOptions.length ? siteOptions : []}
-                      />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaSelect
-                        FIGMA={FIGMA}
-                        value={row.product}
-                        onChange={(v) => updateRowField(idx, "product", v)}
-                        placeholder={productOptions.length ? "Sélectionner" : "Produit"}
-                        options={productOptions.length ? productOptions : []}
-                      />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaSelect
-                        FIGMA={FIGMA}
-                        value={row.reference}
-                        onChange={(v) => updateRowField(idx, "reference", v)}
-                        placeholder={referenceOptions.length ? "Sélectionner" : "Aucune"}
-                        options={referenceOptions.length ? referenceOptions : []}
-                      />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaSelect
-                        FIGMA={FIGMA}
-                        value={row.transportMode}
-                        onChange={(v) => updateRowField(idx, "transportMode", v)}
-                        placeholder="(Sélectionner)"
-                        options={TRANSPORT_OPTIONS}
-                      />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaInput FIGMA={FIGMA} type="number" value={row.oneWayDistanceKm} onChange={(v) => updateRowField(idx, "oneWayDistanceKm", v)} placeholder="0" center />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaInput FIGMA={FIGMA} type="number" value={row.workDaysPerYear} onChange={(v) => updateRowField(idx, "workDaysPerYear", v)} placeholder="0" center />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaInput FIGMA={FIGMA} type="number" value={row.employeesSameTrip} onChange={(v) => updateRowField(idx, "employeesSameTrip", v)} placeholder="(fac.) 1" center />
-                    </GridItem>
-
-                    <GridItem>
-                      <HStack justify="flex-end" spacing={1}>
-                        <IconButton
-                          aria-label="Dupliquer"
-                          icon={<CopyIcon />}
-                          variant="ghost"
-                          color={FIGMA.muted}
-                          size="sm"
-                          _hover={{ bg: FIGMA.greenSoft, color: FIGMA.green }}
-                          onClick={() => duplicateRow(idx)}
+                    <Grid
+                      templateColumns={{
+                        base: "1fr",
+                        lg: "1.0fr 1.0fr 1.2fr 1.0fr 0.7fr 1.0fr 1.0fr 1.0fr 1.1fr 1.2fr 1.0fr 1.0fr 1.0fr 0.9fr 44px",
+                      }}
+                      columnGap={4}
+                      rowGap={3}
+                      alignItems="center"
+                    >
+                      <GridItem>
+                        <FigmaSelect
+                          FIGMA={FIGMA}
+                          value={row.methodology}
+                          onChange={(v) => updateRowField(idx, "methodology", v)}
+                          placeholder="(Sélectionner)"
+                          options={METHODOLOGY_OPTIONS}
                         />
-                        <IconButton
-                          aria-label="Supprimer"
-                          icon={<DeleteIcon />}
-                          variant="ghost"
-                          color={FIGMA.muted}
-                          size="sm"
-                          _hover={{ bg: "red.50", color: "red.500" }}
-                          onClick={() => removeRow(idx)}
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaInput FIGMA={FIGMA} value={row.equipment} onChange={(v) => updateRowField(idx, "equipment", v)} placeholder="(Facultatif)" />
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaInput FIGMA={FIGMA} value={row.description} onChange={(v) => updateRowField(idx, "description", v)} placeholder="(Facultatif)" />
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaInput FIGMA={FIGMA} type="date" value={row.date} onChange={(v) => updateRowField(idx, "date", v)} />
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaInput FIGMA={FIGMA} value={row.month} onChange={(v) => updateRowField(idx, "month", v)} placeholder="01..12" center />
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaSelect
+                          FIGMA={FIGMA}
+                          value={row.site}
+                          onChange={(v) => updateRowField(idx, "site", v)}
+                          placeholder={siteOptions.length ? "Sélectionner" : "Site"}
+                          options={siteOptions.length ? siteOptions : []}
                         />
-                      </HStack>
-                    </GridItem>
-                  </Grid>
-                </Box>
-              ))}
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaSelect
+                          FIGMA={FIGMA}
+                          value={row.product}
+                          onChange={(v) => updateRowField(idx, "product", v)}
+                          placeholder={productOptions.length ? "Sélectionner" : "Produit"}
+                          options={productOptions.length ? productOptions : []}
+                        />
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaSelect
+                          FIGMA={FIGMA}
+                          value={row.reference}
+                          onChange={(v) => updateRowField(idx, "reference", v)}
+                          placeholder={referenceOptions.length ? "Sélectionner" : "Aucune"}
+                          options={referenceOptions.length ? referenceOptions : []}
+                        />
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaInput FIGMA={FIGMA} value={row.event} onChange={(v) => updateRowField(idx, "event", v)} placeholder="(Facultatif)" />
+                        {metaLine ? (
+                          <Text mt={1} fontSize="xs" color={FIGMA.muted} fontFamily="Montserrat">
+                            {metaLine}
+                          </Text>
+                        ) : null}
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaSelect
+                          FIGMA={FIGMA}
+                          value={row.transportMode}
+                          onChange={(v) => updateRowField(idx, "transportMode", v)}
+                          placeholder="(Sélectionner)"
+                          options={transportOptions.length ? transportOptions : FALLBACK_TRANSPORT_OPTIONS}
+                        />
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaInput
+                          FIGMA={FIGMA}
+                          type="number"
+                          value={row.consumptionLPer100Km}
+                          onChange={(v) => updateRowField(idx, "consumptionLPer100Km", v)}
+                          placeholder="(auto)"
+                          center
+                        />
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaInput FIGMA={FIGMA} type="number" value={row.distanceKm} onChange={(v) => updateRowField(idx, "distanceKm", v)} placeholder="0" center />
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaInput
+                          FIGMA={FIGMA}
+                          type="number"
+                          value={row.fuelKnownL}
+                          onChange={(v) => updateRowField(idx, "fuelKnownL", v)}
+                          placeholder="(fac.)"
+                          center
+                        />
+                      </GridItem>
+
+                      <GridItem>
+                        <FigmaInput
+                          FIGMA={FIGMA}
+                          type="number"
+                          value={row.identicalTrips}
+                          onChange={(v) => updateRowField(idx, "identicalTrips", v)}
+                          placeholder="(fac.) 1"
+                          center
+                        />
+                      </GridItem>
+
+                      <GridItem>
+                        <HStack justify="flex-end" spacing={1}>
+                          <IconButton
+                            aria-label="Dupliquer"
+                            icon={<CopyIcon />}
+                            variant="ghost"
+                            color={FIGMA.muted}
+                            size="sm"
+                            _hover={{ bg: FIGMA.greenSoft, color: FIGMA.green }}
+                            onClick={() => duplicateRow(idx)}
+                          />
+                          <IconButton
+                            aria-label="Supprimer"
+                            icon={<DeleteIcon />}
+                            variant="ghost"
+                            color={FIGMA.muted}
+                            size="sm"
+                            _hover={{ bg: "red.50", color: "red.500" }}
+                            onClick={() => removeRow(idx)}
+                          />
+                        </HStack>
+                      </GridItem>
+                    </Grid>
+                  </Box>
+                );
+              })}
             </Stack>
 
             {/* Actions */}
@@ -1034,7 +1176,7 @@ export function Source33A1Form({
   );
 }
 
-/* ================== UI helpers (same style) ================== */
+/* ================== UI helpers ================== */
 
 function FigmaInput({
   FIGMA,
@@ -1138,6 +1280,5 @@ function ResultCard({ FIGMA, label, value }: { FIGMA: any; label: string; value:
   );
 }
 
-// ✅ default export so your import works: `import Source33A1Form from "..."`
-export default Source33A1Form;
-
+// ✅ default export so your import works
+export default Source34A1Form;

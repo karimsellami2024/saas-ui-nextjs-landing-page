@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
-  Heading,
   Grid,
   GridItem,
   Input,
@@ -13,13 +12,20 @@ import {
   Text,
   useToast,
   VStack,
-  useColorModeValue,
+  Badge,
+  Flex,
   Icon,
 } from "@chakra-ui/react";
-import { RepeatIcon } from "@chakra-ui/icons";
-import { Copy, Trash2, Lock } from "lucide-react";
+import { keyframes } from "@emotion/react";
+import { RepeatIcon, AddIcon, DeleteIcon, CopyIcon, ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
+import { Lock, Calendar, Truck, MapPin, Hash } from "lucide-react";
 import { supabase } from "../../../lib/supabaseClient";
 import { usePrefillPosteSource } from "components/postes/HookForGetDataSource";
+
+/** =======================
+ * Poste 2 · Source 2B1
+ * SAME DESIGN (cards + header bar + pill inputs + results cards)
+ * ======================= */
 
 type B1Row = {
   vehicle: string;
@@ -27,10 +33,10 @@ type B1Row = {
   make: string;
   model: string;
   trans: string;
-  distance: string;  // km
-  type: string;      // lookup key (fuel/vehicle type)
-  cons: string;      // L/100km (or blank for EV)
-  estimate: string;  // either Estimation [L] OR kWh for EV
+  distance: string; // km
+  type: string; // lookup key (fuel/vehicle type)
+  cons: string; // L/100km (or blank for EV)
+  estimate: string; // either Estimation [L] OR kWh for EV
   reference: string;
   ac: string;
 };
@@ -52,8 +58,6 @@ type SourceB1FormProps = {
   userId: string;
   gesResults?: GesResult[];
   setGesResults?: (results: GesResult[]) => void;
-  highlight?: string;
-  tableBg?: string;
 };
 
 type FleetVehicle = {
@@ -68,7 +72,8 @@ type FleetVehicle = {
   clim?: string;
 };
 
-// ---------- helpers ----------
+/* ---------------- helpers ---------------- */
+
 const toNum = (x: any, fallback = 0) => {
   if (x === "" || x == null) return fallback;
   const n =
@@ -88,10 +93,9 @@ const norm = (s: any) =>
 
 const looksElectric = (typeStr: string) => {
   const t = norm(typeStr);
-  return t.includes("electrique") || t.includes("[kwh]") || t.includes("kwh");
+  return t.includes("electrique") || t.includes("[kwh]") || t.includes("kwh") || t.includes("ev");
 };
 
-// ---------- refs ----------
 type MobileEF = {
   type_vehicule: string;
   carburant: string;
@@ -104,10 +108,10 @@ type MobileEF = {
 };
 
 type ElecEF = {
-  gco2_per_unit: number; // grams CO2 per kWh (or per unit)
+  gco2_per_unit: number;
   gch4_per_unit: number;
   gn2o_per_unit: number;
-  energy_kwh_per_unit: number; // should be 1 for kWh-based rows
+  energy_kwh_per_unit: number;
 };
 
 type Refs = {
@@ -116,10 +120,32 @@ type Refs = {
   prpCO2: number;
   prpCH4: number;
   prpN2O: number;
-
-  // electricity fallback (no province key in UI right now)
   elec: ElecEF | null;
 };
+
+/* ---------------- design tokens ---------------- */
+
+const fadeInUp = keyframes`
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+`;
+
+const FIGMA = {
+  bg: "#F5F6F5",
+  green: "#344E41",
+  greenLight: "#588157",
+  greenSoft: "#DDE5E0",
+  border: "#E4E4E4",
+  text: "#404040",
+  muted: "#8F8F8F",
+  inputShadow: "0px 1px 6px 2px rgba(0,0,0,0.05)",
+  buttonShadow: "0px 1px 6px 2px rgba(0,0,0,0.25)",
+  cardShadow: "0 4px 16px rgba(0,0,0,0.08)",
+  hoverShadow: "0 8px 24px rgba(0,0,0,0.12)",
+};
+
+const fmt = (n: any, max = 3) =>
+  Number(toNum(n, 0)).toLocaleString("fr-CA", { maximumFractionDigits: max });
 
 export function SourceB1Form({
   b1Rows = [],
@@ -129,23 +155,16 @@ export function SourceB1Form({
   userId,
   gesResults = [],
   setGesResults,
-  highlight = "#245a7c",
-  tableBg = "#f3f6ef",
 }: SourceB1FormProps) {
   const toast = useToast();
+
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
-  const [loadingFleet, setLoadingFleet] = useState<boolean>(true);
-  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [loadingFleet, setLoadingFleet] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [refs, setRefs] = useState<Refs | null>(null);
+  const [collapsed, setCollapsed] = useState(false);
 
-  const inputBorder = useColorModeValue("#E8ECE7", "#2f3a36");
-  const faintLine = useColorModeValue(
-    "rgba(0,0,0,0.12)",
-    "rgba(255,255,255,0.12)"
-  );
-  const headerFg = "white";
-
-  // ===== Prefill (poste 2, source 2B1) =====
+  // Prefill
   const {
     loading: prefillLoading,
     error: prefillError,
@@ -164,11 +183,10 @@ export function SourceB1Form({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillData, prefillResults]);
 
-  // ===== Load refs (PRP + equipements_mobiles + electricity EF fallback) =====
+  // Load refs
   useEffect(() => {
     (async () => {
       try {
-        // PRP
         const { data: gesRows, error: gesErr } = await supabase
           .from("gaz_effet_serre")
           .select("formule_chimique, prp_100ans");
@@ -187,7 +205,6 @@ export function SourceB1Form({
         const prpCH4 = Number.isFinite(prpMap["CH4"]) ? prpMap["CH4"] : 0;
         const prpN2O = Number.isFinite(prpMap["N2O"]) ? prpMap["N2O"] : 0;
 
-        // mobile equipment factors
         const { data: mobRows, error: mobErr } = await supabase
           .from("equipements_mobiles")
           .select(
@@ -222,8 +239,6 @@ export function SourceB1Form({
           }
         });
 
-        // electricity EF fallback from emission_factors
-        // We pick the first reasonable row where unit = 'kWh' and label contains 'électricité'
         const { data: efRows, error: efErr } = await supabase
           .from("emission_factors")
           .select("label,unit,gco2_per_unit,gch4_per_unit,gn2o_per_unit,energy_kwh_per_unit")
@@ -256,7 +271,7 @@ export function SourceB1Form({
     })();
   }, []);
 
-  // ===== Fleet loading =====
+  // Fleet load
   const normalizeFleet = (arr: any[]): FleetVehicle[] => {
     if (!Array.isArray(arr)) return [];
     return arr.map((v: any) => ({
@@ -275,10 +290,12 @@ export function SourceB1Form({
   const loadFleet = async () => {
     try {
       setLoadingFleet(true);
+
       const { data: userRes, error: userErr } = await supabase.auth.getUser();
       if (userErr) throw userErr;
-      const user = userRes?.user;
-      if (!user?.id) {
+
+      const uid = userRes?.user?.id;
+      if (!uid) {
         toast({ status: "warning", title: "Utilisateur non connecté." });
         return;
       }
@@ -286,10 +303,12 @@ export function SourceB1Form({
       const { data: profile, error: profErr } = await supabase
         .from("user_profiles")
         .select("company_id")
-        .eq("id", user.id)
+        .eq("id", uid)
         .single();
       if (profErr) throw profErr;
-      if (!profile?.company_id) {
+
+      const companyId = profile?.company_id;
+      if (!companyId) {
         toast({ status: "error", title: "Impossible de trouver la compagnie de l'utilisateur." });
         return;
       }
@@ -297,7 +316,7 @@ export function SourceB1Form({
       const { data: company, error: compErr } = await supabase
         .from("companies")
         .select("vehicle_fleet")
-        .eq("id", profile.company_id)
+        .eq("id", companyId)
         .single();
       if (compErr) throw compErr;
 
@@ -320,7 +339,7 @@ export function SourceB1Form({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ===== Row helpers =====
+  // Row ops
   const updateRow = (idx: number, patch: Partial<B1Row>) => {
     setB1Rows(b1Rows.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
   };
@@ -333,14 +352,12 @@ export function SourceB1Form({
     setB1Rows(next);
   };
 
-  const removeRow = (idx: number) => {
-    const next = b1Rows.filter((_, i) => i !== idx);
-    setB1Rows(next);
-  };
+  const removeRow = (idx: number) => setB1Rows(b1Rows.filter((_, i) => i !== idx));
 
   const onSelectVehicle = (rowIdx: number, detailsValue: string) => {
     const v = fleet.find((fv) => (fv.details ?? "") === detailsValue);
     const current = b1Rows[rowIdx] || ({} as B1Row);
+
     updateRow(rowIdx, {
       vehicle: detailsValue,
       year: v?.annee ?? current.year ?? "",
@@ -356,11 +373,7 @@ export function SourceB1Form({
     });
   };
 
-  // ===== Excel replica compute =====
-  // - W: fuel litres = estimate OR (distance * cons / 100)
-  // - M: fuel key = row.type
-  // - AA: electricity kWh (only for EV) = estimate (treated as kWh) OR 0
-  // - energy = kWh_from_fuel + AA
+  // Compute
   const computeResults = (rows: B1Row[], rf: Refs | null): GesResult[] => {
     if (!rf) return [];
 
@@ -368,16 +381,11 @@ export function SourceB1Form({
       const keyRaw = String(r.type ?? "").trim();
       const isEV = looksElectric(keyRaw);
 
-      // fuel quantity in L
       const est = toNum(r.estimate, 0);
       const dist = toNum(r.distance, 0);
       const cons = toNum(r.cons, 0);
 
-      const W_fuel = isEV
-        ? 0
-        : (est > 0 ? est : (dist > 0 && cons > 0 ? (dist * cons) / 100 : 0));
-
-      // electricity kWh
+      const W_fuel = isEV ? 0 : est > 0 ? est : dist > 0 && cons > 0 ? (dist * cons) / 100 : 0;
       const AA_kwh = isEV ? (est > 0 ? est : 0) : 0;
 
       const k = norm(keyRaw);
@@ -385,36 +393,41 @@ export function SourceB1Form({
         rf.byTypeVehicule[k] ||
         rf.byCarburant[k] ||
         (() => {
-          const tvKey = Object.keys(rf.byTypeVehicule).find((kk) => kk === k || kk.includes(k) || k.includes(kk));
+          const tvKey = Object.keys(rf.byTypeVehicule).find(
+            (kk) => kk === k || kk.includes(k) || k.includes(kk)
+          );
           if (tvKey) return rf.byTypeVehicule[tvKey];
-          const cKey = Object.keys(rf.byCarburant).find((kk) => kk === k || kk.includes(k) || k.includes(kk));
+          const cKey = Object.keys(rf.byCarburant).find(
+            (kk) => kk === k || kk.includes(k) || k.includes(kk)
+          );
           return cKey ? rf.byCarburant[cKey] : undefined;
         })();
 
-      // Part 1: fuel emissions (SIERREUR(VLOOKUP(...) * W * PRP ; ) )
-      let co2_fuel = 0, ch4_fuel = 0, n2o_fuel = 0, energy_fuel_kwh = 0;
+      let co2_fuel = 0,
+        ch4_fuel = 0,
+        n2o_fuel = 0,
+        energy_fuel_kwh = 0;
 
       if (ef && W_fuel > 0) {
-        const hasGas = (ef.co2_g_unite ?? 0) !== 0 || (ef.ch4_g_unite ?? 0) !== 0 || (ef.n2o_g_unite ?? 0) !== 0;
+        const hasGas =
+          (ef.co2_g_unite ?? 0) !== 0 ||
+          (ef.ch4_g_unite ?? 0) !== 0 ||
+          (ef.n2o_g_unite ?? 0) !== 0;
 
         if (hasGas) {
           co2_fuel = ef.co2_g_unite * W_fuel * rf.prpCO2;
           ch4_fuel = ef.ch4_g_unite * W_fuel * rf.prpCH4;
           n2o_fuel = ef.n2o_g_unite * W_fuel * rf.prpN2O;
         } else {
-          // fallback to co2eq if gas breakdown not available
           co2_fuel = ef.co2eq_g_unite * W_fuel;
-          ch4_fuel = 0;
-          n2o_fuel = 0;
         }
-
         energy_fuel_kwh = ef.conversion_kwh_unite * W_fuel;
       }
 
-      // Part 2: electricity add-on when EV (your excel adds a second lookup)
-      let co2_elec = 0, ch4_elec = 0, n2o_elec = 0;
+      let co2_elec = 0,
+        ch4_elec = 0,
+        n2o_elec = 0;
       if (AA_kwh > 0 && rf.elec) {
-        // emission_factors expected as g GAS per kWh -> multiply by PRP
         co2_elec = rf.elec.gco2_per_unit * AA_kwh * rf.prpCO2;
         ch4_elec = rf.elec.gch4_per_unit * AA_kwh * rf.prpCH4;
         n2o_elec = rf.elec.gn2o_per_unit * AA_kwh * rf.prpN2O;
@@ -427,48 +440,57 @@ export function SourceB1Form({
       const total_g = co2 + ch4 + n2o;
       const total_t = total_g / 1e6;
 
-      const energy_total_kwh = energy_fuel_kwh + AA_kwh;
-
       return {
         total_co2_gco2e: co2,
         total_ges_ch4_gco2e: ch4,
         total_ges_n2o_gco2e: n2o,
         total_ges_gco2e: total_g,
         total_ges_tco2e: total_t,
-        total_energie_kwh: energy_total_kwh,
+        total_energie_kwh: energy_fuel_kwh + AA_kwh,
       };
     });
   };
 
-  // recompute live
   const computed = useMemo(() => computeResults(b1Rows, refs), [b1Rows, refs]);
+
   useEffect(() => {
     setGesResults?.(computed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [computed]);
 
-  // Validation: estimate OR (distance & cons)
   const validateRows = (rows: B1Row[]) => {
     if (!rows.length) return false;
     return rows.every((r) => {
       const hasEstimate = String(r.estimate ?? "").trim() !== "";
-      const hasDistCons = String(r.distance ?? "").trim() !== "" && String(r.cons ?? "").trim() !== "";
+      const hasDistCons =
+        String(r.distance ?? "").trim() !== "" && String(r.cons ?? "").trim() !== "";
       return hasEstimate || hasDistCons;
     });
   };
 
-  // Submit (compute + save, no Cloud Run)
   const handle2B1Submit = async () => {
     if (!posteSourceId || !userId) {
-      toast({ status: "error", title: "Champs requis manquants", description: "posteSourceId ou userId" });
+      toast({
+        status: "error",
+        title: "Champs requis manquants",
+        description: "posteSourceId ou userId",
+      });
       return;
     }
     if (!validateRows(b1Rows)) {
-      toast({ status: "warning", title: "Validation", description: "Chaque ligne doit avoir une estimation OU (distance et conso)." });
+      toast({
+        status: "warning",
+        title: "Validation",
+        description: "Chaque ligne doit avoir une estimation OU (distance et conso).",
+      });
       return;
     }
     if (!refs) {
-      toast({ status: "error", title: "Références non chargées", description: "equipements_mobiles / PRP" });
+      toast({
+        status: "error",
+        title: "Références non chargées",
+        description: "equipements_mobiles / PRP",
+      });
       return;
     }
 
@@ -491,144 +513,461 @@ export function SourceB1Form({
       });
       const dbResult = await dbResponse.json();
       if (!dbResponse.ok) {
-        toast({ status: "error", title: "Erreur base de données", description: dbResult.error || "Sauvegarde échouée." });
+        toast({
+          status: "error",
+          title: "Erreur base de données",
+          description: dbResult.error || "Sauvegarde échouée.",
+        });
       } else {
         setGesResults?.(computed);
         toast({ status: "success", title: "2B1 calculé et sauvegardé" });
       }
     } catch {
-      toast({ status: "error", title: "Erreur inattendue", description: "Échec lors de la sauvegarde." });
+      toast({
+        status: "error",
+        title: "Erreur inattendue",
+        description: "Échec lors de la sauvegarde.",
+      });
     }
 
     setSubmitting(false);
   };
 
+  // Totals recap
+  const totals = useMemo(() => {
+    const sum = (k: keyof GesResult) =>
+      (computed || []).reduce((acc, r) => acc + toNum((r as any)?.[k], 0), 0);
+
+    return {
+      total_co2_gco2e: sum("total_co2_gco2e"),
+      total_ges_ch4_gco2e: sum("total_ges_ch4_gco2e"),
+      total_ges_n2o_gco2e: sum("total_ges_n2o_gco2e"),
+      total_ges_gco2e: sum("total_ges_gco2e"),
+      total_ges_tco2e: sum("total_ges_tco2e"),
+      total_energie_kwh: sum("total_energie_kwh"),
+    };
+  }, [computed]);
+
   return (
-    <VStack align="stretch" spacing={4}>
-      <HStack justify="space-between" align="flex-start">
-        <Heading as="h3" size="md" color={highlight} pb={2} borderBottom="1px solid" borderColor={`${highlight}30`}>
-          Source B1 – Véhicules (Distance parcourue, Données Canadiennes)
-        </Heading>
-
-        <HStack spacing={3} align="center">
-          {(prefillLoading || loadingFleet) && (
-            <HStack spacing={2} color="gray.500">
-              <Spinner size="sm" />
-              <Text fontSize="sm">
-                {prefillLoading ? "Chargement des données enregistrées…" : "Chargement des véhicules…"}
-              </Text>
+    <Box bg={FIGMA.bg} p={{ base: 4, md: 6 }} rounded="2xl" animation={`${fadeInUp} 0.6s ease-out`}>
+      {/* Header card */}
+      <Box bg="white" p={6} rounded="xl" mb={6} boxShadow={FIGMA.cardShadow}>
+        <Flex justify="space-between" align="center" flexWrap="wrap" gap={4}>
+          <VStack align="flex-start" spacing={2}>
+            <HStack spacing={2}>
+              <Box w="4px" h="24px" bg={FIGMA.green} borderRadius="full" />
+              <Badge
+                bg={FIGMA.greenSoft}
+                color={FIGMA.green}
+                fontSize="xs"
+                px={3}
+                py={1}
+                rounded="full"
+                textTransform="uppercase"
+                letterSpacing="wide"
+              >
+                Poste 2 · Source 2B1
+              </Badge>
             </HStack>
-          )}
-          {prefillError && <Text fontSize="sm" color="red.500">Erreur de préchargement : {String(prefillError)}</Text>}
-          <IconButton aria-label="Rafraîchir la flotte" icon={<RepeatIcon />} size="sm" variant="ghost" onClick={loadFleet} />
-        </HStack>
-      </HStack>
 
-      <Grid
-        templateColumns="2fr 0.8fr 1.1fr 1.1fr 1.1fr 1.1fr 1.2fr 1.1fr 1.1fr 1.2fr 0.9fr 96px"
-        bg={highlight}
-        color="white"
-        fontWeight={600}
-        fontSize="sm"
-        alignItems="center"
-        px={4}
-        py={3}
-        rounded="lg"
-      >
-        <GridItem>Véhicule (flotte)</GridItem>
-        <GridItem>Année</GridItem>
-        <GridItem>Marque</GridItem>
-        <GridItem>Modèle</GridItem>
-        <GridItem>Transmission</GridItem>
-        <GridItem>Distance [km]</GridItem>
-        <GridItem>Type carburant</GridItem>
-        <GridItem>Conso [L/100km]</GridItem>
-        <GridItem>Estimation [L] (ou kWh EV)</GridItem>
-        <GridItem>Référence</GridItem>
-        <GridItem>Climatisation</GridItem>
-        <GridItem textAlign="right">Actions</GridItem>
-      </Grid>
+            <Text fontWeight={700} fontSize={{ base: "xl", md: "2xl" }} color={FIGMA.text}>
+              Véhicules – Estimation carburant / kWh (2B1)
+            </Text>
 
-      <VStack spacing={0} bg={tableBg} rounded="xl" border="1px solid" borderColor={inputBorder} overflow="hidden">
-        {(b1Rows || []).map((row, idx) => (
-          <Box key={idx} bg="transparent" px={{ base: 2, md: 3 }} pt={3}>
-            <Grid
-              templateColumns="2fr 0.8fr 1.1fr 1.1fr 1.1fr 1.1fr 1.2fr 1.1fr 1.1fr 1.2fr 0.9fr 96px"
-              gap={3}
-              alignItems="center"
-              px={1}
-            >
-              <GridItem>
-                <Select
-                  placeholder={loadingFleet ? "Chargement…" : fleet.length ? "Choisir un véhicule" : "Aucun véhicule"}
-                  value={row.vehicle || ""}
-                  onChange={(e) => onSelectVehicle(idx, e.target.value)}
-                  bg="white"
-                  border="1px solid"
-                  borderColor={inputBorder}
-                  rounded="xl"
-                  h="36px"
-                  boxShadow="0 2px 4px rgba(0,0,0,0.06)"
-                  fontSize="sm"
-                  isDisabled={loadingFleet || fleet.length === 0}
-                >
-                  {fleet.map((v, i) => (
-                    <option key={`${v.details}-${i}`} value={v.details ?? ""}>
-                      {v.details ?? "(Sans nom)"}
-                    </option>
-                  ))}
-                </Select>
-              </GridItem>
+            <HStack spacing={3} flexWrap="wrap">
+              <Text fontSize="sm" color={FIGMA.muted}>
+                {b1Rows?.length || 0} ligne(s)
+              </Text>
 
-              {/** rest of inputs unchanged */}
-              <GridItem><Input value={row.year} onChange={(e) => updateRow(idx, { year: e.target.value })} bg="white" border="1px solid" borderColor={inputBorder} rounded="xl" h="36px" fontSize="sm" /></GridItem>
-              <GridItem><Input value={row.make} onChange={(e) => updateRow(idx, { make: e.target.value })} bg="white" border="1px solid" borderColor={inputBorder} rounded="xl" h="36px" fontSize="sm" /></GridItem>
-              <GridItem><Input value={row.model} onChange={(e) => updateRow(idx, { model: e.target.value })} bg="white" border="1px solid" borderColor={inputBorder} rounded="xl" h="36px" fontSize="sm" /></GridItem>
-              <GridItem><Input value={row.trans} onChange={(e) => updateRow(idx, { trans: e.target.value })} bg="white" border="1px solid" borderColor={inputBorder} rounded="xl" h="36px" fontSize="sm" /></GridItem>
-              <GridItem><Input value={row.distance} onChange={(e) => updateRow(idx, { distance: e.target.value })} bg="white" border="1px solid" borderColor={inputBorder} rounded="xl" h="36px" fontSize="sm" /></GridItem>
-              <GridItem><Input value={row.type} onChange={(e) => updateRow(idx, { type: e.target.value })} bg="white" border="1px solid" borderColor={inputBorder} rounded="xl" h="36px" fontSize="sm" /></GridItem>
-              <GridItem><Input value={row.cons} onChange={(e) => updateRow(idx, { cons: e.target.value })} bg="white" border="1px solid" borderColor={inputBorder} rounded="xl" h="36px" fontSize="sm" /></GridItem>
-              <GridItem><Input value={row.estimate} onChange={(e) => updateRow(idx, { estimate: e.target.value })} bg="white" border="1px solid" borderColor={inputBorder} rounded="xl" h="36px" fontSize="sm" /></GridItem>
-              <GridItem><Input value={row.reference} onChange={(e) => updateRow(idx, { reference: e.target.value })} bg="white" border="1px solid" borderColor={inputBorder} rounded="xl" h="36px" fontSize="sm" /></GridItem>
-              <GridItem><Input value={row.ac} onChange={(e) => updateRow(idx, { ac: e.target.value })} bg="white" border="1px solid" borderColor={inputBorder} rounded="xl" h="36px" fontSize="sm" /></GridItem>
-
-              <GridItem>
-                <HStack spacing={2} justify="flex-end" pr={1}>
-                  <Box as="button" aria-label="Verrouiller" p="6px" rounded="md" color="gray.600" _hover={{ bg: "#eef2ee" }}>
-                    <Icon as={Lock} boxSize={4} />
-                  </Box>
-                  <Box as="button" aria-label="Dupliquer" p="6px" rounded="md" color="gray.600" _hover={{ bg: "#eef2ee" }} onClick={() => duplicateRow(idx)}>
-                    <Icon as={Copy} boxSize={4} />
-                  </Box>
-                  <Box as="button" aria-label="Supprimer" p="6px" rounded="md" color="gray.600" _hover={{ bg: "#eef2ee" }} onClick={() => removeRow(idx)}>
-                    <Icon as={Trash2} boxSize={4} />
-                  </Box>
+              {(prefillLoading || loadingFleet) && (
+                <HStack spacing={2} color={FIGMA.muted}>
+                  <Spinner size="sm" />
+                  <Text fontSize="sm">
+                    {prefillLoading ? "Chargement…" : "Chargement flotte…"}
+                  </Text>
                 </HStack>
-              </GridItem>
-            </Grid>
+              )}
 
-            <HStack spacing={3} align="center" px={1} py={3}>
-              <Text ml="auto" fontSize="sm" color="gray.600">
-                <strong>{Number(toNum((computed[idx]?.total_ges_tco2e ?? 0), 0)).toLocaleString("fr-CA", { maximumFractionDigits: 6 })} tCO₂e</strong>
-              </Text>
+              {prefillError && (
+                <Text fontSize="sm" color="red.500">
+                  Préchargement: {String(prefillError)}
+                </Text>
+              )}
             </HStack>
+          </VStack>
 
-            <Box h="2px" bg={faintLine} mx={2} rounded="full" />
-          </Box>
-        ))}
-      </VStack>
+          <HStack spacing={2}>
+            <IconButton
+              aria-label="Rafraîchir la flotte"
+              icon={<RepeatIcon />}
+              size="sm"
+              variant="ghost"
+              color={FIGMA.muted}
+              _hover={{ color: FIGMA.green, bg: FIGMA.greenSoft }}
+              onClick={loadFleet}
+            />
+            <IconButton
+              aria-label={collapsed ? "Développer" : "Réduire"}
+              icon={collapsed ? <ChevronDownIcon /> : <ChevronUpIcon />}
+              size="sm"
+              variant="ghost"
+              color={FIGMA.muted}
+              _hover={{ color: FIGMA.green, bg: FIGMA.greenSoft }}
+              onClick={() => setCollapsed((v) => !v)}
+            />
+          </HStack>
+        </Flex>
+      </Box>
 
-      <HStack pt={3} spacing={3}>
-        <Button onClick={addB1Row} bg={highlight} color="white" rounded="full" px={6} h="44px" _hover={{ opacity: 0.95 }}>
-          Ajouter une ligne
-        </Button>
-        <Button onClick={handle2B1Submit} colorScheme="blue" rounded="full" px={6} h="44px" isLoading={submitting}>
-          Soumettre
-        </Button>
-      </HStack>
-    </VStack>
+      {/* Main card */}
+      <Box bg="white" rounded="xl" p={6} boxShadow={FIGMA.cardShadow}>
+        {collapsed ? (
+          <Text color={FIGMA.muted}>Section réduite.</Text>
+        ) : (
+          <VStack align="stretch" spacing={5}>
+            {/* Header bar (desktop) */}
+            <Box
+              bg={`linear-gradient(135deg, ${FIGMA.green} 0%, ${FIGMA.greenLight} 100%)`}
+              color="white"
+              h="50px"
+              rounded="xl"
+              px={6}
+              display={{ base: "none", xl: "flex" }}
+              alignItems="center"
+              boxShadow="0 2px 8px rgba(52, 78, 65, 0.2)"
+            >
+              <Grid
+                w="full"
+                templateColumns="1.6fr .7fr .9fr .9fr .9fr 1fr 1.2fr .9fr 1.2fr 1fr .9fr 140px"
+                columnGap={5}
+                alignItems="center"
+              >
+                <HStack justify="center" spacing={2}><Icon as={Truck} boxSize={4} /><Text fontWeight={600} fontSize="14px">Véhicule</Text></HStack>
+                <Text textAlign="center" fontWeight={600} fontSize="14px">Année</Text>
+                <Text textAlign="center" fontWeight={600} fontSize="14px">Marque</Text>
+                <Text textAlign="center" fontWeight={600} fontSize="14px">Modèle</Text>
+                <Text textAlign="center" fontWeight={600} fontSize="14px">Trans.</Text>
+                <Text textAlign="center" fontWeight={600} fontSize="14px">Distance</Text>
+                <Text textAlign="center" fontWeight={600} fontSize="14px">Type</Text>
+                <Text textAlign="center" fontWeight={600} fontSize="14px">Conso</Text>
+                <Text textAlign="center" fontWeight={600} fontSize="14px">Estimation</Text>
+                <Text textAlign="center" fontWeight={600} fontSize="14px">Référence</Text>
+                <Text textAlign="center" fontWeight={600} fontSize="14px">Clim</Text>
+                <Text textAlign="right" fontWeight={600} fontSize="14px">Actions</Text>
+              </Grid>
+            </Box>
+
+            {/* Rows */}
+            <VStack align="stretch" spacing={4}>
+              {(b1Rows || []).map((row, idx) => (
+                <Box
+                  key={idx}
+                  bg={FIGMA.bg}
+                  rounded="xl"
+                  p={4}
+                  border="2px solid"
+                  borderColor={FIGMA.border}
+                  transition="all 0.3s"
+                  _hover={{ borderColor: FIGMA.green }}
+                >
+                  <Grid
+                    templateColumns={{
+                      base: "1fr",
+                      xl: "1.6fr .7fr .9fr .9fr .9fr 1fr 1.2fr .9fr 1.2fr 1fr .9fr 140px",
+                    }}
+                    columnGap={4}
+                    rowGap={3}
+                    alignItems="center"
+                  >
+                    <GridItem>
+                      <FigmaSelect
+                        value={row.vehicle || ""}
+                        placeholder={loadingFleet ? "Chargement…" : fleet.length ? "Choisir un véhicule" : "Aucun véhicule"}
+                        disabled={loadingFleet || fleet.length === 0}
+                        onChange={(v) => onSelectVehicle(idx, v)}
+                        options={fleet.map((v, i) => ({
+                          value: v.details ?? "",
+                          label: v.details ?? `(Sans nom ${i + 1})`,
+                        }))}
+                      />
+                    </GridItem>
+
+                    <GridItem><FigmaInput value={row.year} onChange={(v) => updateRow(idx, { year: v })} placeholder="AAAA" center /></GridItem>
+                    <GridItem><FigmaInput value={row.make} onChange={(v) => updateRow(idx, { make: v })} placeholder="Marque" /></GridItem>
+                    <GridItem><FigmaInput value={row.model} onChange={(v) => updateRow(idx, { model: v })} placeholder="Modèle" /></GridItem>
+                    <GridItem><FigmaInput value={row.trans} onChange={(v) => updateRow(idx, { trans: v })} placeholder="Auto" center /></GridItem>
+                    <GridItem><FigmaInput value={row.distance} onChange={(v) => updateRow(idx, { distance: v })} placeholder="km" type="number" center /></GridItem>
+
+                    <GridItem>
+                      <FigmaInput
+                        value={row.type}
+                        onChange={(v) => updateRow(idx, { type: v })}
+                        placeholder="Type (clé lookup)"
+                      />
+                    </GridItem>
+
+                    <GridItem>
+                      <FigmaInput
+                        value={row.cons}
+                        onChange={(v) => updateRow(idx, { cons: v })}
+                        placeholder="L/100km"
+                        type="number"
+                        center
+                      />
+                    </GridItem>
+
+                    <GridItem>
+                      <FigmaInput
+                        value={row.estimate}
+                        onChange={(v) => updateRow(idx, { estimate: v })}
+                        placeholder="L (ou kWh EV)"
+                        type="number"
+                        center
+                      />
+                    </GridItem>
+
+                    <GridItem><FigmaInput value={row.reference} onChange={(v) => updateRow(idx, { reference: v })} placeholder="Référence" /></GridItem>
+                    <GridItem><FigmaInput value={row.ac} onChange={(v) => updateRow(idx, { ac: v })} placeholder="Oui/Non" center /></GridItem>
+
+                    <GridItem>
+                      <HStack justify="flex-end" spacing={1}>
+                        <IconButton
+                          aria-label="Verrouiller"
+                          icon={<Icon as={Lock} boxSize={4} />}
+                          variant="ghost"
+                          color={FIGMA.muted}
+                          size="sm"
+                          _hover={{ bg: FIGMA.greenSoft, color: FIGMA.green }}
+                        />
+                        <IconButton
+                          aria-label="Dupliquer"
+                          icon={<CopyIcon />}
+                          variant="ghost"
+                          color={FIGMA.muted}
+                          size="sm"
+                          _hover={{ bg: FIGMA.greenSoft, color: FIGMA.green }}
+                          onClick={() => duplicateRow(idx)}
+                        />
+                        <IconButton
+                          aria-label="Supprimer"
+                          icon={<DeleteIcon />}
+                          variant="ghost"
+                          color={FIGMA.muted}
+                          size="sm"
+                          _hover={{ bg: "red.50", color: "red.500" }}
+                          onClick={() => removeRow(idx)}
+                        />
+                      </HStack>
+                    </GridItem>
+                  </Grid>
+
+                  {/* Inline row recap */}
+                  <HStack mt={3} justify="flex-end" spacing={3} flexWrap="wrap">
+                    <Box
+                      px={4}
+                      py={2}
+                      rounded="full"
+                      bg="white"
+                      border="1px solid"
+                      borderColor={FIGMA.border}
+                      boxShadow={FIGMA.inputShadow}
+                    >
+                      <Text fontSize="sm" color={FIGMA.text}>
+                        Total ligne (tCO₂e): <b>{fmt((computed[idx] as any)?.total_ges_tco2e ?? 0, 6)}</b>
+                      </Text>
+                    </Box>
+                    <Box
+                      px={4}
+                      py={2}
+                      rounded="full"
+                      bg="white"
+                      border="1px solid"
+                      borderColor={FIGMA.border}
+                      boxShadow={FIGMA.inputShadow}
+                    >
+                      <Text fontSize="sm" color={FIGMA.text}>
+                        Énergie (kWh): <b>{fmt((computed[idx] as any)?.total_energie_kwh ?? 0, 3)}</b>
+                      </Text>
+                    </Box>
+                  </HStack>
+                </Box>
+              ))}
+
+              {(!b1Rows || b1Rows.length === 0) && (
+                <Box p={4} textAlign="center" color={FIGMA.muted}>
+                  Aucune ligne. Cliquez sur “Ajouter une ligne” pour commencer.
+                </Box>
+              )}
+            </VStack>
+
+            {/* Footer actions */}
+            <HStack pt={2} spacing={4} flexWrap="wrap">
+              <Button
+                leftIcon={<AddIcon />}
+                variant="outline"
+                borderColor={FIGMA.green}
+                color={FIGMA.green}
+                rounded="full"
+                h="44px"
+                px={6}
+                onClick={addB1Row}
+                fontWeight={600}
+                _hover={{ bg: FIGMA.greenSoft, borderColor: FIGMA.green }}
+              >
+                Ajouter une ligne
+              </Button>
+
+              <Button
+                bg={FIGMA.green}
+                color="white"
+                rounded="full"
+                h="44px"
+                px={8}
+                boxShadow={FIGMA.buttonShadow}
+                _hover={{
+                  bg: FIGMA.greenLight,
+                  transform: "translateY(-2px)",
+                  boxShadow: FIGMA.hoverShadow,
+                }}
+                _active={{ transform: "translateY(0)" }}
+                onClick={handle2B1Submit}
+                isLoading={submitting}
+                loadingText="Sauvegarde…"
+                fontWeight={600}
+              >
+                Calculer et soumettre
+              </Button>
+            </HStack>
+          </VStack>
+        )}
+      </Box>
+
+      {/* Results recap */}
+      <Box mt={6} bg="white" rounded="xl" p={6} boxShadow={FIGMA.cardShadow} animation={`${fadeInUp} 0.6s ease-out`}>
+        <Text fontWeight={700} color={FIGMA.text} fontSize="lg" mb={4}>
+          Calculs et résultats (récapitulatif)
+        </Text>
+
+        {computed && computed.length > 0 ? (
+          <Grid templateColumns={{ base: "1fr", md: "repeat(auto-fit, minmax(220px, 1fr))" }} gap={6}>
+            <ResultCard label="CO₂ [gCO₂e]" value={fmt(totals.total_co2_gco2e)} />
+            <ResultCard label="CH₄ [gCO₂e]" value={fmt(totals.total_ges_ch4_gco2e)} />
+            <ResultCard label="N₂O [gCO₂e]" value={fmt(totals.total_ges_n2o_gco2e)} />
+            <ResultCard label="Total [gCO₂e]" value={fmt(totals.total_ges_gco2e)} />
+            <ResultCard label="Total [tCO₂e]" value={fmt(totals.total_ges_tco2e, 6)} />
+            <ResultCard label="Énergie [kWh]" value={fmt(totals.total_energie_kwh)} />
+          </Grid>
+        ) : (
+          <Text color={FIGMA.muted}>Aucun résultat à afficher.</Text>
+        )}
+      </Box>
+    </Box>
   );
 }
+
+/* ================= UI helpers ================= */
+
+function FigmaInput({
+  value,
+  onChange,
+  placeholder,
+  type = "text",
+  center,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  type?: string;
+  center?: boolean;
+}) {
+  return (
+    <Input
+      type={type}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      h="42px"
+      rounded="lg"
+      bg="white"
+      borderColor={FIGMA.border}
+      boxShadow={FIGMA.inputShadow}
+      fontSize="14px"
+      color={FIGMA.text}
+      textAlign={center ? "center" : "left"}
+      _placeholder={{ color: FIGMA.muted }}
+      _focus={{
+        borderColor: FIGMA.green,
+        boxShadow: `0 0 0 1px ${FIGMA.green}`,
+      }}
+      transition="all 0.2s"
+    />
+  );
+}
+
+function FigmaSelect({
+  value,
+  onChange,
+  placeholder,
+  options,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+}) {
+  return (
+    <Select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      isDisabled={disabled}
+      h="42px"
+      rounded="lg"
+      bg="white"
+      borderColor={FIGMA.border}
+      boxShadow={FIGMA.inputShadow}
+      fontSize="14px"
+      color={FIGMA.text}
+      _placeholder={{ color: FIGMA.muted }}
+      _focus={{
+        borderColor: FIGMA.green,
+        boxShadow: `0 0 0 1px ${FIGMA.green}`,
+      }}
+      transition="all 0.2s"
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </Select>
+  );
+}
+
+function ResultCard({ label, value }: { label: string; value: string }) {
+  return (
+    <Box
+      bg={FIGMA.bg}
+      p={4}
+      rounded="lg"
+      border="2px solid"
+      borderColor={FIGMA.border}
+      transition="all 0.3s"
+      _hover={{ borderColor: FIGMA.green, transform: "translateY(-2px)" }}
+    >
+      <Text fontSize="xs" color={FIGMA.muted} mb={2} textTransform="uppercase">
+        {label}
+      </Text>
+      <Text fontSize="2xl" fontWeight={700} color={FIGMA.green}>
+        {value}
+      </Text>
+    </Box>
+  );
+}
+
+export default SourceB1Form;
 
 // import { useEffect, useState } from 'react';
 // import {

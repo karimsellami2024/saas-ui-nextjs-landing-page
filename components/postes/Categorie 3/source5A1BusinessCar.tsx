@@ -1,3 +1,5 @@
+'use client';
+
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
@@ -15,7 +17,7 @@ import {
   Badge,
   Icon,
   IconButton,
-  Stack, // ✅ important (you asked: avoid Stack error)
+  Stack,
 } from "@chakra-ui/react";
 import { keyframes } from "@emotion/react";
 import {
@@ -26,16 +28,16 @@ import {
   AddIcon,
   CopyIcon,
 } from "@chakra-ui/icons";
-import { FiCalendar, FiFileText, FiMapPin, FiUsers, FiTruck } from "react-icons/fi";
+import { FiCalendar, FiFileText, FiMapPin, FiTruck } from "react-icons/fi";
 import { supabase } from "../../../lib/supabaseClient";
 import { usePrefillPosteSource } from "components/postes/HookForGetDataSource";
 
 /** =======================
- * Poste 3.3A1 – Navettage
- * SAME DESIGN as Source4B1 (Figma card / pills / results cards)
+ * Poste 3.5A1 – Déplacements d'affaires en voiture
+ * (Same design family as Source33A1Form / Source34B1Form)
  * ======================= */
 
-export type Source33A1Row = {
+export type Source35A1Row = {
   methodology: string;
   equipment: string;
   description: string;
@@ -45,13 +47,14 @@ export type Source33A1Row = {
   product: string;
   reference: string;
 
-  transportMode: string;
-  oneWayDistanceKm: string;
-  workDaysPerYear: string;
-  employeesSameTrip: string;
+  transportMode: string; // label that matches emission_factors.label mapping
+  consumptionLPer100Km: string; // optional, if known
+  distanceKm: string; // optional if fuelKnownL is provided
+  fuelKnownL: string; // optional, if user knows fuel qty directly
+  identicalTrips: string; // optional, default 1
 };
 
-export type GesResult33A1 = {
+export type GesResult35A1 = {
   distance_km?: string | number;
   fuel_qty_l?: string | number;
 
@@ -68,37 +71,64 @@ export type GesResult33A1 = {
   energy_kwh?: string | number;
 };
 
-export interface Source33A1FormProps {
-  rows?: Source33A1Row[];
-  setRows?: React.Dispatch<React.SetStateAction<Source33A1Row[]>>;
+export interface Source35A1FormProps {
+  rows?: Source35A1Row[];
+  setRows?: React.Dispatch<React.SetStateAction<Source35A1Row[]>>;
 
   posteSourceId: string | null;
   userId?: string | null;
 
-  gesResults?: GesResult33A1[];
-  setGesResults?: (results: GesResult33A1[]) => void;
+  gesResults?: GesResult35A1[];
+  setGesResults?: (results: GesResult35A1[]) => void;
 }
 
 /* ================== constants ================== */
 
+const SOURCE_CODE = "3.5A1";
 const METHODOLOGY_OPTIONS = ["Données réelles", "Estimation", "Valeur par défaut"];
-const TRANSPORT_OPTIONS = ["Voiture", "Autobus", "Marche ou vélo"];
 
-// Defaults to reproduce Excel rows
-const DEFAULT_FUEL_L_PER_KM: Record<string, number> = {
-  Voiture: 0.097,
-  Autobus: 0.0244333333333,
-  "Marche ou vélo": 0,
-};
+/**
+ * Transport options should match your Excel dropdowns.
+ * We keep them as human-readable, and map them to EF labels below.
+ * Adjust options to your exact list.
+ */
+const TRANSPORT_OPTIONS = [
+  "Voiture légère - Essence [L]",
+  "Voiture légère - Diesel [L]",
+  "Camion lourd - Essence [L]",
+  "Camion lourd - Diesel [L]",
+];
 
-// MUST match emission_factors.label in DB
+/**
+ * ⚠️ IMPORTANT:
+ * MUST match `emission_factors.label` in DB for CO2/CH4/N2O/kWh/biogenic.
+ * Update these labels to your DB truth.
+ */
 const EF_LABEL_BY_MODE: Record<string, string> = {
-  Voiture: "Navettage - Voiture [L]",
-  Autobus: "Navettage - Autobus [L]",
-  "Marche ou vélo": "",
+  "Voiture légère - Essence [L]": "Déplacements affaires - Voiture légère Essence [L]",
+  "Voiture légère - Diesel [L]": "Déplacements affaires - Voiture légère Diesel [L]",
+  "Camion lourd - Essence [L]": "Déplacements affaires - Camion lourd Essence [L]",
+  "Camion lourd - Diesel [L]": "Déplacements affaires - Camion lourd Diesel [L]",
 };
 
-const DEFAULT_ROWS: Source33A1Row[] = [
+/**
+ * Excel logic:
+ * - fuelL = (fuelKnownL != 0 ? fuelKnownL : (consumption default or known) /100 * distanceKm) * identicalTrips
+ * - distanceKmUsed = distanceKm * identicalTrips (for reporting)
+ *
+ * If consumption is NOT provided:
+ * - Excel uses VLOOKUP(AP; FE B64:L74; 4) as default consumption (L/100km)
+ * We replicate this by reading a "default consumption" per mode.
+ * Adjust defaults to your FE sheet truth if needed.
+ */
+const DEFAULT_CONSUMPTION_L_PER_100KM: Record<string, number> = {
+  "Voiture légère - Essence [L]": 8.5,
+  "Voiture légère - Diesel [L]": 7.0,
+  "Camion lourd - Essence [L]": 25,
+  "Camion lourd - Diesel [L]": 22,
+};
+
+const DEFAULT_ROWS: Source35A1Row[] = [
   {
     methodology: "Données réelles",
     equipment: "",
@@ -109,17 +139,17 @@ const DEFAULT_ROWS: Source33A1Row[] = [
     product: "",
     reference: "",
     transportMode: "",
-    oneWayDistanceKm: "",
-    workDaysPerYear: "",
-    employeesSameTrip: "",
+    consumptionLPer100Km: "",
+    distanceKm: "",
+    fuelKnownL: "",
+    identicalTrips: "",
   },
 ];
 
 // ---------- helpers ----------
 const toNum = (x: any, fallback = 0) => {
   if (x === "" || x == null) return fallback;
-  const n =
-    typeof x === "number" ? x : Number(String(x).replace(",", ".").replace(/\s/g, ""));
+  const n = typeof x === "number" ? x : Number(String(x).replace(",", ".").replace(/\s/g, ""));
   return Number.isFinite(n) ? n : fallback;
 };
 
@@ -134,7 +164,7 @@ type Refs = {
   prpN2O: number;
 };
 
-function buildEmptyResult(): GesResult33A1 {
+function buildEmptyResult(): GesResult35A1 {
   return {
     distance_km: 0,
     fuel_qty_l: 0,
@@ -149,24 +179,30 @@ function buildEmptyResult(): GesResult33A1 {
   };
 }
 
-function computeResults(rws: Source33A1Row[], rf: Refs | null): GesResult33A1[] {
+function computeResults(rws: Source35A1Row[], rf: Refs | null): GesResult35A1[] {
   if (!rf) return [];
 
   return (rws || []).map((row) => {
     const mode = String(row.transportMode || "").trim();
-    const oneWayKm = toNum(row.oneWayDistanceKm, 0);
-    const days = toNum(row.workDaysPerYear, 0);
-    const employees = Math.max(1, toNum(row.employeesSameTrip, 1));
+    const trips = Math.max(1, toNum(row.identicalTrips, 1));
 
-    if (!mode || oneWayKm === 0 || days === 0) return buildEmptyResult();
+    const dist = toNum(row.distanceKm, 0);
+    const fuelKnown = toNum(row.fuelKnownL, 0);
 
-    const distanceKm = oneWayKm * days * 2 * employees;
+    // consumption: if user filled, use it; else use default by mode; else 0
+    const consUser = toNum(row.consumptionLPer100Km, 0);
+    const consDefault = DEFAULT_CONSUMPTION_L_PER_100KM[mode] ?? 0;
+    const cons = consUser > 0 ? consUser : consDefault;
 
-    const lPerKm = DEFAULT_FUEL_L_PER_KM[mode] ?? 0;
-    const fuelL = distanceKm * lPerKm;
+    // Excel: fuel = (AT==0 ? AQ*AR/100 : AT) * AZ
+    const fuelL = (fuelKnown > 0 ? fuelKnown : (cons / 100) * dist) * trips;
+    const distanceKmUsed = dist * trips;
+
+    if (!mode || (fuelL === 0 && distanceKmUsed === 0)) return buildEmptyResult();
 
     const efLabel = EF_LABEL_BY_MODE[mode] ?? "";
 
+    // emissions are per L (labels include [L])
     const gco2_per_unit = efLabel ? toNum(rf.gco2ByLabel[efLabel], 0) : 0;
     const gch4_per_unit = efLabel ? toNum(rf.gch4ByLabel[efLabel], 0) : 0;
     const gn2o_per_unit = efLabel ? toNum(rf.gn2oByLabel[efLabel], 0) : 0;
@@ -190,8 +226,8 @@ function computeResults(rws: Source33A1Row[], rf: Refs | null): GesResult33A1[] 
     const energy = kwh_per_unit * fuelL;
 
     return {
-      distance_km: distanceKm,
-      fuel_qty_l: mode === "Marche ou vélo" ? 0 : fuelL,
+      distance_km: distanceKmUsed,
+      fuel_qty_l: fuelL,
       co2_gco2e: co2,
       ch4_gco2e: ch4,
       n2o_gco2e: n2o,
@@ -204,7 +240,7 @@ function computeResults(rws: Source33A1Row[], rf: Refs | null): GesResult33A1[] 
   });
 }
 
-/* ================== animations (same style) ================== */
+/* ================== animations ================== */
 
 const fadeInUp = keyframes`
   from { opacity: 0; transform: translateY(20px); }
@@ -221,24 +257,22 @@ const pulse = keyframes`
 
 /* ================== component ================== */
 
-export function Source33A1Form({
+export function Source35A1Form({
   rows: propRows,
   setRows: propSetRows,
   posteSourceId,
   userId: propUserId,
   gesResults: propGesResults,
   setGesResults: propSetGesResults,
-}: Source33A1FormProps) {
-  // ✅ same safety as you asked previously
-  const [localRows, setLocalRows] = useState<Source33A1Row[]>(DEFAULT_ROWS);
+}: Source35A1FormProps) {
+  const [localRows, setLocalRows] = useState<Source35A1Row[]>(DEFAULT_ROWS);
   const rows = propRows ?? localRows;
   const setRows = propSetRows ?? setLocalRows;
 
-  const [localGes, setLocalGes] = useState<GesResult33A1[]>([]);
+  const [localGes, setLocalGes] = useState<GesResult35A1[]>([]);
   const gesResults = propGesResults ?? localGes;
   const setGesResults = propSetGesResults ?? setLocalGes;
 
-  // FIGMA tokens (same palette as your “Figma design” component)
   const FIGMA = {
     bg: "#F5F6F5",
     green: "#344E41",
@@ -263,14 +297,12 @@ export function Source33A1Form({
   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
   const [refs, setRefs] = useState<Refs | null>(null);
 
-  // company dropdowns
   const [siteOptions, setSiteOptions] = useState<string[]>([]);
   const [productOptions, setProductOptions] = useState<string[]>([]);
   const [referenceOptions, setReferenceOptions] = useState<string[]>([]);
 
-  // Prefill
   const { loading: prefillLoading, error: prefillError, data: prefillData, results: prefillResults } =
-    usePrefillPosteSource((userId ?? "") as string, 3, "3.3A1", { rows: DEFAULT_ROWS });
+    usePrefillPosteSource((userId ?? "") as string, 3, SOURCE_CODE, { rows: DEFAULT_ROWS });
 
   const isPristine = useMemo(() => {
     if (!rows || rows.length === 0) return true;
@@ -286,9 +318,10 @@ export function Source33A1Form({
       !r.product &&
       !r.reference &&
       !r.transportMode &&
-      !r.oneWayDistanceKm &&
-      !r.workDaysPerYear &&
-      !r.employeesSameTrip
+      !r.consumptionLPer100Km &&
+      !r.distanceKm &&
+      !r.fuelKnownL &&
+      !r.identicalTrips
     );
   }, [rows]);
 
@@ -334,7 +367,7 @@ export function Source33A1Form({
 
         setRefs({ gco2ByLabel, gch4ByLabel, gn2oByLabel, kwhByLabel, gco2eBioByLabel, prpCO2, prpCH4, prpN2O });
       } catch (e) {
-        console.error("3.3A1 refs load error:", e);
+        console.error("3.5A1 refs load error:", e);
         setRefs({
           gco2ByLabel: {},
           gch4ByLabel: {},
@@ -349,7 +382,7 @@ export function Source33A1Form({
     })();
   }, []);
 
-  /* ===== load latest saved poste ===== */
+  /* ===== load latest saved ===== */
   useEffect(() => {
     (async () => {
       setLoading(true);
@@ -388,11 +421,7 @@ export function Source33A1Form({
         if (poste) {
           let parsed = poste.data;
           if (typeof parsed === "string") {
-            try {
-              parsed = JSON.parse(parsed);
-            } catch {
-              parsed = {};
-            }
+            try { parsed = JSON.parse(parsed); } catch { parsed = {}; }
           }
 
           if (parsed?.rows && Array.isArray(parsed.rows)) {
@@ -407,9 +436,10 @@ export function Source33A1Form({
                 product: r.product ?? "",
                 reference: r.reference ?? "",
                 transportMode: r.transportMode ?? "",
-                oneWayDistanceKm: String(r.oneWayDistanceKm ?? ""),
-                workDaysPerYear: String(r.workDaysPerYear ?? ""),
-                employeesSameTrip: String(r.employeesSameTrip ?? ""),
+                consumptionLPer100Km: String(r.consumptionLPer100Km ?? ""),
+                distanceKm: String(r.distanceKm ?? ""),
+                fuelKnownL: String(r.fuelKnownL ?? ""),
+                identicalTrips: String(r.identicalTrips ?? ""),
               }))
             );
           } else if (!rows?.length) {
@@ -417,7 +447,7 @@ export function Source33A1Form({
           }
 
           if (Array.isArray(poste.results)) {
-            setGesResults(poste.results as GesResult33A1[]);
+            setGesResults(poste.results as GesResult35A1[]);
           }
         } else if (!rows?.length) {
           setRows(DEFAULT_ROWS);
@@ -445,7 +475,7 @@ export function Source33A1Form({
 
     if (prefillResults) {
       const normalized = Array.isArray(prefillResults) ? prefillResults : [prefillResults];
-      setGesResults(normalized as GesResult33A1[]);
+      setGesResults(normalized as GesResult35A1[]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefillData, prefillResults, prefillLoading, loading, isPristine]);
@@ -456,19 +486,18 @@ export function Source33A1Form({
       try {
         if (!userId) return;
 
-        const { data: profile, error: profErr } = await supabase
+        const { data: profile } = await supabase
           .from("user_profiles")
           .select("company_id")
           .eq("id", userId)
           .single();
-        if (profErr || !profile?.company_id) return;
+        if (!profile?.company_id) return;
 
-        const { data: company, error: compErr } = await supabase
+        const { data: company } = await supabase
           .from("companies")
           .select("production_sites, products, company_references")
           .eq("id", profile.company_id)
           .single();
-        if (compErr) return;
 
         const sites = Array.isArray(company?.production_sites)
           ? (company.production_sites as any[]).map((s) => String(s?.nom ?? "")).filter(Boolean)
@@ -490,11 +519,6 @@ export function Source33A1Form({
     })();
   }, [userId]);
 
-  /* ===== validation ===== */
-  const validateData = (rws: Source33A1Row[]) =>
-    rws.length > 0 &&
-    rws.every((row) => row.methodology && row.site && row.transportMode && row.oneWayDistanceKm !== "" && row.workDaysPerYear !== "");
-
   /* ===== live compute ===== */
   useEffect(() => {
     const res = computeResults(rows, refs);
@@ -506,20 +530,21 @@ export function Source33A1Form({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedJSONRef = useRef<string>("");
 
-  const makeSanitizedRows = (rws: Source33A1Row[]) =>
+  const makeSanitizedRows = (rws: Source35A1Row[]) =>
     rws.map((row) => ({
       methodology: row.methodology,
       equipment: row.equipment,
       description: row.description,
       date: row.date,
-      month: row.month,
+      month: row.month || (row.date ? String(new Date(row.date).getMonth() + 1).padStart(2, "0") : ""),
       site: row.site,
       product: row.product,
       reference: row.reference,
       transportMode: row.transportMode,
-      oneWayDistanceKm: toNum(row.oneWayDistanceKm, 0),
-      workDaysPerYear: toNum(row.workDaysPerYear, 0),
-      employeesSameTrip: Math.max(1, toNum(row.employeesSameTrip, 1)),
+      consumptionLPer100Km: toNum(row.consumptionLPer100Km, 0),
+      distanceKm: toNum(row.distanceKm, 0),
+      fuelKnownL: toNum(row.fuelKnownL, 0),
+      identicalTrips: Math.max(1, toNum(row.identicalTrips, 1)),
     }));
 
   const saveDraft = async () => {
@@ -536,7 +561,7 @@ export function Source33A1Form({
       user_id: userId,
       poste_source_id: posteSourceId,
       poste_num: 3,
-      source_code: "3.3A1",
+      source_code: SOURCE_CODE,
       data: { rows: makeSanitizedRows(rows) },
       results: computeResults(rows, refs),
     };
@@ -579,13 +604,17 @@ export function Source33A1Form({
   /* ===== submit ===== */
   const [submitting, setSubmitting] = useState(false);
 
+  const validateData = (rws: Source35A1Row[]) =>
+    rws.length > 0 &&
+    rws.every((row) => row.methodology && row.transportMode && (row.fuelKnownL !== "" || row.distanceKm !== ""));
+
   const handleSubmit = async () => {
     if (!posteSourceId || !userId) {
       alert("Champs obligatoires manquants (posteSourceId ou userId)");
       return;
     }
     if (!validateData(rows)) {
-      alert("Veuillez remplir tous les champs requis.");
+      alert("Veuillez remplir les champs requis (Transport + Distance ou Carburant).");
       return;
     }
     if (!refs) {
@@ -599,7 +628,7 @@ export function Source33A1Form({
       user_id: userId,
       poste_source_id: posteSourceId,
       poste_num: 3,
-      source_code: "3.3A1",
+      source_code: SOURCE_CODE,
       data: { rows: makeSanitizedRows(rows) },
       results: computeResults(rows, refs),
     };
@@ -616,7 +645,7 @@ export function Source33A1Form({
       } else {
         setGesResults(payload.results);
         lastSavedJSONRef.current = JSON.stringify(rows);
-        alert("Données 3.3A1 calculées et sauvegardées avec succès!");
+        alert("Données 3.5A1 calculées et sauvegardées avec succès!");
       }
     } catch {
       alert("Erreur inattendue lors de la sauvegarde en base.");
@@ -639,9 +668,10 @@ export function Source33A1Form({
         product: "",
         reference: "",
         transportMode: "",
-        oneWayDistanceKm: "",
-        workDaysPerYear: "",
-        employeesSameTrip: "",
+        consumptionLPer100Km: "",
+        distanceKm: "",
+        fuelKnownL: "",
+        identicalTrips: "",
       },
     ]);
 
@@ -654,7 +684,7 @@ export function Source33A1Form({
 
   const removeRow = (idx: number) => setRows((prev) => prev.filter((_, i) => i !== idx));
 
-  const updateRowField = (idx: number, key: keyof Source33A1Row, value: string) => {
+  const updateRowField = (idx: number, key: keyof Source35A1Row, value: string) => {
     setRows((prev) => {
       const copy = [...prev];
       copy[idx] = { ...copy[idx], [key]: value };
@@ -662,9 +692,10 @@ export function Source33A1Form({
     });
   };
 
-  /* ===== results display ===== */
   const totals = useMemo(() => {
-    const sum = (k: keyof GesResult33A1) => (gesResults || []).reduce((acc, r) => acc + toNum((r as any)?.[k], 0), 0);
+    const sum = (k: keyof GesResult35A1) =>
+      (gesResults || []).reduce((acc, r) => acc + toNum((r as any)?.[k], 0), 0);
+
     return {
       distance_km: sum("distance_km"),
       fuel_qty_l: sum("fuel_qty_l"),
@@ -718,25 +749,23 @@ export function Source33A1Form({
                 textTransform="uppercase"
                 letterSpacing="wide"
               >
-                Poste 3 · Source 3.3A1
+                Poste 3 · Source {SOURCE_CODE}
               </Badge>
             </HStack>
 
             <Heading as="h2" fontFamily="Inter" fontWeight={700} fontSize={{ base: "xl", md: "2xl" }} color={FIGMA.text}>
-              Navettage des employés
+              Déplacements d&apos;affaires — voiture
             </Heading>
 
-            <HStack spacing={3} flexWrap="wrap">
-              <Text fontSize="sm" fontFamily="Montserrat" color={FIGMA.muted}>
-                {rows?.length || 0} ligne(s)
-              </Text>
+            <Text fontSize="sm" fontFamily="Montserrat" color={FIGMA.muted}>
+              {rows?.length || 0} ligne(s)
+            </Text>
 
-              {prefillError && (
-                <Text fontSize="sm" color="red.500">
-                  Préchargement: {String(prefillError)}
-                </Text>
-              )}
-            </HStack>
+            {prefillError && (
+              <Text fontSize="sm" color="red.500">
+                Préchargement: {String(prefillError)}
+              </Text>
+            )}
           </VStack>
 
           <HStack spacing={3} flexWrap="wrap" align="center">
@@ -798,7 +827,7 @@ export function Source33A1Form({
             >
               <Grid
                 w="full"
-                templateColumns="1.1fr 1.1fr 1.3fr 1.0fr 0.8fr 1.1fr 1.1fr 1.1fr 1.2fr 1.2fr 1.0fr 1.0fr 44px"
+                templateColumns="1.05fr 1.05fr 1.25fr 0.95fr 0.75fr 1.05fr 1.05fr 1.05fr 1.35fr 1.0fr 1.0fr 1.0fr 44px"
                 columnGap={6}
                 alignItems="center"
               >
@@ -812,9 +841,9 @@ export function Source33A1Form({
                   { label: "Produit", icon: FiFileText },
                   { label: "Réf.", icon: FiFileText },
                   { label: "Transport", icon: FiTruck },
+                  { label: "Conso (L/100)", icon: FiTruck },
                   { label: "Distance (km)", icon: FiTruck },
-                  { label: "Jours/an", icon: FiCalendar },
-                  { label: "Employés", icon: FiUsers },
+                  { label: "Carburant (L)", icon: FiTruck },
                 ].map(({ label, icon }) => (
                   <HStack key={label} justify="center" spacing={2}>
                     <Icon as={icon} boxSize={4} />
@@ -823,6 +852,12 @@ export function Source33A1Form({
                     </Text>
                   </HStack>
                 ))}
+                <HStack justify="center" spacing={2}>
+                  <Icon as={FiTruck} boxSize={4} />
+                  <Text fontFamily="Montserrat" fontWeight={600} fontSize="14px">
+                    Nb identiques
+                  </Text>
+                </HStack>
                 <Box />
               </Grid>
             </Box>
@@ -844,7 +879,7 @@ export function Source33A1Form({
                   <Grid
                     templateColumns={{
                       base: "1fr",
-                      lg: "1.1fr 1.1fr 1.3fr 1.0fr 0.8fr 1.1fr 1.1fr 1.1fr 1.2fr 1.2fr 1.0fr 1.0fr 44px",
+                      lg: "1.05fr 1.05fr 1.25fr 0.95fr 0.75fr 1.05fr 1.05fr 1.05fr 1.35fr 1.0fr 1.0fr 1.0fr 44px",
                     }}
                     columnGap={4}
                     rowGap={3}
@@ -917,15 +952,33 @@ export function Source33A1Form({
                     </GridItem>
 
                     <GridItem>
-                      <FigmaInput FIGMA={FIGMA} type="number" value={row.oneWayDistanceKm} onChange={(v) => updateRowField(idx, "oneWayDistanceKm", v)} placeholder="0" center />
+                      <FigmaInput
+                        FIGMA={FIGMA}
+                        type="number"
+                        value={row.consumptionLPer100Km}
+                        onChange={(v) => updateRowField(idx, "consumptionLPer100Km", v)}
+                        placeholder="(fac.) auto"
+                        center
+                      />
                     </GridItem>
 
                     <GridItem>
-                      <FigmaInput FIGMA={FIGMA} type="number" value={row.workDaysPerYear} onChange={(v) => updateRowField(idx, "workDaysPerYear", v)} placeholder="0" center />
+                      <FigmaInput FIGMA={FIGMA} type="number" value={row.distanceKm} onChange={(v) => updateRowField(idx, "distanceKm", v)} placeholder="0" center />
                     </GridItem>
 
                     <GridItem>
-                      <FigmaInput FIGMA={FIGMA} type="number" value={row.employeesSameTrip} onChange={(v) => updateRowField(idx, "employeesSameTrip", v)} placeholder="(fac.) 1" center />
+                      <FigmaInput FIGMA={FIGMA} type="number" value={row.fuelKnownL} onChange={(v) => updateRowField(idx, "fuelKnownL", v)} placeholder="(ou) L" center />
+                    </GridItem>
+
+                    <GridItem>
+                      <FigmaInput
+                        FIGMA={FIGMA}
+                        type="number"
+                        value={row.identicalTrips}
+                        onChange={(v) => updateRowField(idx, "identicalTrips", v)}
+                        placeholder="(fac.) 1"
+                        center
+                      />
                     </GridItem>
 
                     <GridItem>
@@ -991,6 +1044,15 @@ export function Source33A1Form({
                 Calculer et soumettre
               </Button>
             </HStack>
+
+            <Box bg={FIGMA.greenSoft} p={3} rounded="lg" border="1px solid" borderColor={FIGMA.border}>
+              <Text fontSize="sm" color={FIGMA.text} fontFamily="Montserrat">
+                EF labels DB (à ajuster si besoin) : <b>{Object.values(EF_LABEL_BY_MODE).join(" · ")}</b>
+              </Text>
+              <Text fontSize="xs" color={FIGMA.muted} fontFamily="Montserrat" mt={1}>
+                Si vous voulez reproduire exactement Excel, remplacez DEFAULT_CONSUMPTION_L_PER_100KM par les valeurs FE (ou chargez-les depuis une table).
+              </Text>
+            </Box>
           </Stack>
         )}
       </Box>
@@ -1022,19 +1084,11 @@ export function Source33A1Form({
           </Text>
         )}
       </Box>
-
-      {prefillError && (
-        <Box mt={4}>
-          <Text fontSize="sm" color="red.500">
-            Erreur de préchargement : {String(prefillError)}
-          </Text>
-        </Box>
-      )}
     </Box>
   );
 }
 
-/* ================== UI helpers (same style) ================== */
+/* ================== UI helpers ================== */
 
 function FigmaInput({
   FIGMA,
@@ -1138,6 +1192,5 @@ function ResultCard({ FIGMA, label, value }: { FIGMA: any; label: string; value:
   );
 }
 
-// ✅ default export so your import works: `import Source33A1Form from "..."`
-export default Source33A1Form;
-
+// ✅ default export so your import works
+export default Source35A1Form;

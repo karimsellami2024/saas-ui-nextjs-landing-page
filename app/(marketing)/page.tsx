@@ -8,70 +8,582 @@ import {
   Heading,
   Text,
   VStack,
+  HStack,
+  SimpleGrid,
+  Grid,
 } from '@chakra-ui/react'
+import { keyframes } from '@emotion/react'
+import { useEffect, useState } from 'react'
 
-export default function Home() {
+// Subtle animations
+const fadeInUp = keyframes`
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+`
+
+const drawLine = keyframes`
+  from { stroke-dashoffset: 1000; }
+  to { stroke-dashoffset: 0; }
+`
+
+const fillBar = keyframes`
+  from { transform: scaleY(0); }
+  to { transform: scaleY(1); }
+`
+
+const pulse = keyframes`
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.8; }
+`
+
+// Feature card component
+const FeatureCard = ({ icon, title, description, delay }: any) => (
+  <Box
+    bg="rgba(255, 255, 255, 0.05)"
+    backdropFilter="blur(10px)"
+    p={6}
+    borderRadius="xl"
+    border="1px solid rgba(255, 255, 255, 0.1)"
+    animation={`${fadeInUp} 0.6s ease-out ${delay}s both`}
+    _hover={{
+      bg: 'rgba(255, 255, 255, 0.08)',
+      borderColor: 'rgba(73, 195, 172, 0.3)',
+      transform: 'translateY(-2px)',
+    }}
+    transition="all 0.3s ease"
+  >
+    <Text fontSize="2xl" mb={3}>{icon}</Text>
+    <Heading size="sm" color="white" mb={2} fontWeight="600">
+      {title}
+    </Heading>
+    <Text fontSize="sm" color="rgba(255, 255, 255, 0.7)" lineHeight="1.6">
+      {description}
+    </Text>
+  </Box>
+)
+
+// Mini bar chart component
+const MiniBarChart = ({ delay }: any) => {
+  const bars = [
+    { height: 40, label: 'Scope 1' },
+    { height: 65, label: 'Scope 2' },
+    { height: 85, label: 'Scope 3' },
+  ]
+
   return (
     <Box
-      minH="100vh"
-      display="flex"
-      alignItems="center"
-      justifyContent="center"
-      bg="linear-gradient(135deg, #F3FAF9 0%, #E6F7FF 100%)"
-      px={4}
+      bg="rgba(255, 255, 255, 0.03)"
+      backdropFilter="blur(10px)"
+      p={6}
+      borderRadius="xl"
+      border="1px solid rgba(255, 255, 255, 0.08)"
+      animation={`${fadeInUp} 0.6s ease-out ${delay}s both`}
     >
-      <Container maxW="container.md">
-        <VStack spacing={6} textAlign="center">
-          <Heading
-            fontSize={{ base: '3xl', md: '5xl' }}
-            fontWeight="extrabold"
-            color="#265966"
-          >
-            Carbone Québec
-          </Heading>
-
-          <Text
-            fontSize={{ base: 'md', md: 'lg' }}
-            color="gray.700"
-            maxW="640px"
-          >
-            Calculez rapidement vos émissions de gaz à effet de serre et
-            générez vos rapports automatiquement.
-          </Text>
-
-          <Link href="/intro" passHref legacyBehavior>
-            <Button
-              as="a"
-              size="lg"
-              px={12}
-              py={7}
-              rounded="full"
-              fontWeight="bold"
-              fontSize="xl"
-              bg="linear-gradient(90deg, #49C3AC, #265966)"
-              color="white"
-              _hover={{
-                transform: 'scale(1.05)',
-                bg: 'linear-gradient(90deg, #3AB7A0, #1F4F59)',
+      <HStack spacing={2} mb={2}>
+        <Box w={2} h={2} bg="#49C3AC" borderRadius="sm" />
+        <Text fontSize="xs" color="rgba(255, 255, 255, 0.5)" fontWeight="600">
+          RÉPARTITION DES ÉMISSIONS
+        </Text>
+      </HStack>
+      
+      <HStack align="flex-end" justify="space-around" h="120px" mt={4}>
+        {bars.map((bar, i) => (
+          <VStack key={i} spacing={2} flex={1}>
+            <Box
+              w="full"
+              maxW="60px"
+              h={`${bar.height}%`}
+              bg="linear-gradient(180deg, #49C3AC 0%, #2D8A7E 100%)"
+              borderRadius="md"
+              position="relative"
+              animation={`${fillBar} 1s ease-out ${delay + 0.2 + i * 0.1}s both`}
+              transformOrigin="bottom"
+              _before={{
+                content: '""',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: '30%',
+                bg: 'rgba(255, 255, 255, 0.2)',
+                borderRadius: 'md',
               }}
-              _active={{ transform: 'scale(0.97)' }}
-              boxShadow="0 12px 30px rgba(38, 89, 102, 0.35)"
-              transition="all 0.25s ease"
-            >
-              🚀 COMMENCER
-            </Button>
-          </Link>
-
-          <Text fontSize="sm" color="gray.500">
-            Accès immédiat · Aucun engagement
-          </Text>
-        </VStack>
-      </Container>
+            />
+            <Text fontSize="xs" color="rgba(255, 255, 255, 0.6)" fontWeight="500">
+              {bar.label}
+            </Text>
+          </VStack>
+        ))}
+      </HStack>
     </Box>
   )
 }
 
+// Line chart component
+const MiniLineChart = ({ delay }: any) => {
+  const points = [
+    { x: 20, y: 80 },
+    { x: 40, y: 60 },
+    { x: 60, y: 65 },
+    { x: 80, y: 45 },
+    { x: 100, y: 30 },
+    { x: 120, y: 35 },
+  ]
 
+  const pathData = points.map((p, i) => 
+    i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`
+  ).join(' ')
+
+  return (
+    <Box
+      bg="rgba(255, 255, 255, 0.03)"
+      backdropFilter="blur(10px)"
+      p={6}
+      borderRadius="xl"
+      border="1px solid rgba(255, 255, 255, 0.08)"
+      animation={`${fadeInUp} 0.6s ease-out ${delay}s both`}
+    >
+      <HStack spacing={2} mb={2}>
+        <Box w={2} h={2} bg="#49C3AC" borderRadius="sm" />
+        <Text fontSize="xs" color="rgba(255, 255, 255, 0.5)" fontWeight="600">
+          TENDANCE DE RÉDUCTION
+        </Text>
+      </HStack>
+
+      <Box position="relative" h="120px" mt={4}>
+        <svg width="100%" height="100%" viewBox="0 0 140 100">
+          {/* Grid lines */}
+          {[25, 50, 75].map((y) => (
+            <line
+              key={y}
+              x1="0"
+              y1={y}
+              x2="140"
+              y2={y}
+              stroke="rgba(255, 255, 255, 0.05)"
+              strokeWidth="1"
+            />
+          ))}
+          
+          {/* Area under curve */}
+          <path
+            d={`${pathData} L 120 100 L 20 100 Z`}
+            fill="url(#gradient)"
+            opacity="0.3"
+          />
+          
+          {/* Line */}
+          <path
+            d={pathData}
+            fill="none"
+            stroke="#49C3AC"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeDasharray="1000"
+            strokeDashoffset="1000"
+            style={{
+              animation: `${drawLine} 2s ease-out ${delay + 0.3}s forwards`
+            }}
+          />
+          
+          {/* Points */}
+          {points.map((p, i) => (
+            <circle
+              key={i}
+              cx={p.x}
+              cy={p.y}
+              r="4"
+              fill="#49C3AC"
+              opacity="0"
+              style={{
+                animation: `${fadeInUp} 0.3s ease-out ${delay + 0.5 + i * 0.1}s both`
+              }}
+            />
+          ))}
+          
+          <defs>
+            <linearGradient id="gradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#49C3AC" stopOpacity="0.4" />
+              <stop offset="100%" stopColor="#49C3AC" stopOpacity="0" />
+            </linearGradient>
+          </defs>
+        </svg>
+        
+        <HStack justify="space-between" mt={2}>
+          <Text fontSize="xs" color="rgba(255, 255, 255, 0.4)">2020</Text>
+          <Text fontSize="xs" color="rgba(255, 255, 255, 0.4)">2025</Text>
+        </HStack>
+      </Box>
+      
+      <HStack justify="space-between" mt={3}>
+        <VStack align="flex-start" spacing={0}>
+          <Text fontSize="xs" color="rgba(255, 255, 255, 0.5)">Réduction</Text>
+          <Text fontSize="lg" color="#49C3AC" fontWeight="700">-62%</Text>
+        </VStack>
+        <VStack align="flex-end" spacing={0}>
+          <Text fontSize="xs" color="rgba(255, 255, 255, 0.5)">Objectif 2030</Text>
+          <Text fontSize="lg" color="white" fontWeight="700">-80%</Text>
+        </VStack>
+      </HStack>
+    </Box>
+  )
+}
+
+// Donut chart component
+const MiniDonutChart = ({ delay }: any) => {
+  const segments = [
+    { percent: 45, color: '#49C3AC', label: 'Transport' },
+    { percent: 30, color: '#2D8A7E', label: 'Énergie' },
+    { percent: 25, color: '#1A5F6F', label: 'Autres' },
+  ]
+
+  let cumulativePercent = 0
+
+  return (
+    <Box
+      bg="rgba(255, 255, 255, 0.03)"
+      backdropFilter="blur(10px)"
+      p={6}
+      borderRadius="xl"
+      border="1px solid rgba(255, 255, 255, 0.08)"
+      animation={`${fadeInUp} 0.6s ease-out ${delay}s both`}
+    >
+      <HStack spacing={2} mb={2}>
+        <Box w={2} h={2} bg="#49C3AC" borderRadius="sm" />
+        <Text fontSize="xs" color="rgba(255, 255, 255, 0.5)" fontWeight="600">
+          SOURCES PRINCIPALES
+        </Text>
+      </HStack>
+
+      <HStack spacing={6} align="center" mt={4}>
+        <Box position="relative" w="100px" h="100px">
+          <svg width="100" height="100" viewBox="0 0 100 100">
+            <circle
+              cx="50"
+              cy="50"
+              r="40"
+              fill="none"
+              stroke="rgba(255, 255, 255, 0.05)"
+              strokeWidth="20"
+            />
+            {segments.map((segment, i) => {
+              const startAngle = (cumulativePercent / 100) * 360 - 90
+              const endAngle = ((cumulativePercent + segment.percent) / 100) * 360 - 90
+              cumulativePercent += segment.percent
+
+              const startRad = (startAngle * Math.PI) / 180
+              const endRad = (endAngle * Math.PI) / 180
+
+              const x1 = 50 + 40 * Math.cos(startRad)
+              const y1 = 50 + 40 * Math.sin(startRad)
+              const x2 = 50 + 40 * Math.cos(endRad)
+              const y2 = 50 + 40 * Math.sin(endRad)
+
+              const largeArc = segment.percent > 50 ? 1 : 0
+
+              return (
+                <path
+                  key={i}
+                  d={`M 50 50 L ${x1} ${y1} A 40 40 0 ${largeArc} 1 ${x2} ${y2} Z`}
+                  fill={segment.color}
+                  opacity="0"
+                  style={{
+                    animation: `${fadeInUp} 0.5s ease-out ${delay + 0.2 + i * 0.15}s both`
+                  }}
+                />
+              )
+            })}
+            <circle cx="50" cy="50" r="25" fill="#0B1F24" />
+          </svg>
+          <VStack
+            position="absolute"
+            top="50%"
+            left="50%"
+            transform="translate(-50%, -50%)"
+            spacing={0}
+          >
+            <Text fontSize="xl" color="white" fontWeight="700">100%</Text>
+            <Text fontSize="2xs" color="rgba(255, 255, 255, 0.5)">Total</Text>
+          </VStack>
+        </Box>
+
+        <VStack align="flex-start" spacing={2} flex={1}>
+          {segments.map((segment, i) => (
+            <HStack key={i} spacing={2} w="full">
+              <Box w={3} h={3} bg={segment.color} borderRadius="sm" />
+              <Text fontSize="xs" color="rgba(255, 255, 255, 0.7)" flex={1}>
+                {segment.label}
+              </Text>
+              <Text fontSize="xs" color="white" fontWeight="600">
+                {segment.percent}%
+              </Text>
+            </HStack>
+          ))}
+        </VStack>
+      </HStack>
+    </Box>
+  )
+}
+
+// Data metric card
+const DataMetric = ({ value, label, trend, delay }: any) => (
+  <Box
+    bg="rgba(255, 255, 255, 0.03)"
+    backdropFilter="blur(10px)"
+    p={5}
+    borderRadius="lg"
+    border="1px solid rgba(255, 255, 255, 0.08)"
+    animation={`${fadeInUp} 0.6s ease-out ${delay}s both`}
+  >
+    <HStack justify="space-between" mb={2}>
+      <Text fontSize="xs" color="rgba(255, 255, 255, 0.5)" fontWeight="600">
+        {label}
+      </Text>
+      {trend && (
+        <HStack spacing={1}>
+          <Text fontSize="xs" color="#49C3AC">↓</Text>
+          <Text fontSize="xs" color="#49C3AC" fontWeight="600">{trend}</Text>
+        </HStack>
+      )}
+    </HStack>
+    <Text fontSize="2xl" color="white" fontWeight="700">
+      {value}
+    </Text>
+  </Box>
+)
+
+export default function Home() {
+  const [scrollY, setScrollY] = useState(0)
+
+  useEffect(() => {
+    const handleScroll = () => setScrollY(window.scrollY)
+    window.addEventListener('scroll', handleScroll)
+    return () => window.removeEventListener('scroll', handleScroll)
+  }, [])
+
+  return (
+    <Box
+      minH="100vh"
+      position="relative"
+      overflow="hidden"
+      bg="#0B1F24"
+    >
+      {/* Subtle gradient background */}
+      <Box
+        position="absolute"
+        top="0"
+        left="0"
+        right="0"
+        bottom="0"
+        bgGradient="linear(to-br, #0B1F24 0%, #154350 50%, #1A5F6F 100%)"
+        opacity="0.9"
+      />
+
+      {/* Subtle grid pattern */}
+      <Box
+        position="absolute"
+        top="0"
+        left="0"
+        right="0"
+        bottom="0"
+        opacity="0.03"
+        backgroundImage="linear-gradient(rgba(73, 195, 172, 0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(73, 195, 172, 0.5) 1px, transparent 1px)"
+        backgroundSize="50px 50px"
+      />
+
+      {/* Subtle accent glow */}
+      <Box
+        position="absolute"
+        top="20%"
+        right="10%"
+        w="400px"
+        h="400px"
+        borderRadius="full"
+        bg="radial-gradient(circle, rgba(73, 195, 172, 0.08) 0%, transparent 70%)"
+        pointerEvents="none"
+        style={{
+          transform: `translateY(${scrollY * 0.2}px)`,
+        }}
+      />
+
+      {/* Main content */}
+      <Container maxW="container.xl" position="relative" zIndex={1} py={16}>
+        <VStack spacing={12}>
+          {/* Hero section */}
+          <VStack spacing={6} maxW="800px" textAlign="center">
+            {/* Badge */}
+            <Box
+              animation={`${fadeInUp} 0.6s ease-out`}
+              display="inline-block"
+            >
+              <HStack
+                spacing={2}
+                px={4}
+                py={2}
+                bg="rgba(73, 195, 172, 0.1)"
+                border="1px solid rgba(73, 195, 172, 0.2)"
+                borderRadius="full"
+                fontSize="sm"
+                color="rgba(255, 255, 255, 0.8)"
+              >
+                <Box w={2} h={2} bg="#49C3AC" borderRadius="full" animation={`${pulse} 2s ease-in-out infinite`} />
+                <Text fontWeight="500">Solution professionnelle de gestion carbone</Text>
+              </HStack>
+            </Box>
+
+            {/* Main heading */}
+            <Heading
+              fontSize={{ base: '4xl', md: '6xl', lg: '7xl' }}
+              fontWeight="700"
+              color="white"
+              animation={`${fadeInUp} 0.6s ease-out 0.1s both`}
+              letterSpacing="tight"
+              lineHeight="1.1"
+            >
+              Carbone Québec
+            </Heading>
+            
+            <Text
+              fontSize={{ base: 'lg', md: 'xl' }}
+              color="rgba(255, 255, 255, 0.7)"
+              maxW="600px"
+              fontWeight="400"
+              animation={`${fadeInUp} 0.6s ease-out 0.2s both`}
+              lineHeight="1.8"
+            >
+              Plateforme complète pour le calcul, le suivi et le reporting de vos émissions de gaz à effet de serre. Conforme aux standards internationaux.
+            </Text>
+
+            {/* CTA Buttons */}
+            <HStack
+              spacing={4}
+              animation={`${fadeInUp} 0.6s ease-out 0.3s both`}
+              flexWrap="wrap"
+              justify="center"
+            >
+              <Link href="/intro" passHref legacyBehavior>
+                <Button
+                  as="a"
+                  size="lg"
+                  px={8}
+                  py={6}
+                  rounded="lg"
+                  fontWeight="600"
+                  fontSize="md"
+                  bg="#49C3AC"
+                  color="white"
+                  _hover={{
+                    bg: '#3AB39B',
+                    transform: 'translateY(-2px)',
+                    boxShadow: '0 10px 30px rgba(73, 195, 172, 0.3)',
+                  }}
+                  _active={{ transform: 'translateY(0)' }}
+                  boxShadow="0 4px 14px rgba(73, 195, 172, 0.2)"
+                  transition="all 0.2s ease"
+                >
+                  Commencer l'évaluation
+                </Button>
+              </Link>
+
+              <Button
+                size="lg"
+                px={8}
+                py={6}
+                rounded="lg"
+                fontWeight="600"
+                fontSize="md"
+                bg="transparent"
+                color="white"
+                border="1px solid rgba(255, 255, 255, 0.2)"
+                _hover={{
+                  bg: 'rgba(255, 255, 255, 0.05)',
+                  borderColor: 'rgba(255, 255, 255, 0.3)',
+                }}
+                transition="all 0.2s ease"
+              >
+                En savoir plus
+              </Button>
+            </HStack>
+
+            {/* Trust indicators */}
+            <HStack
+              spacing={6}
+              pt={4}
+              flexWrap="wrap"
+              justify="center"
+              animation={`${fadeInUp} 0.6s ease-out 0.4s both`}
+              color="rgba(255, 255, 255, 0.5)"
+              fontSize="sm"
+              divider={<Text>•</Text>}
+            >
+              <Text>Accès immédiat</Text>
+              <Text>Aucun engagement</Text>
+              <Text>Données sécurisées</Text>
+            </HStack>
+          </VStack>
+
+          {/* Data metrics row */}
+          <SimpleGrid columns={{ base: 2, md: 4 }} spacing={4} w="full" maxW="1100px">
+            <DataMetric value="2,500+" label="ORGANISATIONS" delay="0.5" />
+            <DataMetric value="50K+" label="TONNES CO₂" trend="12%" delay="0.55" />
+            <DataMetric value="98%" label="SATISFACTION" delay="0.6" />
+            <DataMetric value="156" label="RAPPORTS/MOIS" trend="8%" delay="0.65" />
+          </SimpleGrid>
+
+          {/* Charts section */}
+          <Grid
+            templateColumns={{ base: '1fr', md: 'repeat(3, 1fr)' }}
+            gap={6}
+            w="full"
+            maxW="1100px"
+          >
+            <MiniLineChart delay="0.7" />
+            <MiniBarChart delay="0.75" />
+            <MiniDonutChart delay="0.8" />
+          </Grid>
+
+          {/* Features grid */}
+          <SimpleGrid
+            columns={{ base: 1, md: 3 }}
+            spacing={6}
+            w="full"
+            maxW="1100px"
+          >
+            <FeatureCard
+              icon="📊"
+              title="Analyse précise"
+              description="Calculs conformes aux protocoles GHG et ISO 14064 pour des résultats fiables."
+              delay="0.85"
+            />
+            <FeatureCard
+              icon="⚡"
+              title="Génération automatique"
+              description="Rapports professionnels générés en quelques clics, prêts à être partagés."
+              delay="0.9"
+            />
+            <FeatureCard
+              icon="🔒"
+              title="Conformité garantie"
+              description="Respect des normes environnementales et protection complète de vos données."
+              delay="0.95"
+            />
+          </SimpleGrid>
+        </VStack>
+      </Container>
+
+      {/* Bottom accent line */}
+      <Box
+        position="absolute"
+        bottom="0"
+        left="0"
+        right="0"
+        height="1px"
+        bgGradient="linear(to-r, transparent, rgba(73, 195, 172, 0.3), transparent)"
+      />
+    </Box>
+  )
+}
 // 'use client'
 // import Section from "#components/postes/maincomponent"
 
