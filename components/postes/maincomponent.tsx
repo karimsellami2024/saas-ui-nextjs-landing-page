@@ -21,6 +21,8 @@ import DashboardPage from "#components/postes/dash";
 import Categorie1Page from "#components/postes/Categorie1/main";
 import Categorie2EnergiePage from "#components/postes/-Categorie2-poste6/main";
 import Categorie3Page from "#components/postes/Categorie 3/main";
+import Categorie4Page from "#components/postes/Categorie4/main";
+import Categorie5Page from "#components/postes/Categorie5/main";
 
 import NotificationsPage from "#components/postes/entreprise";
 import { HiddenPostePlaceholder } from "../../components/postes/HiddenPostePlaceholder";
@@ -63,8 +65,8 @@ const menuToIsoCategory = (menuKey: string): IsoCategoryKey => {
   if (["combustion_fixes", "combustion_mobiles", "procedes", "refrigerants", "sols"].includes(menuKey)) return "cat1";
   if (["products", "autre_energie"].includes(menuKey)) return "cat2";
   if (["p31", "p32", "p33", "p34", "p35"].includes(menuKey)) return "cat3";
-  if (["p9", "p10", "p11", "p14"].includes(menuKey)) return "cat4";
-  if (["p18", "p21", "p19", "p15", "p20"].includes(menuKey)) return "cat5";
+  if (["p41", "p43"].includes(menuKey)) return "cat4";
+  if (["p51", "p52"].includes(menuKey)) return "cat5";
   return "cat6";
 };
 
@@ -72,8 +74,8 @@ const defaultMenuForCategory: Record<IsoCategoryKey, string> = {
   cat1: "combustion_fixes",
   cat2: "products",
   cat3: "p31",
-  cat4: "p9",
-  cat5: "p18",
+  cat4: "p41",
+  cat5: "p51",
   cat6: "p23",
 };
 
@@ -143,6 +145,18 @@ const POSTE_META: Record<string, { groupTitle: string; posteTitle: string; descr
     description: "Autres énergies importées — à venir.",
   },
 
+  // Cat 4
+  p41: {
+    groupTitle: "Émissions indirectes hors énergie et transport",
+    posteTitle: "Catégorie 4",
+    description: "4.1 — Technologies numériques et consommables de bureau.",
+  },
+  p43: {
+    groupTitle: "Émissions indirectes hors énergie et transport",
+    posteTitle: "Catégorie 4",
+    description: "4.3 — Traitement des eaux usées.",
+  },
+
   // Cat 3 (new)
   p31: {
     groupTitle: "Émissions indirects des transports",
@@ -168,6 +182,18 @@ const POSTE_META: Record<string, { groupTitle: string; posteTitle: string; descr
     groupTitle: "Émissions indirects des transports",
     posteTitle: "Poste 3",
     description: "3.5 — Déplacement d'affaires.",
+  },
+
+  // Cat 5
+  p51: {
+    groupTitle: "Émissions indirectes liées à l'utilisation des produits vendus",
+    posteTitle: "Catégorie 5",
+    description: "5.1 — Utilisation directe des produits vendus (énergie).",
+  },
+  p52: {
+    groupTitle: "Émissions indirectes liées à l'utilisation des produits vendus",
+    posteTitle: "Catégorie 5",
+    description: "5.2 — Fin de vie des produits vendus.",
   },
 };
 
@@ -242,7 +268,9 @@ export default function Section() {
 
   const isPosteKey = (k: string) =>
     ["combustion_fixes", "combustion_mobiles", "refrigerants", "products", "autre_energie", "procedes", "sols"].includes(k) ||
-    ["p31", "p32", "p33", "p34", "p35"].includes(k);
+    ["p31", "p32", "p33", "p34", "p35"].includes(k) ||
+    ["p41", "p43"].includes(k) ||
+    ["p51", "p52"].includes(k);
 
   const currentMeta = typeof selectedMenu === "string" ? POSTE_META[selectedMenu] : undefined;
   const groupTitle = currentMeta?.groupTitle ?? "Section";
@@ -270,6 +298,18 @@ export default function Section() {
         { key: "p33", title: "3.3 Navettage des employés" },
         { key: "p34", title: "3.4 Déplacement des clients" },
         { key: "p35", title: "3.5 Déplacement d'affaires" },
+      ];
+    }
+    if (activeCategory === "cat4") {
+      return [
+        { key: "p41", title: "4.1 Numérique & consommables" },
+        { key: "p43", title: "4.3 Eaux usées" },
+      ];
+    }
+    if (activeCategory === "cat5") {
+      return [
+        { key: "p51", title: "5.1 Utilisation des produits" },
+        { key: "p52", title: "5.2 Fin de vie des produits" },
       ];
     }
     return [];
@@ -428,11 +468,27 @@ export default function Section() {
               )
             }
 
-            {/* ✅ Cat 3 (NEW): always pass activeSubKey to main router */}
+            {/* ✅ Cat 3 */}
             {["p31","p32","p33","p34","p35"].includes(String(selectedMenu)) &&
               renderOrPlaceholder(
                 String(selectedMenu),
                 <Categorie3Page activeSubKey={String(selectedMenu)} />
+              )
+            }
+
+            {/* ✅ Cat 4 */}
+            {["p41","p43"].includes(String(selectedMenu)) &&
+              renderOrPlaceholder(
+                String(selectedMenu),
+                <Categorie4Page activeSubKey={String(selectedMenu)} />
+              )
+            }
+
+            {/* ✅ Cat 5 */}
+            {["p51","p52"].includes(String(selectedMenu)) &&
+              renderOrPlaceholder(
+                String(selectedMenu),
+                <Categorie5Page activeSubKey={String(selectedMenu)} />
               )
             }
 

@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     if (!userId) {
       return res.status(400).json({ error: "Missing user_id" });
     }
-    if (!data || typeof data !== 'object' || !Array.isArray(data.counters)) {
+    if (!data || typeof data !== 'object') {
       return res.status(400).json({ error: "Missing or invalid data structure" });
     }
     if (!poste_num) {

@@ -54,25 +54,41 @@ export default function CompanyInfoForm({ userId, onComplete }: CompanyInfoFormP
       /* ------------------------------------------------------------------ */
       /* 2) Create postes                                                    */
       /* ------------------------------------------------------------------ */
-      // ✅ IMPORTANT: Catégorie 1 = poste 1, Catégorie 2 = poste 2, Catégorie 3 = poste 3
-      // We DO NOT create an extra poste 6 anymore (it was causing confusion).
+      // ✅ Catégorie N = poste N (ISO 14064-4 mapping, categories 1–6)
       const defaultPostes: PosteInsert[] = [
         {
-          label: "Catégorie 1 - Émissions directs",
+          label: "Catégorie 1 - Émissions directes",
           num: 1,
           enabled: true,
           company_id: companyData.id,
         },
         {
-          label: "Catégorie 2 - Émissions indirects de l'énergie importée",
+          label: "Catégorie 2 - Émissions indirectes de l'énergie importée",
           num: 2,
           enabled: true,
           company_id: companyData.id,
         },
         {
-          // ✅ This is now explicitly poste 3
-          label: "Catégorie 3 - Émissions indirects des transports",
+          label: "Catégorie 3 - Émissions indirectes des transports",
           num: 3,
+          enabled: true,
+          company_id: companyData.id,
+        },
+        {
+          label: "Catégorie 4 - Émissions indirectes hors énergie et transport",
+          num: 4,
+          enabled: true,
+          company_id: companyData.id,
+        },
+        {
+          label: "Catégorie 5 - Émissions indirectes liées à l'utilisation des produits",
+          num: 5,
+          enabled: true,
+          company_id: companyData.id,
+        },
+        {
+          label: "Catégorie 6 - Autres émissions indirectes",
+          num: 6,
           enabled: true,
           company_id: companyData.id,
         },
@@ -96,10 +112,16 @@ export default function CompanyInfoForm({ userId, onComplete }: CompanyInfoFormP
       const poste1Id = postesByNum[1]?.id;
       const poste2Id = postesByNum[2]?.id;
       const poste3Id = postesByNum[3]?.id;
+      const poste4Id = postesByNum[4]?.id;
+      const poste5Id = postesByNum[5]?.id;
+      const poste6Id = postesByNum[6]?.id;
 
       if (!poste1Id) throw new Error("Poste 1 introuvable");
       if (!poste2Id) throw new Error("Poste 2 introuvable");
       if (!poste3Id) throw new Error("Poste 3 introuvable");
+      if (!poste4Id) throw new Error("Poste 4 introuvable");
+      if (!poste5Id) throw new Error("Poste 5 introuvable");
+      if (!poste6Id) throw new Error("Poste 6 introuvable");
 
       /* ------------------------------------------------------------------ */
       /* 4) Assign sources                                                   */
@@ -171,6 +193,90 @@ export default function CompanyInfoForm({ userId, onComplete }: CompanyInfoFormP
           poste_id: poste3Id,
           source_code: "3A1",
           label: "Navettage des employés",
+          enabled: true,
+        },
+
+        /* ---------- POSTE 4 : Catégorie 4 – Hors énergie et transport ---------- */
+        {
+          poste_id: poste4Id,
+          source_code: "4.1A2",
+          label: "Appareils numériques (achetés cette période)",
+          enabled: true,
+        },
+        {
+          poste_id: poste4Id,
+          source_code: "4.1B1",
+          label: "Réseaux et transfert de données",
+          enabled: true,
+        },
+        {
+          poste_id: poste4Id,
+          source_code: "4.1C1",
+          label: "Salles de serveurs (consommation électrique)",
+          enabled: true,
+        },
+        {
+          poste_id: poste4Id,
+          source_code: "4.1D1",
+          label: "Papier d'imprimante",
+          enabled: true,
+        },
+        {
+          poste_id: poste4Id,
+          source_code: "4.1E1",
+          label: "Production des aliments",
+          enabled: true,
+        },
+        {
+          poste_id: poste4Id,
+          source_code: "4.1E2",
+          label: "Production des repas et boissons",
+          enabled: true,
+        },
+        {
+          poste_id: poste4Id,
+          source_code: "4.3A1",
+          label: "Traitement des eaux usées",
+          enabled: true,
+        },
+
+        /* ---------- POSTE 5 : Catégorie 5 – Utilisation des produits ---------- */
+        {
+          poste_id: poste5Id,
+          source_code: "5.1A1",
+          label: "Produits vendus consommant de l'électricité",
+          enabled: true,
+        },
+        {
+          poste_id: poste5Id,
+          source_code: "5.1B1",
+          label: "Produits vendus consommant des combustibles",
+          enabled: true,
+        },
+        {
+          poste_id: poste5Id,
+          source_code: "5.2A1",
+          label: "Mise en décharge des produits vendus",
+          enabled: true,
+        },
+        {
+          poste_id: poste5Id,
+          source_code: "5.2B1",
+          label: "Recyclage / incinération des produits vendus",
+          enabled: true,
+        },
+
+        /* ---------- POSTE 6 : Catégorie 6 – Autres émissions indirectes ---------- */
+        {
+          poste_id: poste6Id,
+          source_code: "6A1",
+          label: "Quantité d'électricité (Location-based)",
+          enabled: true,
+        },
+        {
+          poste_id: poste6Id,
+          source_code: "6B1",
+          label: "Quantité d'électricité (Market-based)",
           enabled: true,
         },
       ];
