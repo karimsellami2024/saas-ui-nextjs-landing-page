@@ -1,625 +1,444 @@
+'use client'
 import React, { useState } from "react";
-import { Box, Button, Input, VStack, Text } from "@chakra-ui/react";
+import {
+  Box, Button, Input, VStack, HStack, Text, Heading,
+  IconButton, Select, Badge, Flex, Grid, GridItem,
+} from "@chakra-ui/react";
 import { supabase } from "../../../lib/supabaseClient";
 
+/* ─── Palette ─── */
+const G = {
+  brand:  "#344E41",
+  accent: "#588157",
+  soft:   "#DDE5E0",
+  bg:     "#F5F6F4",
+  border: "#E4E6E1",
+  muted:  "#6B7A72",
+  white:  "#FFFFFF",
+  error:  "#E53E3E",
+};
+
+/* ─── Types ─── */
 interface CompanyInfoFormProps {
   userId: string;
   onComplete: () => void;
 }
+type Poste         = { id: string; label: string; num: number; enabled: boolean; company_id: string };
+type PosteInsert   = { label: string; num: number; enabled: boolean; company_id: string };
+type PostSrcInsert = { poste_id: string; source_code: string; label: string; enabled: boolean };
+type Lieu          = { nom: string; description: string; adresse: string };
+type ProdItem      = { nom: string; description: string; quantite: string; unite: string };
+type SvcItem       = { nom: string; description: string; quantite: string; unite: string };
 
-type Poste = {
-  id: string;
-  label: string;
-  num: number;
-  enabled: boolean;
-  company_id: string;
-};
+const emptyLieu: Lieu    = { nom: "", description: "", adresse: "" };
+const emptyProd: ProdItem = { nom: "", description: "", quantite: "", unite: "" };
+const emptySvc: SvcItem  = { nom: "", description: "", quantite: "", unite: "" };
 
-type PosteInsert = {
-  label: string;
-  num: number;
-  enabled: boolean;
-  company_id: string;
-};
+const STEPS = [
+  { num: 1, label: "Entreprise"  },
+  { num: 2, label: "Sites"       },
+  { num: 3, label: "Produits"    },
+  { num: 4, label: "Services"    },
+]
 
-type PostSourceInsert = {
-  poste_id: string;
-  source_code: string;
-  label: string;
-  enabled: boolean;
-};
-
+/* ══════════════════════════════════════════
+   COMPONENT
+══════════════════════════════════════════ */
 export default function CompanyInfoForm({ userId, onComplete }: CompanyInfoFormProps) {
-  const [company, setCompany] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [step,     setStep]     = useState(1);
+  const [company,  setCompany]  = useState("");
+  const [lieux,    setLieux]    = useState<Lieu[]>([{ ...emptyLieu }]);
+  const [products, setProducts] = useState<ProdItem[]>([{ ...emptyProd }]);
+  const [services, setServices] = useState<SvcItem[]>([{ ...emptySvc }]);
+  const [loading,  setLoading]  = useState(false);
+  const [error,    setError]    = useState("");
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  /* ── helpers ── */
+  const updLieu = <K extends keyof Lieu>(i: number, k: K, v: Lieu[K]) =>
+    setLieux(p => { const c = [...p]; c[i] = { ...c[i], [k]: v }; return c; });
+  const updProd = <K extends keyof ProdItem>(i: number, k: K, v: ProdItem[K]) =>
+    setProducts(p => { const c = [...p]; c[i] = { ...c[i], [k]: v }; return c; });
+  const updSvc  = <K extends keyof SvcItem>(i: number, k: K, v: SvcItem[K]) =>
+    setServices(p => { const c = [...p]; c[i] = { ...c[i], [k]: v }; return c; });
+
+  const removeRow = <T,>(arr: T[], set: (v: T[]) => void, i: number) => {
+    if (arr.length > 1) set([...arr.slice(0, i), ...arr.slice(i + 1)]);
+  };
+
+  /* ── submit ── */
+  async function handleSubmit() {
     setLoading(true);
     setError("");
-
     try {
-      /* ------------------------------------------------------------------ */
-      /* 1) Create company                                                   */
-      /* ------------------------------------------------------------------ */
-      const { data: companyData, error: companyError } = await supabase
+      /* 1) Company */
+      const { data: co, error: coErr } = await supabase
         .from("companies")
-        .insert([{ name: company }])
-        .select()
-        .single();
+        .insert([{
+          name: company.trim(),
+          production_sites: lieux.filter(l => l.nom.trim()),
+          products: products.filter(p => p.nom.trim()),
+          services: services.filter(s => s.nom.trim()),
+        }])
+        .select().single();
+      if (coErr) throw new Error(coErr.message);
 
-      if (companyError) throw new Error(companyError.message);
-
-      /* ------------------------------------------------------------------ */
-      /* 2) Create postes                                                    */
-      /* ------------------------------------------------------------------ */
-      // ✅ Catégorie N = poste N (ISO 14064-4 mapping, categories 1–6)
-      const defaultPostes: PosteInsert[] = [
-        {
-          label: "Catégorie 1 - Émissions directes",
-          num: 1,
-          enabled: true,
-          company_id: companyData.id,
-        },
-        {
-          label: "Catégorie 2 - Émissions indirectes de l'énergie importée",
-          num: 2,
-          enabled: true,
-          company_id: companyData.id,
-        },
-        {
-          label: "Catégorie 3 - Émissions indirectes des transports",
-          num: 3,
-          enabled: true,
-          company_id: companyData.id,
-        },
-        {
-          label: "Catégorie 4 - Émissions indirectes hors énergie et transport",
-          num: 4,
-          enabled: true,
-          company_id: companyData.id,
-        },
-        {
-          label: "Catégorie 5 - Émissions indirectes liées à l'utilisation des produits",
-          num: 5,
-          enabled: true,
-          company_id: companyData.id,
-        },
-        {
-          label: "Catégorie 6 - Autres émissions indirectes",
-          num: 6,
-          enabled: true,
-          company_id: companyData.id,
-        },
+      /* 2) Postes */
+      const postesRows: PosteInsert[] = [
+        { label: "Catégorie 1 - Émissions directes",                                       num: 1, enabled: true, company_id: co.id },
+        { label: "Catégorie 2 - Émissions indirectes de l'énergie importée",               num: 2, enabled: true, company_id: co.id },
+        { label: "Catégorie 3 - Émissions indirectes des transports",                      num: 3, enabled: true, company_id: co.id },
+        { label: "Catégorie 4 - Émissions indirectes hors énergie et transport",           num: 4, enabled: true, company_id: co.id },
+        { label: "Catégorie 5 - Émissions indirectes liées à l'utilisation des produits",  num: 5, enabled: true, company_id: co.id },
+        { label: "Catégorie 6 - Autres émissions indirectes",                              num: 6, enabled: true, company_id: co.id },
       ];
+      const { data: postesData, error: postesErr } = await supabase.from("postes").insert(postesRows).select();
+      if (postesErr) throw new Error(postesErr.message);
 
-      const { data: postesData, error: postesError } = await supabase
-        .from("postes")
-        .insert(defaultPostes)
-        .select();
+      /* 3) Poste IDs */
+      const byNum: Record<number, Poste> = {};
+      (postesData as Poste[]).forEach(p => { byNum[p.num] = p; });
+      const [p1, p2, p3, p4, p5, p6] = [1,2,3,4,5,6].map(n => byNum[n]?.id);
+      if (!p1||!p2||!p3||!p4||!p5||!p6) throw new Error("Erreur de création des postes");
 
-      if (postesError) throw new Error(postesError.message);
-
-      /* ------------------------------------------------------------------ */
-      /* 3) Build poste map                                                  */
-      /* ------------------------------------------------------------------ */
-      const postesByNum: Record<number, Poste> = {};
-      (postesData as Poste[]).forEach((p) => {
-        postesByNum[p.num] = p;
-      });
-
-      const poste1Id = postesByNum[1]?.id;
-      const poste2Id = postesByNum[2]?.id;
-      const poste3Id = postesByNum[3]?.id;
-      const poste4Id = postesByNum[4]?.id;
-      const poste5Id = postesByNum[5]?.id;
-      const poste6Id = postesByNum[6]?.id;
-
-      if (!poste1Id) throw new Error("Poste 1 introuvable");
-      if (!poste2Id) throw new Error("Poste 2 introuvable");
-      if (!poste3Id) throw new Error("Poste 3 introuvable");
-      if (!poste4Id) throw new Error("Poste 4 introuvable");
-      if (!poste5Id) throw new Error("Poste 5 introuvable");
-      if (!poste6Id) throw new Error("Poste 6 introuvable");
-
-      /* ------------------------------------------------------------------ */
-      /* 4) Assign sources                                                   */
-      /* ------------------------------------------------------------------ */
-      // ✅ Poste 1 = category 1 (directs) → 1A1 + (2A1/2A3/2B1) + (4A1/4B1/4B2)
-      // ✅ Poste 2 = category 2 (énergie importée) → 6A1 + 6B1
-      // ✅ Poste 3 = category 3 (transports) → 3A1 (Navettage)
-      const sourcesToInsert: PostSourceInsert[] = [
-        /* ---------- POSTE 1 : Catégorie 1 – Émissions directs ---------- */
-        {
-          poste_id: poste1Id,
-          source_code: "1A1",
-          label: "Quantité de combustible comptabilisé à partir des factures",
-          enabled: true,
-        },
-        {
-          poste_id: poste1Id,
-          source_code: "2A1",
-          label: "Quantité de combustible comptabilisé à partir des factures",
-          enabled: true,
-        },
-        {
-          poste_id: poste1Id,
-          source_code: "2B1",
-          label: "Par la distance parcourue (Marque, modèle, année connus)",
-          enabled: true,
-        },
-        {
-          poste_id: poste1Id,
-          source_code: "2A3",
-          label: "À partir des coûts d'essence",
-          enabled: true,
-        },
-        {
-          poste_id: poste1Id,
-          source_code: "4A1",
-          label: "Quantité rapportée par le frigoriste",
-          enabled: true,
-        },
-        {
-          poste_id: poste1Id,
-          source_code: "4B1",
-          label: "Moyenne de l'industrie (climatisation véhicules)",
-          enabled: true,
-        },
-        {
-          poste_id: poste1Id,
-          source_code: "4B2",
-          label: "Données des véhicules (climatisation véhicules)",
-          enabled: true,
-        },
-
-        /* ---------- POSTE 2 : Catégorie 2 – Énergie importée ---------- */
-        {
-          poste_id: poste2Id,
-          source_code: "6A1",
-          label: "Quantité d'électricité comptabilisée à partir des factures (Location-based)",
-          enabled: true,
-        },
-        {
-          poste_id: poste2Id,
-          source_code: "6B1",
-          label: "Quantité d'électricité comptabilisée à partir des factures (Market-based)",
-          enabled: true,
-        },
-
-        /* ---------- POSTE 3 : Catégorie 3 – Transports ---------- */
-        {
-          poste_id: poste3Id,
-          source_code: "3A1",
-          label: "Navettage des employés",
-          enabled: true,
-        },
-
-        /* ---------- POSTE 4 : Catégorie 4 – Hors énergie et transport ---------- */
-        {
-          poste_id: poste4Id,
-          source_code: "4.1A2",
-          label: "Appareils numériques (achetés cette période)",
-          enabled: true,
-        },
-        {
-          poste_id: poste4Id,
-          source_code: "4.1B1",
-          label: "Réseaux et transfert de données",
-          enabled: true,
-        },
-        {
-          poste_id: poste4Id,
-          source_code: "4.1C1",
-          label: "Salles de serveurs (consommation électrique)",
-          enabled: true,
-        },
-        {
-          poste_id: poste4Id,
-          source_code: "4.1D1",
-          label: "Papier d'imprimante",
-          enabled: true,
-        },
-        {
-          poste_id: poste4Id,
-          source_code: "4.1E1",
-          label: "Production des aliments",
-          enabled: true,
-        },
-        {
-          poste_id: poste4Id,
-          source_code: "4.1E2",
-          label: "Production des repas et boissons",
-          enabled: true,
-        },
-        {
-          poste_id: poste4Id,
-          source_code: "4.3A1",
-          label: "Traitement des eaux usées",
-          enabled: true,
-        },
-
-        /* ---------- POSTE 5 : Catégorie 5 – Utilisation des produits ---------- */
-        {
-          poste_id: poste5Id,
-          source_code: "5.1A1",
-          label: "Produits vendus consommant de l'électricité",
-          enabled: true,
-        },
-        {
-          poste_id: poste5Id,
-          source_code: "5.1B1",
-          label: "Produits vendus consommant des combustibles",
-          enabled: true,
-        },
-        {
-          poste_id: poste5Id,
-          source_code: "5.2A1",
-          label: "Mise en décharge des produits vendus",
-          enabled: true,
-        },
-        {
-          poste_id: poste5Id,
-          source_code: "5.2B1",
-          label: "Recyclage / incinération des produits vendus",
-          enabled: true,
-        },
-
-        /* ---------- POSTE 6 : Catégorie 6 – Autres émissions indirectes ---------- */
-        {
-          poste_id: poste6Id,
-          source_code: "6A1",
-          label: "Quantité d'électricité (Location-based)",
-          enabled: true,
-        },
-        {
-          poste_id: poste6Id,
-          source_code: "6B1",
-          label: "Quantité d'électricité (Market-based)",
-          enabled: true,
-        },
+      /* 4) Sources */
+      const sources: PostSrcInsert[] = [
+        /* Cat 1 */ { poste_id: p1, source_code: "1A1",   label: "Quantité de combustible comptabilisé à partir des factures", enabled: true },
+                    { poste_id: p1, source_code: "2A1",   label: "Quantité de combustible comptabilisé à partir des factures", enabled: true },
+                    { poste_id: p1, source_code: "2B1",   label: "Par la distance parcourue (Marque, modèle, année connus)",   enabled: true },
+                    { poste_id: p1, source_code: "2A3",   label: "À partir des coûts d'essence",                               enabled: true },
+                    { poste_id: p1, source_code: "4A1",   label: "Quantité rapportée par le frigoriste",                       enabled: true },
+                    { poste_id: p1, source_code: "4B1",   label: "Moyenne de l'industrie (climatisation véhicules)",           enabled: true },
+                    { poste_id: p1, source_code: "4B2",   label: "Données des véhicules (climatisation véhicules)",            enabled: true },
+        /* Cat 2 */ { poste_id: p2, source_code: "6A1",   label: "Quantité d'électricité — Location-based",                   enabled: true },
+                    { poste_id: p2, source_code: "6B1",   label: "Quantité d'électricité — Market-based",                     enabled: true },
+        /* Cat 3 */ { poste_id: p3, source_code: "3A1",   label: "Navettage des employés",                                    enabled: true },
+        /* Cat 4 */ { poste_id: p4, source_code: "4.1A2", label: "Appareils numériques (achetés cette période)",              enabled: true },
+                    { poste_id: p4, source_code: "4.1B1", label: "Réseaux et transfert de données",                           enabled: true },
+                    { poste_id: p4, source_code: "4.1C1", label: "Salles de serveurs (consommation électrique)",              enabled: true },
+                    { poste_id: p4, source_code: "4.1D1", label: "Papier d'imprimante",                                       enabled: true },
+                    { poste_id: p4, source_code: "4.1E1", label: "Cartouches d'encre et toner",                               enabled: true },
+                    { poste_id: p4, source_code: "4.1E2", label: "Piles et batteries",                                        enabled: true },
+                    { poste_id: p4, source_code: "4.3A1", label: "Traitement des eaux usées",                                 enabled: true },
+        /* Cat 5 */ { poste_id: p5, source_code: "5.1A1", label: "Produits vendus consommant de l'électricité",              enabled: true },
+                    { poste_id: p5, source_code: "5.1B1", label: "Produits vendus consommant des combustibles",               enabled: true },
+                    { poste_id: p5, source_code: "5.2A1", label: "Mise en décharge des produits vendus",                     enabled: true },
+                    { poste_id: p5, source_code: "5.2B1", label: "Recyclage / incinération des produits vendus",             enabled: true },
+        /* Cat 6 */ { poste_id: p6, source_code: "6A1",   label: "Quantité d'électricité (Location-based)",                  enabled: true },
+                    { poste_id: p6, source_code: "6B1",   label: "Quantité d'électricité (Market-based)",                    enabled: true },
       ];
+      const { error: srcErr } = await supabase.from("poste_sources").insert(sources);
+      if (srcErr) throw new Error(srcErr.message);
 
-      const { error: sourcesError } = await supabase.from("poste_sources").insert(sourcesToInsert);
-      if (sourcesError) throw new Error(sourcesError.message);
+      /* 5) Visibility */
+      await supabase.from("poste_visibility").insert(
+        (postesData as Poste[]).map(p => ({ user_id: userId, poste_id: p.id, is_hidden: false }))
+      );
+      await supabase.from("poste_source_visibility").insert(
+        sources.map(s => ({ user_id: userId, poste_id: s.poste_id, source_code: s.source_code, is_hidden: false }))
+      );
 
-      /* ------------------------------------------------------------------ */
-      /* 5) Visibility defaults                                              */
-      /* ------------------------------------------------------------------ */
-      const posteVisibilityRows = (postesData as Poste[]).map((p) => ({
-        user_id: userId,
-        poste_id: p.id,
-        is_hidden: false,
-      }));
+      /* 6) User profile */
+      const { error: profErr } = await supabase.from("user_profiles").upsert(
+        [{ id: userId, company_id: co.id, role: "admin" }],
+        { onConflict: "id" }
+      );
+      if (profErr) throw new Error(profErr.message);
 
-      const { error: visError } = await supabase.from("poste_visibility").insert(posteVisibilityRows);
-      // don't block signup on duplicates etc
-      if (visError) {
-        // optionally console.log(visError)
-      }
-
-      const posteSourceVisibilityRows = sourcesToInsert.map((s) => ({
-        user_id: userId,
-        poste_id: s.poste_id,
-        source_code: s.source_code,
-        is_hidden: false,
-      }));
-
-      const { error: srcVisError } = await supabase
-        .from("poste_source_visibility")
-        .insert(posteSourceVisibilityRows);
-
-      if (srcVisError) {
-        // optionally console.log(srcVisError)
-      }
-
-      /* ------------------------------------------------------------------ */
-      /* 6) Update user profile                                              */
-      /* ------------------------------------------------------------------ */
-      const { error: profileError } = await supabase
-        .from("user_profiles")
-        .upsert(
-          [
-            {
-              id: userId,
-              company_id: companyData.id,
-              role: "admin",
-            },
-          ],
-          { onConflict: "id" }
-        );
-
-      if (profileError) throw new Error(profileError.message);
-
-      setLoading(false);
       onComplete();
     } catch (err: any) {
-      setLoading(false);
       setError(err?.message || "Erreur inconnue");
+    } finally {
+      setLoading(false);
     }
   }
 
+  /* ══════════ RENDER ══════════ */
   return (
-    <Box mt={8} p={6} rounded="xl" bg="white" boxShadow="md">
-      <form onSubmit={handleSubmit}>
-        <VStack spacing={4}>
-          <Text fontWeight="bold" fontSize="xl" color="#00496F">
-            Renseignez votre entreprise
+    <Box
+      w="full" maxW="680px" mx="auto"
+      bg={G.white} borderRadius="24px"
+      boxShadow="0 20px 60px rgba(0,0,0,0.12)"
+      overflow="hidden"
+    >
+      {/* ── Header ── */}
+      <Box bgGradient={`linear(135deg, #1B2E25 0%, ${G.brand} 100%)`} px={8} pt={8} pb={6}>
+        <Text fontSize="xs" fontWeight="700" color="rgba(255,255,255,0.55)" letterSpacing="widest" textTransform="uppercase" mb={2}>
+          Carbone Québec
+        </Text>
+        <Heading fontSize="xl" color="white" fontWeight="800" mb={1}>
+          Configurez votre organisation
+        </Heading>
+        <Text fontSize="sm" color="rgba(255,255,255,0.6)">
+          Ces informations seront utilisées dans votre bilan GES.
+        </Text>
+
+        {/* Step indicator */}
+        <HStack spacing={0} mt={5}>
+          {STEPS.map((s, i) => (
+            <React.Fragment key={s.num}>
+              <VStack spacing={1} flex="1">
+                <Flex
+                  w="32px" h="32px" borderRadius="full" align="center" justify="center"
+                  bg={step >= s.num ? G.soft : "rgba(255,255,255,0.15)"}
+                  color={step >= s.num ? G.brand : "rgba(255,255,255,0.4)"}
+                  fontWeight="800" fontSize="xs"
+                  transition="all 0.3s"
+                >
+                  {step > s.num ? "✓" : s.num}
+                </Flex>
+                <Text fontSize="9px" fontWeight="600"
+                  color={step >= s.num ? G.soft : "rgba(255,255,255,0.35)"}
+                  textTransform="uppercase" letterSpacing="wider">
+                  {s.label}
+                </Text>
+              </VStack>
+              {i < STEPS.length - 1 && (
+                <Box flex="1" h="2px" mb={4}
+                  bg={step > s.num ? G.soft : "rgba(255,255,255,0.15)"}
+                  transition="all 0.3s" />
+              )}
+            </React.Fragment>
+          ))}
+        </HStack>
+      </Box>
+
+      {/* ── Body ── */}
+      <Box px={8} py={7}>
+        {error && (
+          <Box mb={4} p={3} bg="red.50" borderRadius="10px" border="1px solid" borderColor="red.200">
+            <Text color={G.error} fontSize="sm">{error}</Text>
+          </Box>
+        )}
+
+        {/* ── STEP 1 : Entreprise ── */}
+        {step === 1 && (
+          <VStack spacing={5} align="stretch">
+            <Box>
+              <Text fontSize="sm" fontWeight="700" color={G.brand} mb={1}>Nom de l&apos;entreprise *</Text>
+              <Input
+                value={company}
+                onChange={e => setCompany(e.target.value)}
+                placeholder="ex : Acme Québec inc."
+                size="md" borderRadius="10px"
+                borderColor={G.border}
+                _focus={{ borderColor: G.accent, boxShadow: `0 0 0 3px rgba(88,129,87,0.15)` }}
+              />
+            </Box>
+          </VStack>
+        )}
+
+        {/* ── STEP 2 : Lieux de production ── */}
+        {step === 2 && (
+          <VStack spacing={4} align="stretch">
+            <HStack justify="space-between">
+              <Box>
+                <Text fontSize="sm" fontWeight="700" color={G.brand}>Sites de production</Text>
+                <Text fontSize="xs" color={G.muted}>Ajoutez vos lieux d&apos;exploitation.</Text>
+              </Box>
+              <Button size="xs" bg={G.brand} color="white" borderRadius="full" px={4}
+                _hover={{ bg: G.accent }} onClick={() => setLieux(p => [...p, { ...emptyLieu }])}>
+                + Ajouter
+              </Button>
+            </HStack>
+
+            {lieux.map((lieu, i) => (
+              <Box key={i} p={4} bg={G.bg} borderRadius="12px" border={`1px solid ${G.border}`} position="relative">
+                <Badge position="absolute" top={3} left={4} bg={G.soft} color={G.brand}
+                  fontSize="9px" fontWeight="800" borderRadius="6px">
+                  Site {i + 1}
+                </Badge>
+                {lieux.length > 1 && (
+                  <IconButton aria-label="Supprimer" size="xs" variant="ghost"
+                    position="absolute" top={2} right={2}
+                    icon={<Text fontSize="md" lineHeight={1} color={G.muted}>×</Text>}
+                    onClick={() => removeRow(lieux, setLieux, i)} />
+                )}
+                <Grid templateColumns="1fr 1fr" gap={3} mt={5}>
+                  <GridItem colSpan={1}>
+                    <Text fontSize="xs" fontWeight="600" color={G.muted} mb={1}>Nom</Text>
+                    <Input size="sm" borderRadius="8px" borderColor={G.border} value={lieu.nom}
+                      _focus={{ borderColor: G.accent }} placeholder="Bureau principal"
+                      onChange={e => updLieu(i, "nom", e.target.value)} />
+                  </GridItem>
+                  <GridItem colSpan={1}>
+                    <Text fontSize="xs" fontWeight="600" color={G.muted} mb={1}>Description</Text>
+                    <Input size="sm" borderRadius="8px" borderColor={G.border} value={lieu.description}
+                      _focus={{ borderColor: G.accent }} placeholder="Siège social"
+                      onChange={e => updLieu(i, "description", e.target.value)} />
+                  </GridItem>
+                  <GridItem colSpan={2}>
+                    <Text fontSize="xs" fontWeight="600" color={G.muted} mb={1}>Adresse</Text>
+                    <Input size="sm" borderRadius="8px" borderColor={G.border} value={lieu.adresse}
+                      _focus={{ borderColor: G.accent }} placeholder="123 rue Principale, Montréal, QC"
+                      onChange={e => updLieu(i, "adresse", e.target.value)} />
+                  </GridItem>
+                </Grid>
+              </Box>
+            ))}
+          </VStack>
+        )}
+
+        {/* ── STEP 3 : Produits ── */}
+        {step === 3 && (
+          <VStack spacing={4} align="stretch">
+            <HStack justify="space-between">
+              <Box>
+                <Text fontSize="sm" fontWeight="700" color={G.brand}>Produits</Text>
+                <Text fontSize="xs" color={G.muted}>Les produits fabriqués ou vendus par votre organisation.</Text>
+              </Box>
+              <Button size="xs" bg={G.brand} color="white" borderRadius="full" px={4}
+                _hover={{ bg: G.accent }} onClick={() => setProducts(p => [...p, { ...emptyProd }])}>
+                + Ajouter
+              </Button>
+            </HStack>
+
+            {products.map((prod, i) => (
+              <Box key={i} p={4} bg={G.bg} borderRadius="12px" border={`1px solid ${G.border}`} position="relative">
+                <Badge position="absolute" top={3} left={4} bg={G.soft} color={G.brand}
+                  fontSize="9px" fontWeight="800" borderRadius="6px">
+                  Produit {i + 1}
+                </Badge>
+                {products.length > 1 && (
+                  <IconButton aria-label="Supprimer" size="xs" variant="ghost"
+                    position="absolute" top={2} right={2}
+                    icon={<Text fontSize="md" lineHeight={1} color={G.muted}>×</Text>}
+                    onClick={() => removeRow(products, setProducts, i)} />
+                )}
+                <Grid templateColumns="1fr 1fr" gap={3} mt={5}>
+                  <GridItem colSpan={1}>
+                    <Text fontSize="xs" fontWeight="600" color={G.muted} mb={1}>Nom</Text>
+                    <Input size="sm" borderRadius="8px" borderColor={G.border} value={prod.nom}
+                      _focus={{ borderColor: G.accent }} placeholder="Produit A"
+                      onChange={e => updProd(i, "nom", e.target.value)} />
+                  </GridItem>
+                  <GridItem colSpan={1}>
+                    <Text fontSize="xs" fontWeight="600" color={G.muted} mb={1}>Description</Text>
+                    <Input size="sm" borderRadius="8px" borderColor={G.border} value={prod.description}
+                      _focus={{ borderColor: G.accent }} placeholder="Description courte"
+                      onChange={e => updProd(i, "description", e.target.value)} />
+                  </GridItem>
+                  <GridItem colSpan={1}>
+                    <Text fontSize="xs" fontWeight="600" color={G.muted} mb={1}>Quantité</Text>
+                    <Input size="sm" borderRadius="8px" borderColor={G.border} value={prod.quantite}
+                      _focus={{ borderColor: G.accent }} placeholder="ex : 500"
+                      onChange={e => updProd(i, "quantite", e.target.value)} />
+                  </GridItem>
+                  <GridItem colSpan={1}>
+                    <Text fontSize="xs" fontWeight="600" color={G.muted} mb={1}>Unité</Text>
+                    <Select size="sm" borderRadius="8px" borderColor={G.border} value={prod.unite}
+                      _focus={{ borderColor: G.accent }}
+                      onChange={e => updProd(i, "unite", e.target.value)}>
+                      <option value="">— Choisir —</option>
+                      <option value="kg">kg</option>
+                      <option value="lb">lb</option>
+                      <option value="t">tonnes</option>
+                      <option value="L">litres</option>
+                      <option value="m">mètres</option>
+                      <option value="ft">pieds</option>
+                      <option value="kWh">kWh</option>
+                      <option value="unité">unité</option>
+                    </Select>
+                  </GridItem>
+                </Grid>
+              </Box>
+            ))}
+          </VStack>
+        )}
+
+        {/* ── STEP 4 : Services ── */}
+        {step === 4 && (
+          <VStack spacing={4} align="stretch">
+            <HStack justify="space-between">
+              <Box>
+                <Text fontSize="sm" fontWeight="700" color={G.brand}>Services</Text>
+                <Text fontSize="xs" color={G.muted}>Les services offerts par votre organisation.</Text>
+              </Box>
+              <Button size="xs" bg={G.brand} color="white" borderRadius="full" px={4}
+                _hover={{ bg: G.accent }} onClick={() => setServices(p => [...p, { ...emptySvc }])}>
+                + Ajouter
+              </Button>
+            </HStack>
+
+            {services.map((svc, i) => (
+              <Box key={i} p={4} bg={G.bg} borderRadius="12px" border={`1px solid ${G.border}`} position="relative">
+                <Badge position="absolute" top={3} left={4} bg={G.soft} color={G.brand}
+                  fontSize="9px" fontWeight="800" borderRadius="6px">
+                  Service {i + 1}
+                </Badge>
+                {services.length > 1 && (
+                  <IconButton aria-label="Supprimer" size="xs" variant="ghost"
+                    position="absolute" top={2} right={2}
+                    icon={<Text fontSize="md" lineHeight={1} color={G.muted}>×</Text>}
+                    onClick={() => removeRow(services, setServices, i)} />
+                )}
+                <Grid templateColumns="1fr 1fr" gap={3} mt={5}>
+                  <GridItem colSpan={1}>
+                    <Text fontSize="xs" fontWeight="600" color={G.muted} mb={1}>Nom</Text>
+                    <Input size="sm" borderRadius="8px" borderColor={G.border} value={svc.nom}
+                      _focus={{ borderColor: G.accent }} placeholder="Conseil en durabilité"
+                      onChange={e => updSvc(i, "nom", e.target.value)} />
+                  </GridItem>
+                  <GridItem colSpan={1}>
+                    <Text fontSize="xs" fontWeight="600" color={G.muted} mb={1}>Description</Text>
+                    <Input size="sm" borderRadius="8px" borderColor={G.border} value={svc.description}
+                      _focus={{ borderColor: G.accent }} placeholder="Description courte"
+                      onChange={e => updSvc(i, "description", e.target.value)} />
+                  </GridItem>
+                  <GridItem colSpan={1}>
+                    <Text fontSize="xs" fontWeight="600" color={G.muted} mb={1}>Quantité</Text>
+                    <Input size="sm" borderRadius="8px" borderColor={G.border} value={svc.quantite}
+                      _focus={{ borderColor: G.accent }} placeholder="ex : 200"
+                      onChange={e => updSvc(i, "quantite", e.target.value)} />
+                  </GridItem>
+                  <GridItem colSpan={1}>
+                    <Text fontSize="xs" fontWeight="600" color={G.muted} mb={1}>Unité</Text>
+                    <Input size="sm" borderRadius="8px" borderColor={G.border} value={svc.unite}
+                      _focus={{ borderColor: G.accent }} placeholder="ex : heures, mandats…"
+                      onChange={e => updSvc(i, "unite", e.target.value)} />
+                  </GridItem>
+                </Grid>
+              </Box>
+            ))}
+          </VStack>
+        )}
+
+        {/* ── Navigation ── */}
+        <HStack justify="space-between" mt={8}>
+          {step > 1 ? (
+            <Button variant="ghost" color={G.muted} borderRadius="full" px={6}
+              _hover={{ bg: G.bg }} onClick={() => setStep(s => s - 1)}>
+              ← Précédent
+            </Button>
+          ) : <Box />}
+
+          {step < 4 ? (
+            <Button bg={G.brand} color="white" borderRadius="full" px={8} h="44px"
+              fontWeight="700" _hover={{ bg: G.accent }}
+              isDisabled={step === 1 && !company.trim()}
+              onClick={() => setStep(s => s + 1)}>
+              Suivant →
+            </Button>
+          ) : (
+            <Button bg={G.brand} color="white" borderRadius="full" px={8} h="44px"
+              fontWeight="700" _hover={{ bg: G.accent }}
+              isLoading={loading} loadingText="Création…"
+              onClick={handleSubmit}>
+              Créer mon organisation
+            </Button>
+          )}
+        </HStack>
+
+        {step === 2 && (
+          <Text fontSize="xs" color={G.muted} textAlign="center" mt={4}>
+            Vous pouvez passer cette étape et ajouter vos sites plus tard dans l&apos;onglet Entreprise.
           </Text>
-
-          <Input
-            placeholder="Nom de l'entreprise"
-            value={company}
-            onChange={(e) => setCompany(e.target.value)}
-            required
-          />
-
-          <Button type="submit" colorScheme="teal" isLoading={loading} width="100%">
-            Valider
-          </Button>
-
-          {error && <Text color="red.500">{error}</Text>}
-        </VStack>
-      </form>
+        )}
+        {(step === 3 || step === 4) && (
+          <Text fontSize="xs" color={G.muted} textAlign="center" mt={4}>
+            Ces informations peuvent être complétées ou modifiées plus tard.
+          </Text>
+        )}
+      </Box>
     </Box>
   );
 }
-
-// import React, { useState } from 'react';
-// import { Box, Button, Input, VStack, Text } from '@chakra-ui/react';
-// import { supabase } from '../../../lib/supabaseClient';
-
-// interface CompanyInfoFormProps {
-//   userId: string;
-//   onComplete: () => void;
-// }
-
-// type Poste = {
-//   id: string;
-//   label: string;
-//   num: number;
-//   enabled: boolean;
-//   company_id: string;
-// };
-
-// type PosteInsert = {
-//   label: string;
-//   num: number;
-//   enabled: boolean;
-//   company_id: string;
-// };
-
-// type PostSourceInsert = {
-//   poste_id: string;
-//   source_code: string;
-//   label: string;
-//   enabled: boolean;
-// };
-
-// export default function CompanyInfoForm({ userId, onComplete }: CompanyInfoFormProps) {
-//   const [company, setCompany] = useState('');
-//   const [loading, setLoading] = useState(false);
-//   const [error, setError] = useState('');
-
-//   async function handleSubmit(e: React.FormEvent) {
-//     e.preventDefault();
-//     setLoading(true);
-//     setError('');
-
-//     try {
-//       /* ------------------------------------------------------------------ */
-//       /* 1) Create company                                                   */
-//       /* ------------------------------------------------------------------ */
-//       const { data: companyData, error: companyError } = await supabase
-//         .from('companies')
-//         .insert([{ name: company }])
-//         .select()
-//         .single();
-
-//       if (companyError) throw new Error(companyError.message);
-
-//       /* ------------------------------------------------------------------ */
-//       /* 2) Create postes                                                    */
-//       /* ------------------------------------------------------------------ */
-//       const defaultPostes: PosteInsert[] = [
-//         {
-//           label: 'Catégorie 1 - Émissions directs',
-//           num: 1,
-//           enabled: true,
-//           company_id: companyData.id,
-//         },
-//         {
-//           // ✅ UPDATED LABEL
-//           label: "Catégorie 2 - Émissions indirects de l'énergie importée",
-//           num: 2,
-//           enabled: true,
-//           company_id: companyData.id,
-//         },
-//         {
-//           // ✅ UPDATED LABEL
-//           label: 'Catégorie 3 - Émissions indirects des transports',
-//           num: 3,
-//           enabled: true,
-//           company_id: companyData.id,
-//         },
-//         {
-//           // kept empty (structure only)
-//           label: "Émissions indirectes provenant de la consommation d'électricité",
-//           num: 6,
-//           enabled: true,
-//           company_id: companyData.id,
-//         },
-//       ];
-
-//       const { data: postesData, error: postesError } = await supabase
-//         .from('postes')
-//         .insert(defaultPostes)
-//         .select();
-
-//       if (postesError) throw new Error(postesError.message);
-
-//       /* ------------------------------------------------------------------ */
-//       /* 3) Build poste map                                                  */
-//       /* ------------------------------------------------------------------ */
-//       const postesByNum: Record<number, Poste> = {};
-//       (postesData as Poste[]).forEach((p) => {
-//         postesByNum[p.num] = p;
-//       });
-
-//       const poste1Id = postesByNum[1]?.id;
-//       const poste2Id = postesByNum[2]?.id;
-//       const poste3Id = postesByNum[3]?.id;
-
-//       if (!poste1Id) throw new Error('Poste 1 introuvable');
-//       if (!poste2Id) throw new Error('Poste 2 introuvable');
-//       if (!poste3Id) throw new Error('Poste 3 introuvable');
-
-//       /* ------------------------------------------------------------------ */
-//       /* 4) Assign sources                                                   */
-//       /* ------------------------------------------------------------------ */
-//       const sourcesToInsert: PostSourceInsert[] = [
-//         /* ---------- POSTE 1 : Catégorie 1 – Émissions directs ---------- */
-//         {
-//           poste_id: poste1Id,
-//           source_code: '1A1',
-//           label: 'Quantité de combustible comptabilisé à partir des factures',
-//           enabled: true,
-//         },
-//         {
-//           poste_id: poste1Id,
-//           source_code: '2A1',
-//           label: 'Quantité de combustible comptabilisé à partir des factures',
-//           enabled: true,
-//         },
-//         {
-//           poste_id: poste1Id,
-//           source_code: '2B1',
-//           label: 'Par la distance parcourue (Marque, modèle, année connus)',
-//           enabled: true,
-//         },
-//         {
-//           poste_id: poste1Id,
-//           source_code: '2A3',
-//           label: "À partir des coûts d'essence",
-//           enabled: true,
-//         },
-//         {
-//           poste_id: poste1Id,
-//           source_code: '4A1',
-//           label: 'Quantité rapportée par le frigoriste',
-//           enabled: true,
-//         },
-//         {
-//           poste_id: poste1Id,
-//           source_code: '4B1',
-//           label: "Moyenne de l'industrie (climatisation véhicules)",
-//           enabled: true,
-//         },
-//         {
-//           poste_id: poste1Id,
-//           source_code: '4B2',
-//           label: 'Données des véhicules (climatisation véhicules)',
-//           enabled: true,
-//         },
-
-//         /* ---------- POSTE 2 : Énergie importée ---------- */
-//         {
-//           poste_id: poste2Id,
-//           source_code: '6A1',
-//           label: "Quantité d'électricité comptabilisée à partir des factures (Location-based)",
-//           enabled: true,
-//         },
-//         {
-//           poste_id: poste2Id,
-//           source_code: '6B1',
-//           label: "Quantité d'électricité comptabilisée à partir des factures (Market-based)",
-//           enabled: true,
-//         },
-
-//         /* ---------- POSTE 3 : Transports indirects ---------- */
-//         {
-//           poste_id: poste3Id,
-//           source_code: '3A1',
-//           label: 'Navettage des employés',
-//           enabled: true,
-//         },
-//       ];
-
-//       const { error: sourcesError } = await supabase
-//         .from('poste_sources')
-//         .insert(sourcesToInsert);
-
-//       if (sourcesError) throw new Error(sourcesError.message);
-
-//       /* ------------------------------------------------------------------ */
-//       /* 5) Visibility defaults                                             */
-//       /* ------------------------------------------------------------------ */
-//       const posteVisibilityRows = (postesData as Poste[]).map((p) => ({
-//         user_id: userId,
-//         poste_id: p.id,
-//         is_hidden: false,
-//       }));
-
-//       await supabase.from('poste_visibility').insert(posteVisibilityRows);
-
-//       const posteSourceVisibilityRows = sourcesToInsert.map((s) => ({
-//         user_id: userId,
-//         poste_id: s.poste_id,
-//         source_code: s.source_code,
-//         is_hidden: false,
-//       }));
-
-//       await supabase.from('poste_source_visibility').insert(posteSourceVisibilityRows);
-
-//       /* ------------------------------------------------------------------ */
-//       /* 6) Update user profile                                             */
-//       /* ------------------------------------------------------------------ */
-//       const { error: profileError } = await supabase
-//         .from('user_profiles')
-//         .upsert(
-//           [
-//             {
-//               id: userId,
-//               company_id: companyData.id,
-//               role: 'admin',
-//             },
-//           ],
-//           { onConflict: 'id' }
-//         );
-
-//       if (profileError) throw new Error(profileError.message);
-
-//       setLoading(false);
-//       onComplete();
-//     } catch (err: any) {
-//       setLoading(false);
-//       setError(err?.message || 'Erreur inconnue');
-//     }
-//   }
-
-//   return (
-//     <Box mt={8} p={6} rounded="xl" bg="white" boxShadow="md">
-//       <form onSubmit={handleSubmit}>
-//         <VStack spacing={4}>
-//           <Text fontWeight="bold" fontSize="xl" color="#00496F">
-//             Renseignez votre entreprise
-//           </Text>
-
-//           <Input
-//             placeholder="Nom de l'entreprise"
-//             value={company}
-//             onChange={(e) => setCompany(e.target.value)}
-//             required
-//           />
-
-//           <Button type="submit" colorScheme="teal" isLoading={loading} width="100%">
-//             Valider
-//           </Button>
-
-//           {error && <Text color="red.500">{error}</Text>}
-//         </VStack>
-//       </form>
-//     </Box>
-//   );
-// }

@@ -41,16 +41,15 @@ export default function SignUp() {
     return () => subscription.unsubscribe()
   }, [])
 
-  // After "Valider" in CompanyInfoForm -> go to /agent
+  // After "Valider" in CompanyInfoForm -> go to /chart
   function handleCompanyComplete(payload?: { companyName?: string }) {
     const companyName = payload?.companyName?.trim()
 
-    // (optional) persist for later use on Agent page
     if (companyName && typeof window !== 'undefined') {
       window.localStorage.setItem('company_name', companyName)
     }
 
-    router.push('/agent')
+    router.push('/chart')
   }
 
   return (

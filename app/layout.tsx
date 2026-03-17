@@ -1,6 +1,7 @@
 import { ReactNode } from "react";
 import { ColorModeScript, theme } from '@chakra-ui/react';
 import { Provider } from './provider';
+import AIAssistantWrapper from 'components/AIAssistantWrapper';
 
 export const metadata = {
   title: "Your App",
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <Provider>
           {children}
         </Provider>
+        <AIAssistantWrapper />
       </body>
     </html>
   );

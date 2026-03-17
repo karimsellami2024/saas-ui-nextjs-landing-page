@@ -3,6 +3,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Box, Flex, VStack, HStack, Text, Heading, Button, Grid, Icon, Badge, Image,
+  Modal, ModalOverlay, ModalContent, ModalBody, ModalCloseButton,
 } from "@chakra-ui/react";
 import { keyframes } from "@emotion/react";
 import {
@@ -47,18 +48,44 @@ const STEPS = [
   {
     num: "01", icon: FiList, title: "Configurez votre entreprise",
     desc: "Renseignez vos sites de production, vos produits/services et vos paramètres dans l'onglet Entreprise.",
+    details: [
+      { label: "Accédez à l'onglet Entreprise", body: "Dans le menu latéral gauche, cliquez sur « Entreprise » pour ouvrir la page de configuration." },
+      { label: "Ajoutez vos sites de production", body: "Renseignez le nom, la description et l'adresse de chaque lieu d'exploitation. Vous pouvez en ajouter autant que nécessaire." },
+      { label: "Déclarez vos produits et services", body: "Listez les produits fabriqués ou vendus par votre organisation ainsi que vos services, avec leur quantité et unité." },
+      { label: "Enregistrez votre flotte de véhicules", body: "Ajoutez vos véhicules (année, marque, modèle, type de carburant, consommation) pour alimenter les calculs de la Catégorie 1." },
+      { label: "Sauvegardez", body: "Cliquez sur « Sauvegarder » en bas de page. Ces informations seront disponibles dans tous vos formulaires de saisie." },
+    ],
   },
   {
     num: "02", icon: FiEdit3, title: "Saisissez vos données",
     desc: "Pour chaque catégorie (Cat. 1 à 6), activez les sources pertinentes et entrez vos consommations. La sauvegarde est automatique.",
+    details: [
+      { label: "Choisissez une catégorie", body: "Dans le menu de gauche, sélectionnez l'une des 6 catégories d'émissions (ex. : Émissions directes, Transports, Numérique…)." },
+      { label: "Sélectionnez une sous-source", body: "Utilisez les onglets en haut de la page pour naviguer entre les sous-sources disponibles dans chaque catégorie." },
+      { label: "Ajoutez des lignes de données", body: "Cliquez sur « + Ajouter une ligne » pour saisir une consommation. Renseignez la quantité, le type, la date, le site et le produit associés." },
+      { label: "Vérifiez le calcul GES", body: "Le total en tCO₂e est calculé automatiquement à partir des facteurs d'émission officiels (ECCC, IPCC) dès que vous entrez une valeur." },
+      { label: "Sauvegarde automatique", body: "Après 900 ms d'inactivité, vos données sont enregistrées automatiquement. Vous pouvez quitter et revenir à tout moment sans perdre votre travail." },
+    ],
   },
   {
     num: "03", icon: FiBarChart2, title: "Consultez votre bilan",
     desc: "Le bilan GES se calcule en temps réel. Visualisez vos émissions par catégorie, site ou produit.",
+    details: [
+      { label: "Accédez à l'onglet Bilan", body: "Cliquez sur « Bilan » dans le menu latéral pour afficher le récapitulatif complet de vos émissions GES." },
+      { label: "Vue par catégorie", body: "Les émissions sont réparties selon les 6 catégories ISO 14064 (Scope 1, 2 et 3). Chaque catégorie affiche son total en tCO₂e." },
+      { label: "Filtres par site et par produit", body: "Vous pouvez filtrer les résultats par site de production ou par produit/service pour analyser les sources d'émissions les plus importantes." },
+      { label: "Évolution temporelle", body: "Si vous avez saisi des données sur plusieurs années, le graphique de tendance montre l'évolution de vos émissions et votre progression vers vos objectifs de réduction." },
+    ],
   },
   {
     num: "04", icon: FiDownload, title: "Générez votre rapport",
     desc: "Exportez un rapport de durabilité conforme aux normes ISO 14064 pour vos parties prenantes.",
+    details: [
+      { label: "Accédez à l'onglet Rapport", body: "Cliquez sur « Rapport » dans le menu de gauche une fois votre saisie complète." },
+      { label: "Vérifiez les données incluses", body: "Le rapport reprend l'ensemble des émissions déclarées, les facteurs d'émission utilisés et la méthodologie appliquée (ISO 14064, GHG Protocol)." },
+      { label: "Exportez en PDF", body: "Cliquez sur « Télécharger le rapport PDF » pour obtenir un document structuré, prêt à être partagé avec vos parties prenantes, clients ou organismes de certification." },
+      { label: "Archivez et partagez", body: "Le rapport inclut la période de déclaration, le périmètre organisationnel et les sources d'émissions détaillées — conforme aux exigences de divulgation ESG." },
+    ],
   },
 ];
 
@@ -186,22 +213,83 @@ function HeroSection() {
 
 /* ═══════════════ STEP CARD ═══════════════ */
 function StepCard({ step, delay }: { step: typeof STEPS[0]; delay: number }) {
+  const [open, setOpen] = useState(false);
+
   return (
-    <Box bg={C.surface} border="1px solid" borderColor={C.border} borderRadius={C.r}
-      boxShadow={C.shadow} p={6} position="relative" overflow="hidden"
-      animation={`${fadeUp} 0.5s ease ${delay}s both`}
-      transition="all 0.25s" _hover={{ boxShadow: C.shadowHov, transform: "translateY(-4px)", borderColor: C.accent }}>
-      {/* Number watermark */}
-      <Text position="absolute" top="10px" right="16px" fontSize="5xl" fontWeight="900"
-        color={C.soft} lineHeight="1" userSelect="none">
-        {step.num}
-      </Text>
-      <Box w="44px" h="44px" bg={C.soft} borderRadius="12px" display="grid" placeItems="center" mb={4}>
-        <Icon as={step.icon} color={C.brand} boxSize={5} />
+    <>
+      {/* Card */}
+      <Box
+        bg={C.surface} border="1px solid" borderColor={C.border} borderRadius={C.r}
+        boxShadow={C.shadow} p={6} position="relative" overflow="hidden"
+        animation={`${fadeUp} 0.5s ease ${delay}s both`}
+        transition="all 0.25s" cursor="pointer"
+        _hover={{ boxShadow: C.shadowHov, transform: "translateY(-4px)", borderColor: C.accent }}
+        onClick={() => setOpen(true)}
+      >
+        <Text position="absolute" top="10px" right="16px" fontSize="5xl" fontWeight="900"
+          color={C.soft} lineHeight="1" userSelect="none">{step.num}</Text>
+        <Box w="44px" h="44px" bg={C.soft} borderRadius="12px" display="grid" placeItems="center" mb={4}>
+          <Icon as={step.icon} color={C.brand} boxSize={5} />
+        </Box>
+        <Heading fontSize="md" color={C.text} mb={2} fontWeight="700">{step.title}</Heading>
+        <Text fontSize="sm" color={C.muted} lineHeight="tall">{step.desc}</Text>
+        <HStack mt={4} spacing={1}>
+          <Text fontSize="xs" color={C.accent} fontWeight="600">Voir les détails</Text>
+          <Icon as={FiArrowRight} color={C.accent} boxSize={3} />
+        </HStack>
       </Box>
-      <Heading fontSize="md" color={C.text} mb={2} fontWeight="700">{step.title}</Heading>
-      <Text fontSize="sm" color={C.muted} lineHeight="tall">{step.desc}</Text>
-    </Box>
+
+      {/* Modal */}
+      <Modal isOpen={open} onClose={() => setOpen(false)} size="lg" isCentered>
+        <ModalOverlay bg="rgba(0,0,0,0.45)" backdropFilter="blur(4px)" />
+        <ModalContent borderRadius="20px" overflow="hidden" mx={4}>
+          {/* Header */}
+          <Box bgGradient={`linear(135deg, #1B2E25 0%, ${C.brand} 100%)`} px={7} pt={7} pb={6}>
+            <HStack spacing={3} mb={3}>
+              <Box w="40px" h="40px" bg="rgba(255,255,255,0.15)" borderRadius="10px"
+                display="grid" placeItems="center" flexShrink={0}>
+                <Icon as={step.icon} color="white" boxSize={4} />
+              </Box>
+              <Badge bg="rgba(255,255,255,0.15)" color={C.soft} fontSize="xs"
+                fontWeight="800" px={2} py={1} borderRadius="6px">
+                Étape {step.num}
+              </Badge>
+            </HStack>
+            <Heading fontSize="xl" color="white" fontWeight="800" lineHeight="1.2">
+              {step.title}
+            </Heading>
+            <ModalCloseButton color="rgba(255,255,255,0.6)" top={4} right={4}
+              _hover={{ color: "white", bg: "rgba(255,255,255,0.1)" }} borderRadius="8px" />
+          </Box>
+
+          {/* Body */}
+          <ModalBody px={7} py={6}>
+            <VStack spacing={4} align="stretch">
+              {step.details.map((d, i) => (
+                <HStack key={i} align="flex-start" spacing={4}>
+                  {/* Step dot */}
+                  <Box flexShrink={0} mt="2px">
+                    <Box w="24px" h="24px" borderRadius="full" bg={C.soft}
+                      display="flex" alignItems="center" justifyContent="center">
+                      <Text fontSize="10px" fontWeight="800" color={C.brand}>{i + 1}</Text>
+                    </Box>
+                  </Box>
+                  <Box>
+                    <Text fontSize="sm" fontWeight="700" color={C.text} mb={0.5}>{d.label}</Text>
+                    <Text fontSize="sm" color={C.muted} lineHeight="1.7">{d.body}</Text>
+                  </Box>
+                </HStack>
+              ))}
+            </VStack>
+
+            <Button mt={6} w="full" h="44px" bg={C.brand} color="white" borderRadius="full"
+              fontWeight="700" _hover={{ bg: C.accent }} onClick={() => setOpen(false)}>
+              Compris
+            </Button>
+          </ModalBody>
+        </ModalContent>
+      </Modal>
+    </>
   );
 }
 
