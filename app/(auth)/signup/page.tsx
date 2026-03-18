@@ -49,7 +49,7 @@ export default function SignUp() {
       window.localStorage.setItem('company_name', companyName)
     }
 
-    router.push('/chart')
+    router.push('/intro')
   }
 
   return (
@@ -103,7 +103,7 @@ export default function SignUp() {
                   <Auth
                     supabaseClient={supabase}
                     appearance={{ theme: ThemeSupa }}
-                    providers={['google', 'github']}
+                    providers={[]}
                     view="sign_up"
                     showLinks={false}
                     redirectTo={undefined}

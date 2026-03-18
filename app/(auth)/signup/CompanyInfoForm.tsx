@@ -21,7 +21,7 @@ const G = {
 /* ─── Types ─── */
 interface CompanyInfoFormProps {
   userId: string;
-  onComplete: () => void;
+  onComplete: (payload?: { companyName?: string }) => void;
 }
 type Poste         = { id: string; label: string; num: number; enabled: boolean; company_id: string };
 type PosteInsert   = { label: string; num: number; enabled: boolean; company_id: string };
@@ -123,8 +123,7 @@ export default function CompanyInfoForm({ userId, onComplete }: CompanyInfoFormP
                     { poste_id: p5, source_code: "5.1B1", label: "Produits vendus consommant des combustibles",               enabled: true },
                     { poste_id: p5, source_code: "5.2A1", label: "Mise en décharge des produits vendus",                     enabled: true },
                     { poste_id: p5, source_code: "5.2B1", label: "Recyclage / incinération des produits vendus",             enabled: true },
-        /* Cat 6 */ { poste_id: p6, source_code: "6A1",   label: "Quantité d'électricité (Location-based)",                  enabled: true },
-                    { poste_id: p6, source_code: "6B1",   label: "Quantité d'électricité (Market-based)",                    enabled: true },
+        /* Cat 6 — sources à définir */
       ];
       const { error: srcErr } = await supabase.from("poste_sources").insert(sources);
       if (srcErr) throw new Error(srcErr.message);
@@ -144,7 +143,7 @@ export default function CompanyInfoForm({ userId, onComplete }: CompanyInfoFormP
       );
       if (profErr) throw new Error(profErr.message);
 
-      onComplete();
+      onComplete({ companyName: company.trim() });
     } catch (err: any) {
       setError(err?.message || "Erreur inconnue");
     } finally {

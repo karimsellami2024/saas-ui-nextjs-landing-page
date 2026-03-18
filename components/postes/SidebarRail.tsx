@@ -2,40 +2,19 @@
 
 import React from "react";
 import {
-  Box,
-  Flex,
-  VStack,
-  Text,
-  Icon,
-  Avatar,
-  Tooltip,
-  useBreakpointValue,
+  Box, Flex, VStack, Text, Icon, Avatar, Tooltip, useBreakpointValue,
 } from "@chakra-ui/react";
 import {
-  FiGrid,
-  FiBarChart2,
-  FiBatteryCharging,
-  FiTruck,
-  FiPackage,
-  FiRepeat,
-  FiMoreHorizontal,
-  FiPieChart,
-  FiFileText,
-  FiHelpCircle,
+  FiGrid, FiBarChart2, FiBatteryCharging, FiTruck,
+  FiPackage, FiRepeat, FiMoreHorizontal, FiPieChart,
+  FiFileText, FiHelpCircle, FiHome,
 } from "react-icons/fi";
+import { useRouter } from "next/navigation";
 
-/* ------------------------------------------------------------------ */
-/* Types                                                              */
-/* ------------------------------------------------------------------ */
-
+/* ── Types ── */
 type GroupKey =
-  | "direct"
-  | "energie_importee"
-  | "transports"
-  | "produits_utilises"
-  | "utilisation_produits"
-  | "autres_indirects";
-
+  | "direct" | "energie_importee" | "transports"
+  | "produits_utilises" | "utilisation_produits" | "autres_indirects";
 type TopKey = "dashboard" | "bilan" | "rapport";
 
 export type SidebarRailProps = {
@@ -46,18 +25,12 @@ export type SidebarRailProps = {
   onNotificationsClick?: () => void;
 };
 
-/* ------------------------------------------------------------------ */
-/* Styles                                                             */
-/* ------------------------------------------------------------------ */
-
+/* ── Tokens ── */
 const GREEN = "#264a3b";
 const MUTED = "#F2F4F7";
-const ICON = "#6B7280";
+const ICON  = "#6B7280";
 
-/* ------------------------------------------------------------------ */
-/* Component                                                          */
-/* ------------------------------------------------------------------ */
-
+/* ── Component ── */
 export default function SidebarRail({
   activeGroup,
   activeTop = "dashboard",
@@ -65,7 +38,8 @@ export default function SidebarRail({
   onTopSelect,
   onNotificationsClick,
 }: SidebarRailProps) {
-  const railW = useBreakpointValue({ base: "72px", md: "160px" });
+  const railW = useBreakpointValue({ base: "72px", md: "150px" });
+  const router = useRouter();
 
   return (
     <Box
@@ -76,29 +50,64 @@ export default function SidebarRail({
       w={railW}
       boxShadow="0px 4px 6px 4px rgba(0,0,0,0.25)"
       bg="#FFFFFF"
+      overflow="hidden"
     >
-      <Flex direction="column" h="full" align="center" pt={8} pb={6}>
-        {/* Logo / notifications */}
-        <VStack spacing={3} mb={8}>
-          <Tooltip label="Ouvrir les notifications" placement="right">
+      <Flex direction="column" h="full" align="center">
+
+        {/* ── TOP: Home button ── */}
+        <Box w="full" px={3} pt={3} pb={2} borderBottom="1px solid #F2F4F7">
+          <Tooltip label="Retour à l'accueil" placement="right">
+            <Box
+              as="button"
+              onClick={() => router.push('/')}
+              w="full"
+              py={2}
+              rounded="lg"
+              display="flex"
+              flexDir="column"
+              alignItems="center"
+              gap={1}
+              color={ICON}
+              _hover={{ bg: MUTED, color: GREEN }}
+              transition="all .15s"
+            >
+              <Icon as={FiHome} boxSize={4} />
+              <Text fontSize="10px" fontWeight={500}>Accueil</Text>
+            </Box>
+          </Tooltip>
+        </Box>
+
+        {/* ── Avatar + date ── */}
+        <VStack spacing={1} py={3} borderBottom="1px solid #F2F4F7" w="full" align="center">
+          <Tooltip label="Notifications" placement="right">
             <Box
               as="button"
               onClick={onNotificationsClick}
-              _hover={{ transform: "translateY(-1px)", boxShadow: "0 6px 16px rgba(0,0,0,0.15)" }}
-              transition="all 0.15s ease-out"
+              _hover={{ transform: "translateY(-1px)" }}
+              transition="all 0.15s"
               rounded="full"
             >
-              <Avatar name="Carbone Québec" src="/avatar.png" size="lg" />
+              <Avatar name="Carbone Québec" src="/avatar.png" size="sm" />
             </Box>
           </Tooltip>
-          <Text fontSize="sm" color="#8F8F8F" textAlign="center">
-            Oct 2023 — Août 2024
+          <Text fontSize="9px" color="#8F8F8F" textAlign="center" lineHeight="1.3">
+            Oct 2023<br />Août 2024
           </Text>
         </VStack>
 
-        {/* Navigation */}
-        <VStack spacing={4} w="full" px={4} mb={6}>
-          {/* Top */}
+        {/* ── Scrollable nav ── */}
+        <VStack
+          flex={1}
+          overflowY="auto"
+          overflowX="hidden"
+          spacing={2}
+          w="full"
+          px={2}
+          py={2}
+          align="stretch"
+          css={{ '&::-webkit-scrollbar': { width: '0px' } }}
+        >
+          {/* Dashboard */}
           <SidebarBlock>
             <SidebarItem
               icon={FiGrid}
@@ -108,387 +117,84 @@ export default function SidebarRail({
             />
           </SidebarBlock>
 
-          {/* Emissions categories */}
+          {/* Emission categories */}
           <SidebarBlock>
-            <SidebarMini
-              icon={FiBarChart2}
-              label="Émissions directs"
-              active={activeGroup === "direct"}
-              onClick={() => onGroupChange("direct")}
-            />
-            <SidebarMini
-              icon={FiBatteryCharging}
-              label="Émissions indirects de l'énergie importée"
-              active={activeGroup === "energie_importee"}
-              onClick={() => onGroupChange("energie_importee")}
-            />
-            <SidebarMini
-              icon={FiTruck}
-              label="Émissions indirects des transports"
-              active={activeGroup === "transports"}
-              onClick={() => onGroupChange("transports")}
-            />
-            <SidebarMini
-              icon={FiPackage}
-              label="Émissions indirects des produits utilisés"
-              active={activeGroup === "produits_utilises"}
-              onClick={() => onGroupChange("produits_utilises")}
-            />
-            <SidebarMini
-              icon={FiRepeat}
-              label="Utilisation des produits de l'organisation"
-              active={activeGroup === "utilisation_produits"}
-              onClick={() => onGroupChange("utilisation_produits")}
-            />
-            <SidebarMini
-              icon={FiMoreHorizontal}
-              label="Autres émissions indirects"
-              active={activeGroup === "autres_indirects"}
-              onClick={() => onGroupChange("autres_indirects")}
-            />
+            <SidebarMini icon={FiBarChart2}       label="Émissions directes"          active={activeGroup === "direct"}               onClick={() => onGroupChange("direct")} />
+            <SidebarMini icon={FiBatteryCharging} label="Énergie importée"            active={activeGroup === "energie_importee"}     onClick={() => onGroupChange("energie_importee")} />
+            <SidebarMini icon={FiTruck}           label="Transports"                  active={activeGroup === "transports"}           onClick={() => onGroupChange("transports")} />
+            <SidebarMini icon={FiPackage}         label="Produits utilisés"           active={activeGroup === "produits_utilises"}    onClick={() => onGroupChange("produits_utilises")} />
+            <SidebarMini icon={FiRepeat}          label="Utilisation produits"        active={activeGroup === "utilisation_produits"} onClick={() => onGroupChange("utilisation_produits")} />
+            <SidebarMini icon={FiMoreHorizontal} label="Autres indirects"            active={activeGroup === "autres_indirects"}     onClick={() => onGroupChange("autres_indirects")} />
           </SidebarBlock>
 
           {/* Outputs */}
           <SidebarBlock>
-            <SidebarMini
-              icon={FiPieChart}
-              label="Bilan"
-              active={activeTop === "bilan"}
-              onClick={() => onTopSelect?.("bilan")}
-            />
-            <SidebarMini
-              icon={FiFileText}
-              label="Rapport"
-              active={activeTop === "rapport"}
-              onClick={() => onTopSelect?.("rapport")}
-            />
+            <SidebarMini icon={FiPieChart}  label="Bilan"   active={activeTop === "bilan"}   onClick={() => onTopSelect?.("bilan")} />
+            <SidebarMini icon={FiFileText}  label="Rapport" active={activeTop === "rapport"} onClick={() => onTopSelect?.("rapport")} />
           </SidebarBlock>
         </VStack>
 
-        <Box mt="auto" />
-
-        {/* Help */}
-        <VStack spacing={3}>
+        {/* ── BOTTOM: Help ── */}
+        <Box w="full" px={3} pb={3} pt={2} borderTop="1px solid #F2F4F7">
           <Tooltip label="Aide" placement="right">
-            <Box as="button">
-              <Icon as={FiHelpCircle} boxSize={7} color="#344E41" />
+            <Box
+              as="button"
+              w="full"
+              py={2}
+              rounded="lg"
+              display="flex"
+              flexDir="column"
+              alignItems="center"
+              gap={1}
+              color={ICON}
+              _hover={{ bg: MUTED }}
+              transition="all .15s"
+            >
+              <Icon as={FiHelpCircle} boxSize={4} />
+              <Text fontSize="10px">Aide</Text>
             </Box>
           </Tooltip>
-        </VStack>
+        </Box>
+
       </Flex>
     </Box>
   );
 }
 
-/* ------------------------------------------------------------------ */
-/* UI atoms                                                           */
-/* ------------------------------------------------------------------ */
-
+/* ── UI atoms ── */
 function SidebarBlock({ children }: { children: React.ReactNode }) {
   return (
-    <VStack bg={MUTED} w="full" p={2} spacing={2} rounded="xl">
+    <VStack bg={MUTED} w="full" p={1.5} spacing={1} rounded="xl">
       {children}
     </VStack>
   );
 }
 
-function SidebarItem({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: any;
-  label: string;
-  active?: boolean;
-  onClick?: () => void;
-}) {
+function SidebarItem({ icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
   return (
     <Box
-      as="button"
-      onClick={onClick}
-      w="full"
-      px={3}
-      py={2}
-      rounded="lg"
-      bg={active ? GREEN : "#fff"}
-      color={active ? "#fff" : ICON}
-      border="1px solid"
-      borderColor={active ? GREEN : "#E5E7EB"}
-      display="flex"
-      flexDir="column"
-      alignItems="center"
-      gap={2}
-      transition="all .15s"
-      _hover={{ bg: active ? GREEN : "#F9FAFB" }}
-    >
-      <Icon as={icon} boxSize={5} />
-      <Text fontSize="11px" textAlign="center">
-        {label}
-      </Text>
-    </Box>
-  );
-}
-
-function SidebarMini({
-  icon,
-  label,
-  active,
-  onClick,
-}: {
-  icon: any;
-  label: string;
-  active?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <Box
-      as="button"
-      onClick={onClick}
-      w="full"
-      px={2.5}
-      py={2}
-      rounded="full"
-      bg={active ? GREEN : "#fff"}
-      color={active ? "#fff" : ICON}
-      border="1px solid"
-      borderColor={active ? GREEN : "#D1D5DB"}
-      display="flex"
-      flexDir="column"
-      alignItems="center"
-      gap={1}
-      transition="all .15s"
-      _hover={{ bg: active ? GREEN : "#F3F4F6" }}
+      as="button" onClick={onClick} w="full" px={2} py={1.5} rounded="lg"
+      bg={active ? GREEN : "#fff"} color={active ? "#fff" : ICON}
+      border="1px solid" borderColor={active ? GREEN : "#E5E7EB"}
+      display="flex" flexDir="column" alignItems="center" gap={1}
+      transition="all .15s" _hover={{ bg: active ? GREEN : "#F9FAFB" }}
     >
       <Icon as={icon} boxSize={4} />
-      <Text fontSize="10px" textAlign="center">
-        {label}
-      </Text>
+      <Text fontSize="10px" textAlign="center" lineHeight="1.2">{label}</Text>
     </Box>
   );
 }
 
-
-// 'use client';
-
-// import React from "react";
-// import {
-//   Box,
-//   Flex,
-//   VStack,
-//   Text,
-//   Icon,
-//   Avatar,
-//   Tooltip,
-//   useBreakpointValue,
-// } from "@chakra-ui/react";
-// import {
-//   FiGrid,
-//   FiBarChart2,
-//   FiBatteryCharging,
-//   FiCode,
-//   FiPieChart,
-//   FiFileText,
-//   FiHelpCircle,
-// } from "react-icons/fi";
-
-// type GroupKey = "direct" | "energie" | "indirect";
-// type TopKey = "dashboard" | "bilan" | "rapport";
-
-// export type SidebarRailProps = {
-//   activeGroup: GroupKey | null;               // which group is currently shown
-//   activeTop?: TopKey;                         // dashboard / bilan / rapport
-//   onGroupChange: (g: GroupKey) => void;       // click Directe/Énergie/Indirecte
-//   onTopSelect?: (k: TopKey) => void;          // click Dashboard/Bilan/Rapport
-//   onNotificationsClick?: () => void;          // NEW: click on avatar / logo
-// };
-
-// const GREEN = "#264a3b";
-// const MUTED = "#F2F4F7";
-// const ICON  = "#6B7280";
-
-// export default function SidebarRail({
-//   activeGroup,
-//   activeTop = "dashboard",
-//   onGroupChange,
-//   onTopSelect,
-//   onNotificationsClick,
-// }: SidebarRailProps) {
-//   const railW = useBreakpointValue({ base: "72px", md: "142px" });
-
-//   return (
-//     <Box
-//       as="nav"
-//       position="sticky"
-//       top={0}
-//       h="100vh"
-//       w={railW}
-//       boxShadow="0px 4px 6px 4px rgba(0,0,0,0.25)"
-//       bg="#FFFFFF"
-//     >
-//       <Flex direction="column" h="full" align="center" pt={8} pb={6}>
-//         {/* Profile / Company logo → Notifications button */}
-//         <VStack spacing={3} mb={8}>
-//           <Tooltip label="Ouvrir les notifications" placement="right">
-//             <Box
-//               as="button"
-//               onClick={onNotificationsClick}
-//               _hover={{ transform: "translateY(-1px)", boxShadow: "0 6px 16px rgba(0,0,0,0.15)" }}
-//               transition="all 0.15s ease-out"
-//               rounded="full"
-//             >
-//               <Avatar name="Carbone Québec" src="/avatar.png" size="lg" />
-//             </Box>
-//           </Tooltip>
-//           <Text fontSize="sm" color="#8F8F8F" textAlign="center">
-//             Oct 2023 — Août 2024
-//           </Text>
-//         </VStack>
-
-//         {/* Primary */}
-//         <VStack spacing={4} w="full" px={4} mb={6}>
-//           <SidebarBlock>
-//             <SidebarItem
-//               icon={FiGrid}
-//               label="Tableau de bord"
-//               active={activeTop === "dashboard"}
-//               onClick={() => onTopSelect?.("dashboard")}
-//             />
-//           </SidebarBlock>
-
-//           <SidebarBlock>
-//             <SidebarMini
-//               icon={FiBarChart2}
-//               label="Directe"
-//               active={activeGroup === "direct"}
-//               onClick={() => onGroupChange("direct")}
-//             />
-//             <SidebarMini
-//               icon={FiBatteryCharging}
-//               label="Énergie"
-//               active={activeGroup === "energie"}
-//               onClick={() => onGroupChange("energie")}
-//             />
-//             <SidebarMini
-//               icon={FiCode}
-//               label="Indirecte"
-//               active={activeGroup === "indirect"}
-//               onClick={() => onGroupChange("indirect")}
-//             />
-//           </SidebarBlock>
-
-//           <SidebarBlock>
-//             <SidebarMini
-//               icon={FiPieChart}
-//               label="Bilan"
-//               active={activeTop === "bilan"}
-//               onClick={() => onTopSelect?.("bilan")}
-//             />
-//             <SidebarMini
-//               icon={FiFileText}
-//               label="Rapport"
-//               active={activeTop === "rapport"}
-//               onClick={() => onTopSelect?.("rapport")}
-//             />
-//           </SidebarBlock>
-//         </VStack>
-
-//         <Box mt="auto" />
-
-//         {/* Help button area (bottom) */}
-//         <VStack spacing={3}>
-//           <Tooltip label="Aide" placement="right">
-//             <Box as="button">
-//               <Icon as={FiHelpCircle} boxSize={7} color="#344E41" />
-//             </Box>
-//           </Tooltip>
-//           <Box h="4" />
-//         </VStack>
-//       </Flex>
-//     </Box>
-//   );
-// }
-
-// /* ---------- internal atoms ---------- */
-
-// function SidebarBlock({ children }: { children: React.ReactNode }) {
-//   return (
-//     <VStack bg={MUTED} w="full" p={2} spacing={2} rounded="xl">
-//       {children}
-//     </VStack>
-//   );
-// }
-
-// function SidebarItem({
-//   icon,
-//   label,
-//   active,
-//   onClick,
-// }: {
-//   icon: any;
-//   label: string;
-//   active?: boolean;
-//   onClick?: () => void;
-// }) {
-//   return (
-//     <Box
-//       as="button"
-//       onClick={onClick}
-//       w="full"
-//       px={3}
-//       py={2}
-//       rounded="lg"
-//       bg={active ? GREEN : "#fff"}
-//       color={active ? "#fff" : ICON}
-//       border="1px solid"
-//       borderColor={active ? GREEN : "#E5E7EB"}
-//       display="flex"
-//       flexDir="column"
-//       alignItems="center"
-//       gap={2}
-//       transition="all .15s"
-//       _hover={{ bg: active ? GREEN : "#F9FAFB" }}
-//     >
-//       <Icon as={icon} boxSize={5} />
-//       <Text fontSize="11px" textAlign="center">
-//         {label}
-//       </Text>
-//     </Box>
-//   );
-// }
-
-// function SidebarMini({
-//   icon,
-//   label,
-//   active,
-//   onClick,
-// }: {
-//   icon: any;
-//   label: string;
-//   active?: boolean;
-//   onClick?: () => void;
-// }) {
-//   return (
-//     <Box
-//       as="button"
-//       onClick={onClick}
-//       w="full"
-//       px={2.5}
-//       py={2}
-//       rounded="full"
-//       bg={active ? GREEN : "#fff"}
-//       color={active ? "#fff" : ICON}
-//       border="1px solid"
-//       borderColor={active ? GREEN : "#D1D5DB"}
-//       display="flex"
-//       flexDir="column"
-//       alignItems="center"
-//       gap={1}
-//       transition="all .15s"
-//       _hover={{ bg: active ? GREEN : "#F3F4F6" }}
-//     >
-//       <Icon as={icon} boxSize={4} />
-//       <Text fontSize="10px">{label}</Text>
-//     </Box>
-//   );
-// }
+function SidebarMini({ icon, label, active, onClick }: { icon: any; label: string; active?: boolean; onClick?: () => void }) {
+  return (
+    <Box
+      as="button" onClick={onClick} w="full" px={2} py={1.5} rounded="lg"
+      bg={active ? GREEN : "transparent"} color={active ? "#fff" : ICON}
+      display="flex" flexDir="column" alignItems="center" gap={0.5}
+      transition="all .15s" _hover={{ bg: active ? GREEN : "#F3F4F6" }}
+    >
+      <Icon as={icon} boxSize={3.5} />
+      <Text fontSize="9px" textAlign="center" lineHeight="1.2">{label}</Text>
+    </Box>
+  );
+}

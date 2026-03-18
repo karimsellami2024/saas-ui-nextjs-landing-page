@@ -14,11 +14,18 @@ const BRAND  = '#344E41'
 const ACCENT = '#588157'
 const SOFT   = '#DDE5E0'
 
-const Navigation: React.FC = () => {
+interface NavigationProps { transparent?: boolean }
+
+const Navigation: React.FC<NavigationProps> = ({ transparent = false }) => {
   const mobileNav  = useDisclosure()
   const router     = useRouter()
   const path       = usePathname()
   const [loggedIn, setLoggedIn] = React.useState(false)
+
+  /* When header is transparent (over dark hero), use white text */
+  const textColor   = transparent ? 'white' : BRAND
+  const hoverBg     = transparent ? 'rgba(255,255,255,0.12)' : SOFT
+  const outlineBorder = transparent ? 'rgba(255,255,255,0.5)' : BRAND
 
   const mobileNavBtnRef = React.useRef<HTMLButtonElement>()
 
@@ -50,11 +57,11 @@ const Navigation: React.FC = () => {
             display={['none', null, 'inline-flex']}
             size="sm"
             variant="ghost"
-            color={BRAND}
+            color={textColor}
             fontWeight="600"
             borderRadius="full"
             px={5}
-            _hover={{ bg: SOFT }}
+            _hover={{ bg: hoverBg }}
             onClick={() => router.push('/login')}
           >
             Se connecter
@@ -64,12 +71,12 @@ const Navigation: React.FC = () => {
           <Button
             display={['none', null, 'inline-flex']}
             size="sm"
-            bg={BRAND}
-            color="white"
+            bg={transparent ? 'white' : BRAND}
+            color={transparent ? BRAND : 'white'}
             fontWeight="700"
             borderRadius="full"
             px={6}
-            _hover={{ bg: ACCENT, transform: 'translateY(-1px)', boxShadow: 'md' }}
+            _hover={{ bg: transparent ? SOFT : ACCENT, transform: 'translateY(-1px)', boxShadow: 'md' }}
             transition="all 0.2s"
             onClick={() => router.push('/signup')}
           >
@@ -85,11 +92,11 @@ const Navigation: React.FC = () => {
             display={['none', null, 'inline-flex']}
             size="sm"
             variant="ghost"
-            color={BRAND}
+            color={textColor}
             fontWeight="600"
             borderRadius="full"
             px={5}
-            _hover={{ bg: SOFT }}
+            _hover={{ bg: hoverBg }}
             onClick={() => router.push('/chart')}
           >
             Tableau de bord
@@ -100,12 +107,12 @@ const Navigation: React.FC = () => {
             display={['none', null, 'inline-flex']}
             size="sm"
             variant="outline"
-            color={BRAND}
-            borderColor={BRAND}
+            color={textColor}
+            borderColor={outlineBorder}
             fontWeight="600"
             borderRadius="full"
             px={5}
-            _hover={{ bg: SOFT }}
+            _hover={{ bg: hoverBg }}
             onClick={handleLogout}
           >
             Se déconnecter

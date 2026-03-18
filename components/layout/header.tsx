@@ -57,7 +57,7 @@ export const Header = (props: HeaderProps) => {
               }
             }}
           />
-          <Navigation />
+          <Navigation transparent={y <= height} />
         </Flex>
       </Container>
     </Box>
