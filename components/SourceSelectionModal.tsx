@@ -155,7 +155,13 @@ const MAIN_STEP_IDS = ['combustion_fixe', 'vehicules', 'refrigerants_fixes', 'el
 /* ══════════════════════════════════════════════════════════════
    COMPONENT
 ══════════════════════════════════════════════════════════════ */
-export default function SourceSelectionModal() {
+export default function SourceSelectionModal({
+  forceOpen = false,
+  onClose,
+}: {
+  forceOpen?: boolean;
+  onClose?: () => void;
+} = {}) {
   const [show, setShow]             = useState(false);
   const [companyId, setCompanyId]   = useState<string | null>(null);
   const [selected, setSelected]     = useState<Set<string>>(new Set());
@@ -166,7 +172,18 @@ export default function SourceSelectionModal() {
   const [confirming, setConfirming] = useState(false);
   const toast = useToast();
 
-  /* ── trigger check ── */
+  /* ── force-open from parent ── */
+  useEffect(() => {
+    if (!forceOpen) return;
+    setSelected(new Set());
+    setStepId('combustion_fixe');
+    setHistory([]);
+    setMultiTemp(new Set());
+    setIsRecap(false);
+    setShow(true);
+  }, [forceOpen]);
+
+  /* ── auto trigger check ── */
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -265,6 +282,7 @@ export default function SourceSelectionModal() {
       if (typeof window !== 'undefined') localStorage.setItem(`cq_scope_configured_${companyId}`, '1');
       toast({ title: 'Configuration sauvegardée ✓', status: 'success', duration: 3000 });
       setShow(false);
+      onClose?.();
     } catch (e: any) {
       toast({ title: 'Erreur', description: e.message, status: 'error', duration: 5000 });
     } finally {
@@ -275,6 +293,7 @@ export default function SourceSelectionModal() {
   const handleSkip = () => {
     if (companyId && typeof window !== 'undefined') localStorage.setItem(`cq_scope_configured_${companyId}`, '1');
     setShow(false);
+    onClose?.();
   };
 
   if (!show) return null;
