@@ -58,13 +58,13 @@ const STEPS = [
   },
   {
     num: "02", icon: FiEdit3, title: "Saisissez vos données",
-    desc: "Pour chaque catégorie (Cat. 1 à 6), activez les sources pertinentes et entrez vos consommations. La sauvegarde est automatique.",
+    desc: "Deux façons de saisir vos données : l'assistant guidé (recommandé) ou les formulaires par catégorie. La sauvegarde est automatique.",
     details: [
-      { label: "Choisissez une catégorie", body: "Dans le menu de gauche, sélectionnez l'une des 6 catégories d'émissions (ex. : Émissions directes, Transports, Numérique…)." },
-      { label: "Sélectionnez une sous-source", body: "Utilisez les onglets en haut de la page pour naviguer entre les sous-sources disponibles dans chaque catégorie." },
-      { label: "Ajoutez des lignes de données", body: "Cliquez sur « + Ajouter une ligne » pour saisir une consommation. Renseignez la quantité, le type, la date, le site et le produit associés." },
-      { label: "Vérifiez le calcul GES", body: "Le total en tCO₂e est calculé automatiquement à partir des facteurs d'émission officiels (ECCC, IPCC) dès que vous entrez une valeur." },
-      { label: "Sauvegarde automatique", body: "Après 900 ms d'inactivité, vos données sont enregistrées automatiquement. Vous pouvez quitter et revenir à tout moment sans perdre votre travail." },
+      { label: "🧭 Option A — Assistant de saisie guidée (recommandé)", body: "Cliquez sur « Saisie guidée » dans le menu de gauche. L'assistant vous présente chaque source active une par une. Glissez-déposez vos factures (PDF, JPG, PNG ou ZIP jusqu'à 100 fichiers) pour les lire automatiquement — les champs sont pré-remplis par IA. Vérifiez les valeurs, puis cliquez sur « Sauvegarder et continuer »." },
+      { label: "📂 Option B — Saisie par catégorie (avancée)", body: "Dans le menu de gauche, sélectionnez l'une des 6 catégories d'émissions. Utilisez les onglets pour naviguer entre les sous-sources, ajoutez des lignes et renseignez la quantité, le type, la date et le site." },
+      { label: "📄 Importez vos factures en lot", body: "Dans l'assistant de saisie, glissez-déposez un dossier ZIP contenant toutes vos factures de l'année. L'IA extrait automatiquement la consommation (kWh, m³, L), la province et la période, et agrège les totaux." },
+      { label: "✅ Calcul GES automatique", body: "Le total en tCO₂e est calculé en temps réel à partir des facteurs d'émission officiels (ECCC, IPCC). Les gaz CO₂, CH₄ et N₂O sont traités séparément selon leur potentiel de réchauffement." },
+      { label: "💾 Sauvegarde automatique", body: "Vos données sont enregistrées automatiquement après chaque saisie. Vous pouvez quitter et revenir à tout moment sans perdre votre travail." },
     ],
   },
   {

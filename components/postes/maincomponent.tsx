@@ -25,6 +25,7 @@ import Categorie4Page from "#components/postes/Categorie4/main";
 import Categorie5Page from "#components/postes/Categorie5/main";
 
 import NotificationsPage from "#components/postes/entreprise";
+import WizardPage from "#components/postes/WizardPage";
 import { HiddenPostePlaceholder } from "../../components/postes/HiddenPostePlaceholder";
 
 const pageBg = "#F3F6EF";
@@ -40,7 +41,7 @@ const COL = {
 };
 
 type PosteRow = { id: string; label: string; num?: number };
-type TopKey = "dashboard" | "bilan" | "rapport";
+type TopKey = "dashboard" | "bilan" | "rapport" | "wizard";
 
 type GroupKey =
   | "direct"
@@ -373,6 +374,7 @@ export default function Section() {
           if (k === "dashboard") setSelectedMenu("dashboard");
           if (k === "bilan") { setActiveGroup(null); setSelectedMenu("bilan"); }
           if (k === "rapport") setSelectedMenu("rapport");
+          if (k === "wizard") { setActiveGroup(null); setSelectedMenu("wizard"); }
         }}
         onNotificationsClick={() => {
           setActiveTop("dashboard");
@@ -471,6 +473,9 @@ export default function Section() {
             {/* --------- Dynamic content --------- */}
             {selectedMenu === "notifications" && <NotificationsPage />}
             {selectedMenu === "bilan" && <DashboardPage />}
+            {selectedMenu === "wizard" && (
+              <WizardPage onFinish={() => { setActiveTop("bilan"); setSelectedMenu("bilan"); }} />
+            )}
 
             {/* ✅ Cat 1 */}
             {["combustion_fixes","combustion_mobiles","refrigerants","procedes","sols"].includes(String(selectedMenu)) &&
