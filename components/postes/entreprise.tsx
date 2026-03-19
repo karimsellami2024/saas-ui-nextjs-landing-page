@@ -12,6 +12,7 @@ import { CloseIcon } from "@chakra-ui/icons";
 import { supabase } from "../../lib/supabaseClient";
 import VehicleSelect from "#components/vehicleselect/VehicleSelect";
 import SourceSelectionModal from "../SourceSelectionModal";
+import { useRouter } from "next/navigation";
 
 /** JSON row type coming from /public/vehicles_year_marque_modele.json */
 type VehicleRow = { year: number; marque: string; modele: string };
@@ -76,6 +77,7 @@ const COL = {
 
 export default function ProductionAndProductsPage() {
   const toast = useToast();
+  const router = useRouter();
 
   const [lieux, setLieux] = useState<Lieu[]>([{ ...emptyLieu }]);
   const [products, setProducts] = useState<ProductItem[]>([{ ...emptyProduct }]);
@@ -1048,6 +1050,40 @@ export default function ProductionAndProductsPage() {
         >
           Sauvegarder
         </Button>
+      </Box>
+
+      {/* Disconnect */}
+      <Box
+        bg={COL.surface}
+        p={{ base: 4, md: 5 }}
+        rounded="2xl"
+        border="1px solid"
+        borderColor="#F5C6C6"
+        boxShadow={cardShadow}
+      >
+        <HStack justify="space-between" align="center">
+          <Box>
+            <Text fontWeight="700" fontSize="md" color="#C53030">
+              Déconnexion
+            </Text>
+            <Text fontSize="sm" color={COL.textMuted} mt={0.5}>
+              Fermer la session en cours
+            </Text>
+          </Box>
+          <Button
+            size="sm"
+            variant="outline"
+            borderColor="#FC8181"
+            color="#C53030"
+            _hover={{ bg: "#FFF5F5", borderColor: "#C53030" }}
+            onClick={async () => {
+              await supabase.auth.signOut();
+              router.push("/login");
+            }}
+          >
+            Se déconnecter
+          </Button>
+        </HStack>
       </Box>
     </VStack>
   );

@@ -32,8 +32,8 @@ const CAT1_SOURCES = [
   { code: '4B2', label: 'Réfrigérants véhicules (data)', desc: 'Climatisation véhicules — données précises du véhicule' },
 ];
 const CAT2_SOURCES = [
-  { code: '6A1', label: 'Électricité — Location-based',  desc: 'Facteur régional du réseau (ex. Hydro-Québec)' },
-  { code: '6B1', label: 'Électricité — Market-based',    desc: 'Contrat d\'énergie renouvelable ou certificat vert' },
+  { code: '6A1', label: 'Électricité — Basé sur le réseau',  desc: 'Facteur régional du réseau électrique (ex. Hydro-Québec)' },
+  { code: '6B1', label: 'Électricité — Basé sur le marché', desc: 'Contrat d\'énergie renouvelable ou certificat d\'attribut d\'énergie' },
 ];
 const ALL_SOURCES = [...CAT1_SOURCES, ...CAT2_SOURCES];
 
@@ -121,9 +121,19 @@ const STEPS: Record<string, StepDef> = {
     detail: 'Chambres froides, réfrigérateurs industriels, climatiseurs centraux, systèmes de refroidissement des bâtiments.',
     type: 'yesno',
     yesSelect:  ['4A1'],
-    yesNext:    'electricite',
+    yesNext:    'propriete',
     noDeselect: ['4A1'],
-    noNext:     'electricite',
+    noNext:     'propriete',
+  },
+  propriete: {
+    id: 'propriete',
+    icon: '🏢',
+    question: 'Votre organisation est-elle propriétaire de ses locaux ?',
+    detail: 'Si vous êtes locataire, la consommation d\'électricité du bâtiment relève du propriétaire — vos émissions de Scope 2 (Cat. 2) ne s\'appliquent pas à votre périmètre organisationnel.',
+    type: 'yesno',
+    yesNext:    'electricite',
+    noDeselect: ['6A1', '6B1'],
+    noNext:     'recap',
   },
   electricite: {
     id: 'electricite',
@@ -140,7 +150,7 @@ const STEPS: Record<string, StepDef> = {
     id: 'renouvelable',
     icon: '🌿',
     question: 'Avez-vous un contrat d\'énergie renouvelable ou des certificats d\'attributs d\'énergie ?',
-    detail: 'Contrats d\'achat direct d\'énergie verte, RECs (Renewable Energy Certificates), certificats verts, PPAs renouvelables.',
+    detail: 'Contrats d\'achat direct d\'énergie verte, certificats d\'attributs d\'énergie (CAE), certificats verts ou ententes d\'achat d\'électricité renouvelable.',
     type: 'yesno',
     yesSelect:  ['6B1'],
     yesNext:    'recap',
@@ -150,7 +160,7 @@ const STEPS: Record<string, StepDef> = {
 };
 
 /* Progress: main steps only (not sub-steps) */
-const MAIN_STEP_IDS = ['combustion_fixe', 'vehicules', 'refrigerants_fixes', 'electricite', 'renouvelable'];
+const MAIN_STEP_IDS = ['combustion_fixe', 'vehicules', 'refrigerants_fixes', 'propriete', 'electricite', 'renouvelable'];
 
 /* ══════════════════════════════════════════════════════════════
    COMPONENT
@@ -170,6 +180,7 @@ export default function SourceSelectionModal({
   const [multiTemp, setMultiTemp]   = useState<Set<string>>(new Set());
   const [isRecap, setIsRecap]       = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [answers, setAnswers]       = useState<Record<string, 'yes' | 'no' | string[]>>({});
   const toast = useToast();
 
   /* ── force-open from parent ── */
@@ -180,6 +191,7 @@ export default function SourceSelectionModal({
     setHistory([]);
     setMultiTemp(new Set());
     setIsRecap(false);
+    setAnswers({});
     setShow(true);
   }, [forceOpen]);
 
@@ -224,7 +236,14 @@ export default function SourceSelectionModal({
     setHistory(h => h.slice(0, -1));
     setIsRecap(false);
     setStepId(prev);
-    setMultiTemp(new Set());
+    // Restore multiselect state from saved answer
+    const prevAnswer = answers[prev];
+    const prevStep = STEPS[prev];
+    if (prevStep?.type === 'multiselect' && Array.isArray(prevAnswer)) {
+      setMultiTemp(new Set(prevAnswer));
+    } else {
+      setMultiTemp(new Set());
+    }
   };
 
   /* ── yes/no handlers ── */
@@ -234,6 +253,7 @@ export default function SourceSelectionModal({
     if (step.yesSelect) {
       setSelected(prev => { const n = new Set(prev); step.yesSelect!.forEach(c => n.add(c)); return n; });
     }
+    setAnswers(prev => ({ ...prev, [stepId]: 'yes' }));
     goTo(step.yesNext!);
   };
 
@@ -243,6 +263,7 @@ export default function SourceSelectionModal({
     if (step.noDeselect) {
       setSelected(prev => { const n = new Set(prev); step.noDeselect!.forEach(c => n.delete(c)); return n; });
     }
+    setAnswers(prev => ({ ...prev, [stepId]: 'no' }));
     goTo(step.noNext!);
   };
 
@@ -260,6 +281,7 @@ export default function SourceSelectionModal({
       allCodes.forEach(c => multiTemp.has(c) ? n.add(c) : n.delete(c));
       return n;
     });
+    setAnswers(prev => ({ ...prev, [stepId]: Array.from(multiTemp) }));
     goTo(step.multiNext!);
   };
 
@@ -437,7 +459,7 @@ export default function SourceSelectionModal({
                   </Box>
 
                   <Text fontSize="xs" color={C.muted} textAlign="center">
-                    Vous pouvez modifier la sélection dans le portail admin à tout moment.
+                    Vous pouvez modifier la sélection depuis l'onglet Entreprise à tout moment.
                   </Text>
                 </Flex>
               ) : step ? (
@@ -455,36 +477,42 @@ export default function SourceSelectionModal({
                   </Box>
 
                   {/* Answers */}
-                  {step.type === 'yesno' && (
-                    <VStack spacing={3} align="stretch" mt="auto">
-                      <Button
-                        size="lg"
-                        bg={C.brand}
-                        color={C.white}
-                        borderRadius="xl"
-                        fontWeight={700}
-                        _hover={{ bg: C.accent }}
-                        onClick={handleYes}
-                        leftIcon={<Text>✅</Text>}
-                      >
-                        Oui
-                      </Button>
-                      <Button
-                        size="lg"
-                        variant="outline"
-                        borderColor={C.border}
-                        color={C.brand}
-                        bg={C.bg}
-                        borderRadius="xl"
-                        fontWeight={700}
-                        _hover={{ bg: C.soft, borderColor: C.accent }}
-                        onClick={handleNo}
-                        leftIcon={<Text>❌</Text>}
-                      >
-                        Non
-                      </Button>
-                    </VStack>
-                  )}
+                  {step.type === 'yesno' && (() => {
+                    const prev = answers[stepId];
+                    return (
+                      <VStack spacing={3} align="stretch" mt="auto">
+                        <Button
+                          size="lg"
+                          bg={prev === 'yes' ? C.dark : C.brand}
+                          color={C.white}
+                          borderRadius="xl"
+                          fontWeight={700}
+                          _hover={{ bg: C.accent }}
+                          onClick={handleYes}
+                          leftIcon={<Text>{prev === 'yes' ? '✅' : '◻️'}</Text>}
+                          boxShadow={prev === 'yes' ? `0 0 0 3px ${C.light}` : 'none'}
+                        >
+                          Oui
+                        </Button>
+                        <Button
+                          size="lg"
+                          variant="outline"
+                          borderColor={prev === 'no' ? C.brand : C.border}
+                          borderWidth={prev === 'no' ? '2px' : '1px'}
+                          color={C.brand}
+                          bg={prev === 'no' ? C.soft : C.bg}
+                          borderRadius="xl"
+                          fontWeight={700}
+                          _hover={{ bg: C.soft, borderColor: C.accent }}
+                          onClick={handleNo}
+                          leftIcon={<Text>{prev === 'no' ? '✅' : '◻️'}</Text>}
+                          boxShadow={prev === 'no' ? `0 0 0 3px ${C.light}` : 'none'}
+                        >
+                          Non
+                        </Button>
+                      </VStack>
+                    );
+                  })()}
 
                   {step.type === 'multiselect' && (
                     <Flex direction="column" flex={1} justify="space-between">
@@ -601,7 +629,7 @@ export default function SourceSelectionModal({
               <Box mt="auto" pt={3} borderTop={`1px solid ${C.border}`}>
                 <Text fontSize="10px" color={C.muted} lineHeight="1.5">
                   Les sources non sélectionnées seront masquées pour tous les utilisateurs de votre entreprise.
-                  Modifiable depuis le portail admin.
+                  Modifiable depuis l'onglet Entreprise.
                 </Text>
               </Box>
             </Flex>
