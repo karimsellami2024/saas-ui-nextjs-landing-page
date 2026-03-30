@@ -1,7 +1,7 @@
 // components/postes/entreprise.tsx
 'use client';
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
   Box, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Text, Spinner,
   IconButton, HStack, useToast, Select, Tag, TagLabel, TagCloseButton, Wrap, WrapItem,
@@ -96,6 +96,8 @@ export default function ProductionAndProductsPage() {
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [companyLoading, setCompanyLoading] = useState(true);
   const [showSourceModal, setShowSourceModal] = useState(false);
+  const [fleetImporting, setFleetImporting] = useState(false);
+  const fleetFileRef = useRef<HTMLInputElement>(null);
 
   // === Catalog (Année / Marque / Modèle) loaded from public JSON ===
   const [catalog, setCatalog] = useState<VehicleRow[]>([]);
@@ -348,6 +350,40 @@ export default function ProductionAndProductsPage() {
     }
     return out;
   }
+
+  // --- Fleet Excel import handler ---
+  const handleFleetImport = async (file: File) => {
+    setFleetImporting(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/read-fleet", { method: "POST", body: form });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error ?? "Erreur serveur");
+
+      const imported: VehicleItem[] = (data.vehicles ?? []).map((v: any) => ({
+        ...emptyVehicle,
+        qty: v.qty ?? 1,
+        details: v.details ?? "",
+        annee: v.annee ?? "",
+        marque: v.marque ?? "",
+        modele: v.modele ?? "",
+      }));
+
+      if (!imported.length) throw new Error("Aucun véhicule trouvé dans le fichier.");
+      setVehicles(imported);
+      toast({
+        status: "success",
+        title: `${imported.length} véhicule${imported.length > 1 ? "s" : ""} importé${imported.length > 1 ? "s" : ""} ✓`,
+        description: "Complétez les champs manquants (carburant, distance…) puis sauvegardez.",
+        duration: 5000,
+      });
+    } catch (err: any) {
+      toast({ status: "error", title: "Erreur import", description: err.message, duration: 5000 });
+    } finally {
+      setFleetImporting(false);
+    }
+  };
 
   // --- Save handler ---
   const handleSave = async () => {
@@ -777,6 +813,18 @@ export default function ProductionAndProductsPage() {
             </HStack>
             <Button
               size="sm"
+              variant="outline"
+              borderColor={COL.border}
+              color={COL.accent}
+              _hover={{ bg: COL.surfaceMuted }}
+              isLoading={fleetImporting}
+              loadingText="Lecture…"
+              onClick={() => fleetFileRef.current?.click()}
+            >
+              📥 Importer Excel
+            </Button>
+            <Button
+              size="sm"
               bg={COL.accent}
               color="white"
               _hover={{ bg: "#1f3b30" }}
@@ -786,6 +834,17 @@ export default function ProductionAndProductsPage() {
             </Button>
           </HStack>
         </HStack>
+        <input
+          ref={fleetFileRef}
+          type="file"
+          accept=".xlsx,.xls,.csv"
+          style={{ display: "none" }}
+          onChange={e => {
+            const f = e.target.files?.[0];
+            if (f) handleFleetImport(f);
+            e.target.value = "";
+          }}
+        />
 
         <Box overflowX="auto" mt={3}>
           <Table variant="simple" size="sm">

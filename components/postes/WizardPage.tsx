@@ -4,8 +4,10 @@ import { useEffect, useState, useRef } from 'react'
 import {
   Box, VStack, HStack, Heading, Text, Button, Progress,
   Select, Input, Spinner, useToast, Badge, Flex, Icon, Divider,
+  Table, Thead, Tbody, Tr, Th, Td, Modal, ModalOverlay, ModalContent,
+  ModalHeader, ModalBody, ModalFooter, ModalCloseButton, useDisclosure,
 } from '@chakra-ui/react'
-import { FiUploadCloud, FiCheck, FiArrowRight, FiArrowLeft } from 'react-icons/fi'
+import { FiUploadCloud, FiCheck, FiArrowRight, FiArrowLeft, FiTruck } from 'react-icons/fi'
 import { supabase } from '../../lib/supabaseClient'
 
 /* ── Design tokens ───────────────────────────────────────────── */
@@ -203,6 +205,26 @@ function computeResults(code: string, fd: Record<string, any>, refs: WizardRefs 
   return zero
 }
 
+/* ── Fleet import ────────────────────────────────────────────── */
+const VEHICLE_SOURCES = ['2A1', '2A3', '2B1', '4B1', '4B2']
+
+type FleetRow = {
+  qty: number; details: string; annee: string; marque: string; modele: string;
+  transmission: string; distance_km: string; type_carburant: string; conso_l_100km: string;
+  type_equipement_refrigeration: string; type_refrigerant: string; charge_lbs: string;
+  fuites_lbs: string; climatisation: boolean;
+}
+
+
+async function parseFleetExcel(file: File): Promise<FleetRow[]> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await fetch('/api/read-fleet', { method: 'POST', body: form })
+  const data = await res.json()
+  if (!res.ok || data.error) throw new Error(data.error ?? 'Erreur serveur')
+  return (data.vehicles ?? []) as FleetRow[]
+}
+
 /* ── Types ───────────────────────────────────────────────────── */
 type WizardSource = {
   source_code: string
@@ -231,12 +253,17 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
   const [current, setCurrent]     = useState(-1) // -1 = intro
   const [loading, setLoading]     = useState(true)
   const [refs, setRefs]           = useState<WizardRefs | null>(null)
-  const [saving, setSaving]         = useState(false)
-  const [uploading, setUploading]   = useState(false)
-  const [extracted, setExtracted]   = useState<string | null>(null)
-  const [dragOver, setDragOver]     = useState(false)
-  const [fileCount, setFileCount]   = useState(0)
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [saving, setSaving]           = useState(false)
+  const [uploading, setUploading]     = useState(false)
+  const [extracted, setExtracted]     = useState<string | null>(null)
+  const [dragOver, setDragOver]       = useState(false)
+  const [fileCount, setFileCount]     = useState(0)
+  const [fleetRows, setFleetRows]     = useState<FleetRow[]>([])
+  const [fleetSaving, setFleetSaving] = useState(false)
+  const [companyId, setCompanyId]     = useState<string | null>(null)
+  const { isOpen: isFleetOpen, onOpen: openFleet, onClose: closeFleet } = useDisclosure()
+  const fileRef    = useRef<HTMLInputElement>(null)
+  const fleetRef   = useRef<HTMLInputElement>(null)
   const toast = useToast()
 
   /* ── Load active sources ── */
@@ -245,6 +272,10 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) { setLoading(false); return }
       setUserId(user.id)
+
+      const { data: profile } = await supabase
+        .from('user_profiles').select('company_id').eq('id', user.id).single()
+      if (profile?.company_id) setCompanyId(profile.company_id)
 
       const res = await fetch(`/api/source-visibility?user_id=${user.id}`)
       if (!res.ok) { setLoading(false); return }
@@ -486,6 +517,95 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
   const handleSkip = () => { setExtracted(null); setCurrent(c => c + 1) }
   const handleBack = () => { setExtracted(null); setCurrent(c => Math.max(-1, c - 1)) }
 
+  const handleFleetFile = async (file: File) => {
+    try {
+      const rows = await parseFleetExcel(file)
+      if (!rows.length) {
+        toast({ title: 'Fichier vide ou colonnes non reconnues', status: 'warning', duration: 3000 })
+        return
+      }
+      setFleetRows(rows)
+      openFleet()
+    } catch (e: any) {
+      toast({ title: 'Erreur lecture Excel', description: e.message, status: 'error', duration: 4000 })
+    }
+  }
+
+  const handleFleetSave = async () => {
+    if (!companyId || !fleetRows.length) return
+    setFleetSaving(true)
+    try {
+      const { error } = await supabase
+        .from('companies')
+        .update({ vehicle_fleet: fleetRows })
+        .eq('id', companyId)
+      if (error) throw error
+      toast({ title: `${fleetRows.length} véhicule${fleetRows.length > 1 ? 's' : ''} importé${fleetRows.length > 1 ? 's' : ''} ✓`, status: 'success', duration: 3000 })
+      closeFleet()
+      setFleetRows([])
+    } catch (e: any) {
+      toast({ title: 'Erreur sauvegarde', description: e.message, status: 'error', duration: 4000 })
+    } finally {
+      setFleetSaving(false)
+    }
+  }
+
+  /* ── Fleet preview modal ── */
+  const fleetModal = (
+    <Modal isOpen={isFleetOpen} onClose={closeFleet} size="5xl" scrollBehavior="inside">
+      <ModalOverlay />
+      <ModalContent borderRadius="2xl">
+        <ModalHeader borderBottom={`1px solid ${G.border}`} fontSize="md" fontWeight={700} color={G.dark}>
+          <HStack spacing={2}>
+            <Icon as={FiTruck} color={G.brand} />
+            <Text>Aperçu — {fleetRows.length} véhicule{fleetRows.length > 1 ? 's' : ''} détecté{fleetRows.length > 1 ? 's' : ''}</Text>
+          </HStack>
+        </ModalHeader>
+        <ModalCloseButton />
+        <ModalBody py={4}>
+          <Text fontSize="xs" color={G.muted} mb={3}>
+            Vérifiez les données avant d'importer. Ces véhicules remplaceront la flotte actuelle dans l'onglet Entreprise.
+          </Text>
+          <Box overflowX="auto">
+            <Table size="sm" variant="simple">
+              <Thead bg={G.bg}>
+                <Tr>
+                  {['Qté','Année','Marque','Modèle','Carburant','Conso (L/100)','Distance (km)','Clim'].map(h => (
+                    <Th key={h} fontSize="9px" color={G.muted} py={2}>{h}</Th>
+                  ))}
+                </Tr>
+              </Thead>
+              <Tbody>
+                {fleetRows.map((v, i) => (
+                  <Tr key={i} _hover={{ bg: G.bg }}>
+                    <Td fontSize="xs">{v.qty}</Td>
+                    <Td fontSize="xs">{v.annee}</Td>
+                    <Td fontSize="xs">{v.marque}</Td>
+                    <Td fontSize="xs">{v.modele}</Td>
+                    <Td fontSize="xs">{v.type_carburant}</Td>
+                    <Td fontSize="xs">{v.conso_l_100km}</Td>
+                    <Td fontSize="xs">{v.distance_km}</Td>
+                    <Td fontSize="xs">{v.climatisation ? '✓' : '—'}</Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </Box>
+        </ModalBody>
+        <ModalFooter borderTop={`1px solid ${G.border}`} gap={3}>
+          <Button variant="ghost" size="sm" onClick={closeFleet} color={G.muted}>Annuler</Button>
+          <Button
+            size="sm" bg={G.brand} color="white" _hover={{ bg: G.accent }}
+            borderRadius="lg" fontWeight={700} px={6}
+            onClick={handleFleetSave} isLoading={fleetSaving} loadingText="Sauvegarde…"
+          >
+            Importer {fleetRows.length} véhicule{fleetRows.length > 1 ? 's' : ''} →
+          </Button>
+        </ModalFooter>
+      </ModalContent>
+    </Modal>
+  )
+
   /* ── Loading ── */
   if (loading) return (
     <Box display="flex" alignItems="center" justifyContent="center" minH="400px">
@@ -506,6 +626,8 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
 
   /* ── Intro ── */
   if (current === -1) return (
+    <>
+    {fleetModal}
     <Box bg={G.surface} rounded="2xl" border={`1px solid ${G.border}`} overflow="hidden" maxW="680px" mx="auto">
       <Box bgGradient={`linear(135deg, ${G.dark}, ${G.brand})`} px={8} py={6}>
         <Text fontSize="28px" mb={2}>🌿</Text>
@@ -531,6 +653,37 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
             </HStack>
           ))}
         </VStack>
+        {/* Fleet import — shown only when vehicle sources are active */}
+        {steps.some(s => VEHICLE_SOURCES.includes(s.source_code)) && (
+          <Box mb={4} p={4} rounded="xl" border={`1px dashed ${G.border}`} bg={G.bg}>
+            <HStack mb={2} spacing={2}>
+              <Icon as={FiTruck} color={G.brand} boxSize={4} />
+              <Text fontSize="sm" fontWeight={700} color={G.dark}>Importer votre flotte de véhicules</Text>
+            </HStack>
+            <Text fontSize="xs" color={G.muted} mb={3} lineHeight="1.5">
+              Glissez-déposez un fichier Excel (.xlsx) contenant votre flotte. Les colonnes reconnues sont :
+              Année, Marque, Modèle, Type de carburant, Consommation (L/100km), Distance (km), etc.
+            </Text>
+            <Box
+              border="2px dashed" borderColor={G.border} rounded="lg" p={3}
+              textAlign="center" cursor="pointer"
+              _hover={{ borderColor: G.brand, bg: '#EEF5EE' }}
+              transition="all 0.15s"
+              onClick={() => fleetRef.current?.click()}
+              onDragOver={e => { e.preventDefault() }}
+              onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFleetFile(f) }}
+            >
+              <Icon as={FiUploadCloud} boxSize={5} color={G.muted} mb={1} />
+              <Text fontSize="xs" color={G.muted}>Glissez un fichier .xlsx ici ou cliquez pour parcourir</Text>
+            </Box>
+            <input
+              ref={fleetRef} type="file" accept=".xlsx,.xls,.csv"
+              style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFleetFile(f); e.target.value = '' }}
+            />
+          </Box>
+        )}
+
         <Button
           w="full" size="lg" bg={G.brand} color="white" _hover={{ bg: G.accent }}
           borderRadius="xl" fontWeight={700} onClick={() => setCurrent(0)}
@@ -540,6 +693,7 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
         </Button>
       </Box>
     </Box>
+    </>
   )
 
   /* ── Completion ── */
@@ -582,6 +736,8 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
   const tco2e = results.total_ges_tco2e
 
   return (
+    <>
+    {fleetModal}
     <Box maxW="900px" mx="auto">
       {/* Step header */}
       <Box bg={G.surface} rounded="2xl" border={`1px solid ${G.border}`} overflow="hidden" mb={4}>
@@ -738,6 +894,7 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
         </HStack>
       </HStack>
     </Box>
+    </>
   )
 }
 
