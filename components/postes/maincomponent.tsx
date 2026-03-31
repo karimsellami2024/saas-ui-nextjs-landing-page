@@ -26,6 +26,8 @@ import Categorie5Page from "#components/postes/Categorie5/main";
 
 import NotificationsPage from "#components/postes/entreprise";
 import WizardPage from "#components/postes/WizardPage";
+import SaisieGuidePage from "#components/postes/SaisieGuidePage";
+import RapportPage from "#components/postes/RapportPage";
 import { HiddenPostePlaceholder } from "../../components/postes/HiddenPostePlaceholder";
 
 const pageBg = "#F3F6EF";
@@ -391,7 +393,19 @@ export default function Section() {
         color={COL.textBody}
       >
         {isDashboard ? (
-          <NewDashboard />
+          <NewDashboard onStartGuide={() => setSelectedMenu("guide")} />
+        ) : selectedMenu === "guide" ? (
+          <SaisieGuidePage
+            onStartWizard={() => { setActiveTop("wizard"); setSelectedMenu("wizard"); setActiveGroup(null); }}
+            onGoToCategory={(cat) => {
+              const g = cat as GroupKey;
+              setActiveTop("dashboard");
+              setActiveGroup(g);
+              const iso = groupToIso(g);
+              setActiveCategory(iso);
+              setSelectedMenu(defaultMenuForCategory[iso]);
+            }}
+          />
         ) : (
           <Stack maxW="1200px" mx="auto" spacing={6}>
             {!isBilan && typeof selectedMenu === "string" && isPosteKey(selectedMenu) && (
@@ -517,11 +531,7 @@ export default function Section() {
               )
             }
 
-            {selectedMenu === "rapport" && (
-              <Box bg="white" p={6} rounded="lg" border="1px solid" borderColor={COL.border}>
-                <Text>Rapport — page à venir.</Text>
-              </Box>
-            )}
+            {selectedMenu === "rapport" && <RapportPage />}
           </Stack>
         )}
       </Box>

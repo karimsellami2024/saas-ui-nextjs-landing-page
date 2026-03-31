@@ -101,13 +101,13 @@ const CAT_CARDS = [
 /* ═══════════════════════════════════════════
    MAIN COMPONENT
 ═══════════════════════════════════════════ */
-export default function DashboardEnhanced() {
+export default function DashboardEnhanced({ onStartGuide }: { onStartGuide?: () => void } = {}) {
   return (
     <Box minH="100vh" bg={C.bg}>
       <Box w="100%" px={{ base: 4, md: 6, lg: 8 }} py={{ base: 5, md: 8 }} maxW="1400px" mx="auto">
 
         {/* ── HERO ── */}
-        <HeroSection />
+        <HeroSection onStartGuide={onStartGuide} />
 
         {/* ── HOW TO USE ── */}
         <Section title="Comment utiliser le calculateur" icon={FiPlayCircle} delay={0.1}>
@@ -138,7 +138,7 @@ export default function DashboardEnhanced() {
 }
 
 /* ═══════════════ HERO ═══════════════ */
-function HeroSection() {
+function HeroSection({ onStartGuide }: { onStartGuide?: () => void }) {
   return (
     <Box
       bg={C.surface}
@@ -181,7 +181,7 @@ function HeroSection() {
             <Button bg={C.brand} color="white" borderRadius="full" px={7} h="46px"
               _hover={{ bg: C.accent, transform: "translateY(-2px)", boxShadow: "lg" }}
               transition="all 0.2s" rightIcon={<Icon as={FiArrowRight} />}
-              fontWeight="700" fontSize="sm">
+              fontWeight="700" fontSize="sm" onClick={onStartGuide}>
               Commencer la saisie
             </Button>
             <Button variant="outline" borderRadius="full" px={6} h="46px"

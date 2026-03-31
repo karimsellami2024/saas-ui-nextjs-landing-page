@@ -60,6 +60,29 @@ const resultFields = [
   { key: "energie_equivalente_kwh", label: "Énergie équivalente [kWh]" },
 ] as const;
 
+/* ── Provincial emission factors (kgCO₂e/kWh) ── */
+const PROVINCE_FACTORS: Record<string, number> = {
+  "Québec":                    0.002,
+  "Ontario":                   0.056,
+  "Colombie-Britannique":      0.013,
+  "Alberta":                   0.670,
+  "Manitoba":                  0.004,
+  "Saskatchewan":              0.510,
+  "Nouvelle-Écosse":           0.670,
+  "Nouveau-Brunswick":         0.300,
+  "Île-du-Prince-Édouard":     0.280,
+  "Terre-Neuve-et-Labrador":   0.019,
+  "Nunavut":                   0.733,
+  "Territoires du Nord-Ouest": 0.279,
+  "Yukon":                     0.073,
+};
+
+function calcRowTco2e(province: string, consumption: string): number {
+  const kwh = parseFloat(consumption.replace(/\s/g, "").replace(",", ".")) || 0;
+  const factor = PROVINCE_FACTORS[province] ?? 0.002;
+  return +(factor * kwh / 1000).toFixed(4); // tCO₂e
+}
+
 // Animations
 const fadeInUp = keyframes`
   from { opacity: 0; transform: translateY(20px); }
@@ -76,10 +99,6 @@ const pulse = keyframes`
   50% { transform: scale(1.02); }
 `;
 
-const shimmer = keyframes`
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-`;
 
 export function SourceAForm({
   posteId: initialPosteId,
@@ -101,7 +120,6 @@ export function SourceAForm({
 
   const [gesResults, setGesResults] = useState<GesResults[]>([]);
   const [posteId, setPosteId] = useState<string | null>(initialPosteId || null);
-  const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
@@ -356,7 +374,6 @@ export function SourceAForm({
 
         if (poste) {
           setPosteId(poste.id);
-          setSubmissionId(sub.id);
 
           let parsedData = poste.data;
           if (typeof parsedData === "string") {
@@ -481,6 +498,8 @@ export function SourceAForm({
       number: group.number,
       address: group.address,
       province: group.province,
+      site: group.site,
+      commentaires: group.commentaires,
     }));
 
     const invoices = groups.flatMap((group) =>
@@ -488,23 +507,16 @@ export function SourceAForm({
         number: group.number,
         address: group.address,
         province: group.province,
+        site: group.site,
         date: detail.date,
         consumption: detail.consumption,
         reference: detail.reference,
+        periode: detail.periode,
       }))
     );
 
     return { counters, invoices };
   };
-
-  const payloadHash = useMemo(() => {
-    try {
-      const base = buildPayload(compteurs);
-      return JSON.stringify(base);
-    } catch {
-      return "";
-    }
-  }, [compteurs]);
 
   function scheduleAutosave() {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
@@ -686,10 +698,6 @@ export function SourceAForm({
 
     setLoading(false);
   };
-
-  const displayColumns = resultFields.filter((f) =>
-    gesResults.some((res) => res && (res as any)[f.key] !== undefined && (res as any)[f.key] !== "" && (res as any)[f.key] !== "#N/A")
-  );
 
   const toggleGroupExpand = (gIdx: number) => {
     setExpandedGroups((prev) => ({ ...prev, [gIdx]: !prev[gIdx] }));
@@ -1165,26 +1173,30 @@ export function SourceAForm({
                                 }}
                               />
 
-                              {/* Result */}
-                              <Box
-                                bg={gesResults?.[0]?.total_ges_tco2e ? FIGMA.greenSoft : "transparent"}
-                                px={4}
-                                py={2}
-                                rounded="lg"
-                                transition="all 0.3s"
-                              >
-                                <Text
-                                  textAlign="right"
-                                  fontFamily="Montserrat"
-                                  fontWeight={600}
-                                  fontSize="14px"
-                                  color={gesResults?.[0]?.total_ges_tco2e ? FIGMA.green : FIGMA.muted}
-                                >
-                                  {gesResults?.[0]?.total_ges_tco2e && gesResults[0].total_ges_tco2e !== "#N/A"
-                                    ? `${gesResults[0].total_ges_tco2e} t CO²eq`
-                                    : "—"}
-                                </Text>
-                              </Box>
+                              {/* Result — live local calc */}
+                              {(() => {
+                                const liveVal = calcRowTco2e(group.province, row.consumption);
+                                const hasVal = liveVal > 0;
+                                return (
+                                  <Box
+                                    bg={hasVal ? FIGMA.greenSoft : "transparent"}
+                                    px={4}
+                                    py={2}
+                                    rounded="lg"
+                                    transition="all 0.3s"
+                                  >
+                                    <Text
+                                      textAlign="right"
+                                      fontFamily="Montserrat"
+                                      fontWeight={600}
+                                      fontSize="14px"
+                                      color={hasVal ? FIGMA.green : FIGMA.muted}
+                                    >
+                                      {hasVal ? `${liveVal} t CO²eq` : "—"}
+                                    </Text>
+                                  </Box>
+                                );
+                              })()}
 
                               {/* Add row */}
                               <HStack justify="flex-end">
@@ -1261,50 +1273,52 @@ export function SourceAForm({
         </Button>
       </HStack>
 
-      {/* Results */}
-      {gesResults?.length > 0 && (
-        <Box
-          mt={6}
-          bg="white"
-          rounded="xl"
-          p={6}
-          boxShadow={FIGMA.cardShadow}
-          animation={`${fadeInUp} 0.6s ease-out`}
-        >
-          <HStack mb={4} spacing={2}>
-            <Icon as={FiFileText} color={FIGMA.green} boxSize={5} />
-            <Text fontFamily="Inter" fontWeight={700} color={FIGMA.text} fontSize="lg">
-              Calculs et résultats
-            </Text>
-          </HStack>
+      {/* Results — live totals across all rows */}
+      {(() => {
+        const liveTotalTco2e = compteurs.reduce((sum, g) =>
+          sum + g.details.reduce((s, d) => s + calcRowTco2e(g.province, d.consumption), 0), 0
+        );
+        const liveCo2Gco2e = Math.round(liveTotalTco2e * 1_000_000);
 
-          <Grid
-            templateColumns={{ base: "1fr", md: "repeat(auto-fit, minmax(200px, 1fr))" }}
-            gap={6}
-          >
-            {displayColumns.map((f, idx) => (
-              <Box
-                key={String(f.key)}
-                bg={FIGMA.bg}
-                p={4}
-                rounded="lg"
-                border="2px solid"
-                borderColor={FIGMA.border}
-                transition="all 0.3s"
-                _hover={{ borderColor: FIGMA.green, transform: "translateY(-2px)" }}
-                animation={`${fadeInUp} 0.4s ease-out ${idx * 0.1}s both`}
-              >
-                <Text fontSize="xs" color={FIGMA.muted} fontFamily="Montserrat" mb={2} textTransform="uppercase">
-                  {f.label}
-                </Text>
-                <Text fontSize="2xl" fontWeight={700} color={FIGMA.green} fontFamily="Inter">
-                  {String((gesResults[0] as any)[f.key] ?? "-")}
-                </Text>
-              </Box>
-            ))}
-          </Grid>
-        </Box>
-      )}
+        // Always show live calc; webhook results only used if no live data
+        const displayCo2 = liveCo2Gco2e > 0 ? liveCo2Gco2e : (gesResults?.[0]?.total_co2_gco2e ?? null);
+        const displayTco2e = liveTotalTco2e > 0 ? liveTotalTco2e.toFixed(4) : (gesResults?.[0]?.total_ges_tco2e ?? null);
+
+        if (!displayTco2e && !displayCo2) return null;
+
+        return (
+          <Box mt={6} bg="white" rounded="xl" p={6} boxShadow={FIGMA.cardShadow}>
+            <HStack mb={4} spacing={2}>
+              <Icon as={FiFileText} color={FIGMA.green} boxSize={5} />
+              <Text fontFamily="Inter" fontWeight={700} color={FIGMA.text} fontSize="lg">
+                Calculs et résultats
+              </Text>
+            </HStack>
+            <Grid templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }} gap={6}>
+              {displayCo2 !== null && (
+                <Box bg={FIGMA.bg} p={4} rounded="lg" border="2px solid" borderColor={FIGMA.border}>
+                  <Text fontSize="xs" color={FIGMA.muted} fontFamily="Montserrat" mb={2} textTransform="uppercase">
+                    CO₂ [gCO2e]
+                  </Text>
+                  <Text fontSize="2xl" fontWeight={700} color={FIGMA.green} fontFamily="Inter">
+                    {String(displayCo2)}
+                  </Text>
+                </Box>
+              )}
+              {displayTco2e !== null && (
+                <Box bg={FIGMA.bg} p={4} rounded="lg" border="2px solid" borderColor={FIGMA.border}>
+                  <Text fontSize="xs" color={FIGMA.muted} fontFamily="Montserrat" mb={2} textTransform="uppercase">
+                    TOTAL GES [tCO2e]
+                  </Text>
+                  <Text fontSize="2xl" fontWeight={700} color={FIGMA.green} fontFamily="Inter">
+                    {String(displayTco2e)}
+                  </Text>
+                </Box>
+              )}
+            </Grid>
+          </Box>
+        );
+      })()}
     </Box>
   );
 }

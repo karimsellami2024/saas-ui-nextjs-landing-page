@@ -255,7 +255,7 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
   const [refs, setRefs]           = useState<WizardRefs | null>(null)
   const [saving, setSaving]           = useState(false)
   const [uploading, setUploading]     = useState(false)
-  const [extracted, setExtracted]     = useState<string | null>(null)
+  const [extracted, setExtracted]     = useState<{ filename: string; fields: Record<string, any>; ok: boolean }[]>([])
   const [dragOver, setDragOver]       = useState(false)
   const [fileCount, setFileCount]     = useState(0)
   const [fleetRows, setFleetRows]     = useState<FleetRow[]>([])
@@ -417,11 +417,10 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
     if (d.kg != null) updateField('kg', String(d.kg))
   }
 
-  /* ── Invoice upload (supports multiple files) ── */
+  /* ── Invoice upload (supports multiple files, appends to previous results) ── */
   const handleUpload = async (files: File[]) => {
     if (!files.length) return
     setUploading(true)
-    setExtracted(null)
     setFileCount(files.length)
     try {
       const form = new FormData()
@@ -439,38 +438,51 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
         return
       }
 
-      // Aggregate: sum numerics, pick most common categorical
-      const sumField = (key: string) => {
-        const total = valid.reduce((acc, d) => acc + (parseFloat(d[key]) || 0), 0)
-        return total > 0 ? total : null
-      }
-      const mostCommon = (key: string) => {
-        const counts: Record<string, number> = {}
-        valid.forEach(d => { if (d[key]) counts[d[key]] = (counts[d[key]] || 0) + 1 })
-        return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
-      }
+      // Append new results to existing ones
+      setExtracted(prev => {
+        const newEntries = items.map(d => ({
+          filename: d.filename ?? '—',
+          ok: !d.error,
+          fields: d.error ? { erreur: d.error } : {
+            ...(d.source_hint    != null && { 'Type détecté':  d.source_hint }),
+            ...(d.quantity       != null && { 'Quantité':      d.quantity }),
+            ...(d.kwh            != null && { 'kWh':           d.kwh }),
+            ...(d.amount         != null && { 'Montant ($)':   d.amount }),
+            ...(d.fuel_type      != null && { 'Carburant':     d.fuel_type }),
+            ...(d.refrigerant    != null && { 'Réfrigérant':   d.refrigerant }),
+            ...(d.kg             != null && { 'kg':            d.kg }),
+            ...(d.province       != null && { 'Province':      d.province }),
+            ...(d.billing_period != null && { 'Période':       d.billing_period }),
+          },
+          _raw: d,
+        }))
+        return [...prev, ...newEntries]
+      })
 
-      const aggregated = {
-        quantity:   sumField('quantity'),
-        kwh:        sumField('kwh'),
-        amount:     sumField('amount'),
-        montant:    sumField('montant'),
-        kg:         sumField('kg'),
-        province:   mostCommon('province'),
-        fuel_type:  mostCommon('fuel_type'),
-        carburant:  mostCommon('carburant'),
-        refrigerant: mostCommon('refrigerant'),
-      }
+      // Aggregate across ALL valid results (prev + new) for autofill
+      setExtracted(prev => {
+        const allValid = prev.filter(e => e.ok).map(e => (e as any)._raw).filter(Boolean)
+        const sumField = (key: string) => {
+          const total = allValid.reduce((acc: number, d: any) => acc + (parseFloat(d[key]) || 0), 0)
+          return total > 0 ? total : null
+        }
+        const mostCommon = (key: string) => {
+          const counts: Record<string, number> = {}
+          allValid.forEach((d: any) => { if (d[key]) counts[d[key]] = (counts[d[key]] || 0) + 1 })
+          return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? null
+        }
+        tryAutoFill({
+          quantity: sumField('quantity'), kwh: sumField('kwh'),
+          amount: sumField('amount'), montant: sumField('montant'), kg: sumField('kg'),
+          province: mostCommon('province'), fuel_type: mostCommon('fuel_type'),
+          carburant: mostCommon('carburant'), refrigerant: mostCommon('refrigerant'),
+        })
+        return prev
+      })
 
-      const errors = items.length - valid.length
-      setExtracted(
-        `${valid.length}/${items.length} facture${valid.length > 1 ? 's' : ''} lue${valid.length > 1 ? 's' : ''}` +
-        (errors > 0 ? ` (${errors} échec${errors > 1 ? 's' : ''})` : '')
-      )
-      tryAutoFill(aggregated)
       toast({
         title: `${valid.length} facture${valid.length > 1 ? 's' : ''} lue${valid.length > 1 ? 's' : ''} ✓`,
-        description: 'Vérifiez et complétez les champs.',
+        description: 'Résultats ajoutés. Vérifiez les champs.',
         status: 'success',
         duration: 3000,
       })
@@ -479,6 +491,27 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
     } finally {
       setUploading(false)
     }
+  }
+
+  /* ── Build data payload compatible with each category form's prefill ── */
+  const buildData = (code: string, fd: Record<string, string>) => {
+    // 2A3 expects { rows: A3Row[] }
+    if (code === '2A3') {
+      return {
+        wizard: true,
+        rows: [{
+          vehicle: fd.fuel ?? '',
+          type: fd.fuel ?? '',
+          date: '',
+          cost: fd.amount ?? '',
+          avgPrice: fd.pricePerL ?? '1.70',
+          estimateQty: '',
+          reference: '',
+        }],
+      }
+    }
+    // All other sources: flat formData (category forms read prefillData directly)
+    return { wizard: true, ...fd }
   }
 
   /* ── Save step ── */
@@ -495,8 +528,8 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
           user_id: userId,
           poste_num: step.poste_num,
           source_code: step.source_code,
-          data: { wizard: true, ...step.formData },
-          results,
+          data: buildData(step.source_code, step.formData),
+          results: [results],
         }),
       })
       if (!res.ok) throw new Error((await res.json()).error ?? 'Erreur')
@@ -506,7 +539,7 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
         return copy
       })
       toast({ title: 'Sauvegardé ✓', status: 'success', duration: 2000 })
-      setTimeout(() => { setExtracted(null); setCurrent(c => c + 1) }, 600)
+      setTimeout(() => { setExtracted([]); setCurrent(c => c + 1) }, 600)
     } catch (e: any) {
       toast({ title: 'Erreur', description: e.message, status: 'error', duration: 4000 })
     } finally {
@@ -514,8 +547,8 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
     }
   }
 
-  const handleSkip = () => { setExtracted(null); setCurrent(c => c + 1) }
-  const handleBack = () => { setExtracted(null); setCurrent(c => Math.max(-1, c - 1)) }
+  const handleSkip = () => { setExtracted([]); setCurrent(c => c + 1) }
+  const handleBack = () => { setExtracted([]); setCurrent(c => Math.max(-1, c - 1)) }
 
   const handleFleetFile = async (file: File) => {
     try {
@@ -844,17 +877,52 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
             }}
           />
 
-          {extracted && (
-            <Box mt={3} p={3} bg={G.bg} rounded="lg" border={`1px solid ${G.border}`}>
-              <Text fontSize="9px" fontWeight={700} color={G.muted} mb={1} textTransform="uppercase">
-                Données extraites
-              </Text>
-              <Text
-                fontSize="10px" color={G.dark} lineHeight="1.5"
-                whiteSpace="pre-wrap" maxH="140px" overflowY="auto"
-              >
-                {extracted}
-              </Text>
+          {extracted.length > 0 && (
+            <Box mt={3} rounded="lg" border={`1px solid ${G.border}`} overflow="hidden">
+              <HStack px={3} py={1.5} bg={G.bg} borderBottom={`1px solid ${G.border}`} justify="space-between">
+                <Text fontSize="9px" fontWeight={700} color={G.muted} textTransform="uppercase">
+                  {extracted.length} fichier{extracted.length > 1 ? 's' : ''} — {extracted.filter(e => e.ok).length} ✅ {extracted.filter(e => !e.ok).length > 0 ? `· ${extracted.filter(e => !e.ok).length} ❌` : ''}
+                </Text>
+                <HStack spacing={2}>
+                  <Text
+                    fontSize="9px" color={G.brand} fontWeight={700} cursor="pointer"
+                    _hover={{ textDecoration: 'underline' }}
+                    onClick={() => fileRef.current?.click()}
+                  >
+                    + Ajouter
+                  </Text>
+                  <Text
+                    fontSize="9px" color={G.muted} cursor="pointer"
+                    _hover={{ textDecoration: 'underline' }}
+                    onClick={() => setExtracted([])}
+                  >
+                    Effacer
+                  </Text>
+                </HStack>
+              </HStack>
+              <VStack spacing={0} align="stretch" maxH="220px" overflowY="auto">
+                {extracted.map((item, i) => (
+                  <Box
+                    key={i}
+                    px={3} py={2}
+                    bg={item.ok ? G.surface : '#FFF5F5'}
+                    borderBottom={i < extracted.length - 1 ? `1px solid ${G.border}` : 'none'}
+                  >
+                    <HStack spacing={1.5} mb={1}>
+                      <Text fontSize="9px">{item.ok ? '✅' : '❌'}</Text>
+                      <Text fontSize="10px" fontWeight={700} color={item.ok ? G.dark : '#C53030'} noOfLines={1}>
+                        {item.filename}
+                      </Text>
+                    </HStack>
+                    {Object.entries(item.fields).map(([k, v]) => (
+                      <HStack key={k} spacing={1} pl={4}>
+                        <Text fontSize="9px" color={G.muted} minW="80px">{k} :</Text>
+                        <Text fontSize="9px" color={G.dark} fontWeight={600}>{String(v)}</Text>
+                      </HStack>
+                    ))}
+                  </Box>
+                ))}
+              </VStack>
             </Box>
           )}
 
