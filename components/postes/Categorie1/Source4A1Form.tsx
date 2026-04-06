@@ -902,6 +902,25 @@ function FigmaSelect({
   );
 }
 
+function LabeledField({
+  label,
+  children,
+  FIGMA,
+}: {
+  label: string;
+  children: any;
+  FIGMA: any;
+}) {
+  return (
+    <Box>
+      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+        {label}
+      </Text>
+      {children}
+    </Box>
+  );
+}
+
 /* ========= Result utils ========= */
 
 function formatResultField(results: GesResult[], key: ResultKey): string {

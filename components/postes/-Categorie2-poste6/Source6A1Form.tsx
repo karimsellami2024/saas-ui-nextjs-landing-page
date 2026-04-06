@@ -995,16 +995,27 @@ export function SourceAForm({
                       const showGroupFields = dIdx === 0;
 
                       return (
-                        <Box key={`r-${gIdx}-${dIdx}`}>
+                        <Box
+                          key={`r-${gIdx}-${dIdx}`}
+                          bg="white"
+                          rounded="xl"
+                          p={4}
+                          border="1px solid"
+                          borderColor={FIGMA.border}
+                          boxShadow={FIGMA.inputShadow}
+                        >
                           {/* Main row */}
                           <Grid
-                            templateColumns={{ base: "1fr", lg: "2.2fr 1.7fr 1.2fr 1.2fr 1fr 44px" }}
+                            templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }}
                             columnGap={4}
                             rowGap={3}
                             alignItems="center"
                           >
                             {/* Compteur */}
-                            <Box visibility={showGroupFields ? "visible" : "hidden"}>
+                            <Box display={showGroupFields ? "block" : "none"}>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Compteur
+                              </Text>
                               <Input
                                 value={group.number}
                                 onChange={(e) => updateCompteurField(gIdx, "number", e.target.value)}
@@ -1027,7 +1038,10 @@ export function SourceAForm({
                             </Box>
 
                             {/* Site */}
-                            <Box visibility={showGroupFields ? "visible" : "hidden"}>
+                            <Box display={showGroupFields ? "block" : "none"}>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Site
+                              </Text>
                               <Select
                                 value={group.site ?? ""}
                                 onChange={(e) => updateCompteurUIField(gIdx, "site", e.target.value)}
@@ -1052,7 +1066,10 @@ export function SourceAForm({
                             </Box>
 
                             {/* Province */}
-                            <Box visibility={showGroupFields ? "visible" : "hidden"}>
+                            <Box display={showGroupFields ? "block" : "none"}>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Province
+                              </Text>
                               <Select
                                 value={group.province}
                                 onChange={(e) => updateCompteurField(gIdx, "province", e.target.value)}
@@ -1079,28 +1096,37 @@ export function SourceAForm({
                             </Box>
 
                             {/* Consumption */}
-                            <Input
-                              value={row.consumption}
-                              onChange={(e) => updateDetailField(gIdx, dIdx, "consumption", e.target.value)}
-                              placeholder="35 280 kWh"
-                              h="42px"
-                              rounded="lg"
-                              bg="white"
-                              borderColor={FIGMA.border}
-                              boxShadow={FIGMA.inputShadow}
-                              fontFamily="Montserrat"
-                              fontSize="14px"
-                              color={FIGMA.text}
-                              _placeholder={{ color: FIGMA.muted }}
-                              _focus={{
-                                borderColor: FIGMA.green,
-                                boxShadow: `0 0 0 1px ${FIGMA.green}`,
-                              }}
-                              textAlign="center"
-                            />
+                            <Box>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Consommation (kWh)
+                              </Text>
+                              <Input
+                                value={row.consumption}
+                                onChange={(e) => updateDetailField(gIdx, dIdx, "consumption", e.target.value)}
+                                placeholder="35 280 kWh"
+                                h="42px"
+                                rounded="lg"
+                                bg="white"
+                                borderColor={FIGMA.border}
+                                boxShadow={FIGMA.inputShadow}
+                                fontFamily="Montserrat"
+                                fontSize="14px"
+                                color={FIGMA.text}
+                                _placeholder={{ color: FIGMA.muted }}
+                                _focus={{
+                                  borderColor: FIGMA.green,
+                                  boxShadow: `0 0 0 1px ${FIGMA.green}`,
+                                }}
+                                textAlign="center"
+                              />
+                            </Box>
 
                             {/* Period */}
-                            <Select
+                            <Box>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Periode
+                              </Text>
+                              <Select
                               value={row.periode ?? ""}
                               onChange={(e) => updateDetailField(gIdx, dIdx, "periode", e.target.value)}
                               h="42px"
@@ -1126,7 +1152,8 @@ export function SourceAForm({
                                   {m}
                                 </option>
                               ))}
-                            </Select>
+                              </Select>
+                            </Box>
 
                             {/* Delete row */}
                             <IconButton
@@ -1147,33 +1174,42 @@ export function SourceAForm({
                           {dIdx === group.details.length - 1 && (
                             <Grid
                               mt={4}
-                              templateColumns={{ base: "1fr", md: "1.6fr 1.2fr 1fr 120px" }}
+                              templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }}
                               columnGap={4}
                               rowGap={3}
                               alignItems="center"
                             >
                               {/* Comments */}
-                              <Input
-                                value={group.commentaires ?? ""}
-                                onChange={(e) => updateCompteurUIField(gIdx, "commentaires", e.target.value)}
-                                placeholder="Commentaires"
-                                h="42px"
-                                rounded="lg"
-                                bg="white"
-                                borderColor={FIGMA.border}
-                                boxShadow={FIGMA.inputShadow}
-                                fontFamily="Montserrat"
-                                fontSize="14px"
-                                color={FIGMA.text}
-                                _placeholder={{ color: FIGMA.muted }}
-                                _focus={{
-                                  borderColor: FIGMA.green,
-                                  boxShadow: `0 0 0 1px ${FIGMA.green}`,
-                                }}
-                              />
+                              <Box>
+                                <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                  Commentaires
+                                </Text>
+                                <Input
+                                  value={group.commentaires ?? ""}
+                                  onChange={(e) => updateCompteurUIField(gIdx, "commentaires", e.target.value)}
+                                  placeholder="Commentaires"
+                                  h="42px"
+                                  rounded="lg"
+                                  bg="white"
+                                  borderColor={FIGMA.border}
+                                  boxShadow={FIGMA.inputShadow}
+                                  fontFamily="Montserrat"
+                                  fontSize="14px"
+                                  color={FIGMA.text}
+                                  _placeholder={{ color: FIGMA.muted }}
+                                  _focus={{
+                                    borderColor: FIGMA.green,
+                                    boxShadow: `0 0 0 1px ${FIGMA.green}`,
+                                  }}
+                                />
+                              </Box>
 
                               {/* Reference */}
-                              <Input
+                              <Box>
+                                <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                  Reference
+                                </Text>
+                                <Input
                                 value={row.reference}
                                 onChange={(e) => updateDetailField(gIdx, dIdx, "reference", e.target.value)}
                                 placeholder="Référence"
@@ -1190,7 +1226,8 @@ export function SourceAForm({
                                   borderColor: FIGMA.green,
                                   boxShadow: `0 0 0 1px ${FIGMA.green}`,
                                 }}
-                              />
+                                />
+                              </Box>
 
                               {/* Result — live local calc */}
                               {(() => {

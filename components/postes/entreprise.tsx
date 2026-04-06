@@ -438,7 +438,7 @@ export default function ProductionAndProductsPage() {
     }
   }, [companyLoading]);
 
-  // Autosave lieux, products, services on change (debounced 1.2s)
+  // Autosave company info on change (debounced 1.2s)
   useEffect(() => {
     if (!initialLoadDoneRef.current) return;
     if (!companyId) return;
@@ -457,6 +457,8 @@ export default function ProductionAndProductsPage() {
             production_sites: lieux,
             products,
             services,
+            vehicle_fleet: vehicles,
+            company_references: companyReferences,
           }),
         });
         if (res.ok) {
@@ -469,7 +471,7 @@ export default function ProductionAndProductsPage() {
 
     return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lieux, products, services]);
+  }, [lieux, products, services, vehicles, companyReferences]);
 
   if (companyLoading)
     return (

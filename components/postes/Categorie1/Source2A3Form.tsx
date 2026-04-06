@@ -517,6 +517,9 @@ export function Source2A3Form({
                     alignItems="center"
                   >
                     <GridItem>
+                      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                        Véhicule
+                      </Text>
                       <FigmaInput
                         value={row.vehicle}
                         onChange={(v) => updateA3Row(idx, "vehicle", v)}
@@ -525,6 +528,9 @@ export function Source2A3Form({
                     </GridItem>
 
                     <GridItem>
+                      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                        Nom du site
+                      </Text>
                       <FigmaInput
                         value={row.cost}
                         onChange={(v) => updateA3Row(idx, "cost", v)}
@@ -533,6 +539,9 @@ export function Source2A3Form({
                     </GridItem>
 
                     <GridItem>
+                      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                        Type de véhicule
+                      </Text>
                       <FigmaVehicleSelect
                         value={row.type}
                         onChange={(v: string) => updateA3Row(idx, "type", v)}
@@ -540,6 +549,9 @@ export function Source2A3Form({
                     </GridItem>
 
                     <GridItem>
+                      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                        Distance
+                      </Text>
                       <FigmaInput
                         type="number"
                         value={row.estimateQty}
@@ -550,6 +562,9 @@ export function Source2A3Form({
                     </GridItem>
 
                     <GridItem>
+                      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                        Référence
+                      </Text>
                       <FigmaInput
                         value={row.reference}
                         onChange={(v) => updateA3Row(idx, "reference", v)}
@@ -558,6 +573,9 @@ export function Source2A3Form({
                     </GridItem>
 
                     <GridItem>
+                      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                        Date
+                      </Text>
                       <FigmaDate
                         value={row.date}
                         onChange={(v) => updateA3Row(idx, "date", v)}
@@ -605,6 +623,9 @@ export function Source2A3Form({
                   {/* Commentaires + inline row result */}
                   <HStack spacing={3} mt={3} flexWrap="wrap">
                     <Box flex={1} minW={{ base: "100%", md: "420px" }}>
+                      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                        Commentaires
+                      </Text>
                       <FigmaInput
                         value={row.avgPrice}
                         onChange={(v) => updateA3Row(idx, "avgPrice", v)}
@@ -808,6 +829,23 @@ function FigmaVehicleSelect({
       <Box w="full">
         <VehicleSelect value={value} onChange={onChange} />
       </Box>
+    </Box>
+  );
+}
+
+function LabeledField({
+  label,
+  children,
+}: {
+  label: string;
+  children: any;
+}) {
+  return (
+    <Box>
+      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+        {label}
+      </Text>
+      {children}
     </Box>
   );
 }

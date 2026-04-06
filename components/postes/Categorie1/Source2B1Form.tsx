@@ -638,18 +638,12 @@ export function SourceB1Form({
             >
               <Grid
                 w="full"
-                templateColumns="1.6fr .7fr .9fr .9fr .9fr 1fr 1.2fr .9fr 1.2fr 1fr .9fr 140px"
+                templateColumns="1.8fr 1fr 1.2fr 1fr .9fr 140px"
                 columnGap={5}
                 alignItems="center"
               >
                 <HStack justify="center" spacing={2}><Icon as={Truck} boxSize={4} /><Text fontWeight={600} fontSize="14px">Véhicule</Text></HStack>
-                <Text textAlign="center" fontWeight={600} fontSize="14px">Année</Text>
-                <Text textAlign="center" fontWeight={600} fontSize="14px">Marque</Text>
-                <Text textAlign="center" fontWeight={600} fontSize="14px">Modèle</Text>
-                <Text textAlign="center" fontWeight={600} fontSize="14px">Trans.</Text>
                 <Text textAlign="center" fontWeight={600} fontSize="14px">Distance</Text>
-                <Text textAlign="center" fontWeight={600} fontSize="14px">Type</Text>
-                <Text textAlign="center" fontWeight={600} fontSize="14px">Conso</Text>
                 <Text textAlign="center" fontWeight={600} fontSize="14px">Estimation</Text>
                 <Text textAlign="center" fontWeight={600} fontSize="14px">Référence</Text>
                 <Text textAlign="center" fontWeight={600} fontSize="14px">Clim</Text>
@@ -673,13 +667,16 @@ export function SourceB1Form({
                   <Grid
                     templateColumns={{
                       base: "1fr",
-                      xl: "1.6fr .7fr .9fr .9fr .9fr 1fr 1.2fr .9fr 1.2fr 1fr .9fr 140px",
+                      xl: "1.8fr 1fr 1.2fr 1fr .9fr 140px",
                     }}
                     columnGap={4}
                     rowGap={3}
                     alignItems="center"
                   >
                     <GridItem>
+                      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                        Véhicule
+                      </Text>
                       <FigmaSelect
                         value={row.vehicle || ""}
                         placeholder={loadingFleet ? "Chargement…" : fleet.length ? "Choisir un véhicule" : "Aucun véhicule"}
@@ -692,31 +689,12 @@ export function SourceB1Form({
                       />
                     </GridItem>
 
-                    <GridItem><FigmaInput value={row.year} onChange={(v) => updateRow(idx, { year: v })} placeholder="AAAA" center /></GridItem>
-                    <GridItem><FigmaInput value={row.make} onChange={(v) => updateRow(idx, { make: v })} placeholder="Marque" /></GridItem>
-                    <GridItem><FigmaInput value={row.model} onChange={(v) => updateRow(idx, { model: v })} placeholder="Modèle" /></GridItem>
-                    <GridItem><FigmaInput value={row.trans} onChange={(v) => updateRow(idx, { trans: v })} placeholder="Auto" center /></GridItem>
-                    <GridItem><FigmaInput value={row.distance} onChange={(v) => updateRow(idx, { distance: v })} placeholder="km" type="number" center /></GridItem>
+                    <GridItem><Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">Distance (km)</Text><FigmaInput value={row.distance} onChange={(v) => updateRow(idx, { distance: v })} placeholder="km" type="number" center /></GridItem>
 
                     <GridItem>
-                      <FigmaInput
-                        value={row.type}
-                        onChange={(v) => updateRow(idx, { type: v })}
-                        placeholder="Type (clé lookup)"
-                      />
-                    </GridItem>
-
-                    <GridItem>
-                      <FigmaInput
-                        value={row.cons}
-                        onChange={(v) => updateRow(idx, { cons: v })}
-                        placeholder="L/100km"
-                        type="number"
-                        center
-                      />
-                    </GridItem>
-
-                    <GridItem>
+                      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                        Estimation
+                      </Text>
                       <FigmaInput
                         value={row.estimate}
                         onChange={(v) => updateRow(idx, { estimate: v })}
@@ -726,8 +704,8 @@ export function SourceB1Form({
                       />
                     </GridItem>
 
-                    <GridItem><FigmaInput value={row.reference} onChange={(v) => updateRow(idx, { reference: v })} placeholder="Référence" /></GridItem>
-                    <GridItem><FigmaInput value={row.ac} onChange={(v) => updateRow(idx, { ac: v })} placeholder="Oui/Non" center /></GridItem>
+                    <GridItem><Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">Reference</Text><FigmaInput value={row.reference} onChange={(v) => updateRow(idx, { reference: v })} placeholder="RÃ©fÃ©rence" /></GridItem>
+                    <GridItem><Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">Climatisation</Text><FigmaInput value={row.ac} onChange={(v) => updateRow(idx, { ac: v })} placeholder="Oui/Non" center /></GridItem>
 
                     <GridItem>
                       <HStack justify="flex-end" spacing={1}>
@@ -943,6 +921,23 @@ function FigmaSelect({
         </option>
       ))}
     </Select>
+  );
+}
+
+function LabeledField({
+  label,
+  children,
+}: {
+  label: string;
+  children: any;
+}) {
+  return (
+    <Box>
+      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+        {label}
+      </Text>
+      {children}
+    </Box>
   );
 }
 

@@ -921,16 +921,27 @@ export function Source6B1Form({
                       const showGroupFields = dIdx === 0;
 
                       return (
-                        <Box key={`r-${gIdx}-${dIdx}`}>
+                        <Box
+                          key={`r-${gIdx}-${dIdx}`}
+                          bg="white"
+                          rounded="xl"
+                          p={4}
+                          border="1px solid"
+                          borderColor={FIGMA.border}
+                          boxShadow={FIGMA.inputShadow}
+                        >
                           {/* Main row */}
                           <Grid
-                            templateColumns={{ base: "1fr", xl: "1.5fr 1.2fr 1.2fr 1fr 1fr 1fr 1.2fr 44px" }}
+                            templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }}
                             columnGap={4}
                             rowGap={3}
                             alignItems="center"
                           >
                             {/* Compteur number */}
-                            <Box visibility={showGroupFields ? "visible" : "hidden"}>
+                            <Box display={showGroupFields ? "block" : "none"}>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Compteur
+                              </Text>
                               <Input
                                 value={group.number}
                                 onChange={(e) => updateCompteurField(gIdx, "number", e.target.value)}
@@ -953,7 +964,10 @@ export function Source6B1Form({
                             </Box>
 
                             {/* Province */}
-                            <Box visibility={showGroupFields ? "visible" : "hidden"}>
+                            <Box display={showGroupFields ? "block" : "none"}>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Province
+                              </Text>
                               <Select
                                 value={group.province}
                                 onChange={(e) => updateCompteurField(gIdx, "province", e.target.value)}
@@ -980,7 +994,11 @@ export function Source6B1Form({
                             </Box>
 
                             {/* Site */}
-                            <Select
+                            <Box>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Site
+                              </Text>
+                              <Select
                               value={row.site}
                               onChange={(e) => updateDetailField(gIdx, dIdx, "site", e.target.value)}
                               h="42px"
@@ -1000,10 +1018,15 @@ export function Source6B1Form({
                               {siteOptions.map((s) => (
                                 <option key={s} value={s}>{s}</option>
                               ))}
-                            </Select>
+                              </Select>
+                            </Box>
 
                             {/* Product */}
-                            <Select
+                            <Box>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Produit / Service
+                              </Text>
+                              <Select
                               value={row.product}
                               onChange={(e) => updateDetailField(gIdx, dIdx, "product", e.target.value)}
                               h="42px"
@@ -1023,54 +1046,69 @@ export function Source6B1Form({
                               {productOptions.map((p) => (
                                 <option key={p} value={p}>{p}</option>
                               ))}
-                            </Select>
+                              </Select>
+                            </Box>
 
                             {/* Consumption */}
-                            <Input
-                              type="number"
-                              value={row.consumption}
-                              onChange={(e) => updateDetailField(gIdx, dIdx, "consumption", e.target.value)}
-                              placeholder="kWh"
-                              h="42px"
-                              rounded="lg"
-                              bg="white"
-                              borderColor={FIGMA.border}
-                              boxShadow={FIGMA.inputShadow}
-                              fontFamily="Montserrat"
-                              fontSize="14px"
-                              color={FIGMA.text}
-                              _placeholder={{ color: FIGMA.muted }}
-                              _focus={{
-                                borderColor: FIGMA.green,
-                                boxShadow: `0 0 0 1px ${FIGMA.green}`,
-                              }}
-                              textAlign="center"
-                            />
+                            <Box>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Consommation (kWh)
+                              </Text>
+                              <Input
+                                type="number"
+                                value={row.consumption}
+                                onChange={(e) => updateDetailField(gIdx, dIdx, "consumption", e.target.value)}
+                                placeholder="kWh"
+                                h="42px"
+                                rounded="lg"
+                                bg="white"
+                                borderColor={FIGMA.border}
+                                boxShadow={FIGMA.inputShadow}
+                                fontFamily="Montserrat"
+                                fontSize="14px"
+                                color={FIGMA.text}
+                                _placeholder={{ color: FIGMA.muted }}
+                                _focus={{
+                                  borderColor: FIGMA.green,
+                                  boxShadow: `0 0 0 1px ${FIGMA.green}`,
+                                }}
+                                textAlign="center"
+                              />
+                            </Box>
 
                             {/* Carbon Intensity */}
-                            <Input
-                              type="number"
-                              value={row.carbonIntensity}
-                              onChange={(e) => updateDetailField(gIdx, dIdx, "carbonIntensity", e.target.value)}
-                              placeholder="kgCO2e/MWh"
-                              h="42px"
-                              rounded="lg"
-                              bg="white"
-                              borderColor={FIGMA.border}
-                              boxShadow={FIGMA.inputShadow}
-                              fontFamily="Montserrat"
-                              fontSize="14px"
-                              color={FIGMA.text}
-                              _placeholder={{ color: FIGMA.muted }}
-                              _focus={{
-                                borderColor: FIGMA.green,
-                                boxShadow: `0 0 0 1px ${FIGMA.green}`,
-                              }}
-                              textAlign="center"
-                            />
+                            <Box>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Intensite carbone
+                              </Text>
+                              <Input
+                                type="number"
+                                value={row.carbonIntensity}
+                                onChange={(e) => updateDetailField(gIdx, dIdx, "carbonIntensity", e.target.value)}
+                                placeholder="kgCO2e/MWh"
+                                h="42px"
+                                rounded="lg"
+                                bg="white"
+                                borderColor={FIGMA.border}
+                                boxShadow={FIGMA.inputShadow}
+                                fontFamily="Montserrat"
+                                fontSize="14px"
+                                color={FIGMA.text}
+                                _placeholder={{ color: FIGMA.muted }}
+                                _focus={{
+                                  borderColor: FIGMA.green,
+                                  boxShadow: `0 0 0 1px ${FIGMA.green}`,
+                                }}
+                                textAlign="center"
+                              />
+                            </Box>
 
                             {/* Date */}
-                            <Input
+                            <Box>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                Date
+                              </Text>
+                              <Input
                               type="date"
                               value={row.date}
                               onChange={(e) => updateDetailField(gIdx, dIdx, "date", e.target.value)}
@@ -1086,7 +1124,8 @@ export function Source6B1Form({
                                 borderColor: FIGMA.green,
                                 boxShadow: `0 0 0 1px ${FIGMA.green}`,
                               }}
-                            />
+                              />
+                            </Box>
 
                             {/* Delete row */}
                             <IconButton
@@ -1107,13 +1146,17 @@ export function Source6B1Form({
                           {dIdx === group.details.length - 1 && (
                             <Grid
                               mt={4}
-                              templateColumns={{ base: "1fr", md: "1fr 120px" }}
+                              templateColumns={{ base: "1fr", md: "repeat(2, 1fr)" }}
                               columnGap={4}
                               rowGap={3}
                               alignItems="center"
                             >
                               {/* Reference */}
-                              <Input
+                              <Box>
+                                <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
+                                  Reference
+                                </Text>
+                                <Input
                                 value={row.reference}
                                 onChange={(e) => updateDetailField(gIdx, dIdx, "reference", e.target.value)}
                                 placeholder="Référence"
@@ -1130,7 +1173,8 @@ export function Source6B1Form({
                                   borderColor: FIGMA.green,
                                   boxShadow: `0 0 0 1px ${FIGMA.green}`,
                                 }}
-                              />
+                                />
+                              </Box>
 
                               {/* Add row */}
                               <HStack justify="flex-end">

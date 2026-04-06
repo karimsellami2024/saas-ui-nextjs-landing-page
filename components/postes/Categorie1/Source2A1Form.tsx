@@ -700,6 +700,9 @@ export function SourceA1Form({
                             </GridItem>
 
                             <GridItem>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                                Détail
+                              </Text>
                               <FigmaInput
                                 value={row.details}
                                 onChange={(v) => updateRowField(gIdx, rIdx, "details", v)}
@@ -708,6 +711,9 @@ export function SourceA1Form({
                             </GridItem>
 
                             <GridItem>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                                Date
+                              </Text>
                               <FigmaInput
                                 type="date"
                                 value={row.date}
@@ -716,6 +722,9 @@ export function SourceA1Form({
                             </GridItem>
 
                             <GridItem>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                                No facture
+                              </Text>
                               <FigmaInput
                                 value={row.invoiceNumber}
                                 onChange={(v) => updateRowField(gIdx, rIdx, "invoiceNumber", v)}
@@ -725,6 +734,9 @@ export function SourceA1Form({
                             </GridItem>
 
                             <GridItem>
+                              <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                                Quantité
+                              </Text>
                               <FigmaInput
                                 type="number"
                                 value={row.qty}
@@ -919,6 +931,23 @@ function ReadPill({ label, value }: { label: string; value: string }) {
       <Text fontSize="sm" color={FIGMA.text} fontFamily="Montserrat" fontWeight={600} noOfLines={1}>
         {value}
       </Text>
+    </Box>
+  );
+}
+
+function LabeledField({
+  label,
+  children,
+}: {
+  label: string;
+  children: any;
+}) {
+  return (
+    <Box>
+      <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+        {label}
+      </Text>
+      {children}
     </Box>
   );
 }

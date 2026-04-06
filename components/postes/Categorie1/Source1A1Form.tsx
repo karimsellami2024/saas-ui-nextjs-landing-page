@@ -927,6 +927,9 @@ export function Source1AForm({
                 alignItems="center"
               >
                 <GridItem>
+                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                    Équipement
+                  </Text>
                   <FigmaInput
                     value={row.equipment}
                     onChange={(v) => updateRowField(idx, "equipment", v)}
@@ -936,6 +939,9 @@ export function Source1AForm({
                 </GridItem>
 
                 <GridItem>
+                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                    Description
+                  </Text>
                   <FigmaInput
                     value={row.description}
                     onChange={(v) => updateRowField(idx, "description", v)}
@@ -945,6 +951,9 @@ export function Source1AForm({
                 </GridItem>
 
                 <GridItem>
+                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                    Date
+                  </Text>
                   <FigmaInput
                     type="date"
                     value={row.date}
@@ -954,6 +963,9 @@ export function Source1AForm({
                 </GridItem>
 
                 <GridItem>
+                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                    Site
+                  </Text>
                   <FigmaSelect
                     value={row.site}
                     onChange={(v) => updateRowField(idx, "site", v)}
@@ -969,6 +981,9 @@ export function Source1AForm({
                 </GridItem>
 
                 <GridItem>
+                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                    Produit / Service
+                  </Text>
                   <FigmaSelect
                     value={row.product}
                     onChange={(v) => updateRowField(idx, "product", v)}
@@ -984,6 +999,9 @@ export function Source1AForm({
                 </GridItem>
 
                 <GridItem>
+                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                    Référence
+                  </Text>
                   <FigmaSelect
                     value={row.reference}
                     onChange={(v) => updateRowField(idx, "reference", v)}
@@ -999,6 +1017,9 @@ export function Source1AForm({
                 </GridItem>
 
                 <GridItem>
+                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                    Usage / Carburant
+                  </Text>
                   <FigmaSelect
                     value={row.usageAndFuel}
                     onChange={(v) => onFuelChange(idx, v)}
@@ -1014,6 +1035,9 @@ export function Source1AForm({
                 </GridItem>
 
                 <GridItem>
+                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                    Quantité
+                  </Text>
                   <FigmaInput
                     type="number"
                     value={row.qty}
@@ -1025,6 +1049,9 @@ export function Source1AForm({
                 </GridItem>
 
                 <GridItem>
+                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
+                    Unité
+                  </Text>
                   <FigmaSelect
                     value={row.unit}
                     onChange={(v) => updateRowField(idx, "unit", v)}
@@ -1197,6 +1224,25 @@ function FigmaSelect({
     >
       {children}
     </Select>
+  );
+}
+
+function LabeledField({
+  label,
+  children,
+  muted,
+}: {
+  label: string;
+  children: any;
+  muted: string;
+}) {
+  return (
+    <Box>
+      <Text mb={1} fontSize="12px" color={muted} fontWeight="500" fontFamily="Montserrat">
+        {label}
+      </Text>
+      {children}
+    </Box>
   );
 }
 
