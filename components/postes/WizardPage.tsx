@@ -37,14 +37,25 @@ const MOBILE_FUELS = [
   { label: 'Propane', kgco2e: 1.540 },
 ]
 const PROVINCES: Record<string, number> = {
-  QC: 0.002, ON: 0.056, BC: 0.013, AB: 0.670,
-  MB: 0.004, SK: 0.510, NS: 0.670, NB: 0.300,
-  PE: 0.280, NL: 0.019,
+  "QuÃ©bec": 0.002,
+  "Ontario": 0.056,
+  "Colombie-Britannique": 0.013,
+  "Alberta": 0.670,
+  "Manitoba": 0.004,
+  "Saskatchewan": 0.510,
+  "Nouvelle-Ã‰cosse": 0.670,
+  "Nouveau-Brunswick": 0.300,
+  "ÃŽle-du-Prince-Ã‰douard": 0.280,
+  "Terre-Neuve-et-Labrador": 0.019,
+  "Nunavut": 0.733,
+  "Territoires du Nord-Ouest": 0.279,
+  "Yukon": 0.073,
 }
 const REFRIGERANTS = [
   { label: 'R410A', prg: 2088 },
   { label: 'R22',   prg: 1810 },
   { label: 'R134a', prg: 1430 },
+  { label: 'R-134a', prg: 1430 },
   { label: 'R404A', prg: 3922 },
   { label: 'R407C', prg: 1774 },
   { label: 'R32',   prg: 675  },
@@ -54,33 +65,33 @@ const REFRIGERANTS = [
 /* ── Source metadata ─────────────────────────────────────────── */
 const SOURCE_META: Record<string, { poste_num: number; label: string; icon: string; scope: 1|2|3 }> = {
   '1A1': { poste_num: 1, label: 'Combustion fixe',                icon: '🔥', scope: 1 },
-  '2A1': { poste_num: 1, label: 'Véhicules — factures carburant', icon: '🚗', scope: 1 },
-  '2A3': { poste_num: 1, label: 'Véhicules — dépenses ($)',       icon: '💳', scope: 1 },
-  '2B1': { poste_num: 1, label: 'Véhicules — distance parcourue', icon: '📍', scope: 1 },
-  '4A1': { poste_num: 1, label: 'Réfrigérants fixes',             icon: '❄️', scope: 1 },
-  '4B1': { poste_num: 1, label: 'Réfrigérants véhicules (moy.)', icon: '🌡️', scope: 1 },
-  '4B2': { poste_num: 1, label: 'Réfrigérants véhicules (data)', icon: '🌡️', scope: 1 },
-  '6A1': { poste_num: 2, label: 'Électricité — réseau',           icon: '⚡', scope: 2 },
-  '6B1': { poste_num: 2, label: 'Électricité — marché',           icon: '🌿', scope: 2 },
+  '2A1': { poste_num: 2, label: 'Véhicules — factures carburant', icon: '🚗', scope: 1 },
+  '2A3': { poste_num: 2, label: 'Véhicules — dépenses ($)',       icon: '💳', scope: 1 },
+  '2B1': { poste_num: 2, label: 'Véhicules — distance parcourue', icon: '📍', scope: 1 },
+  '4A1': { poste_num: 4, label: 'Réfrigérants fixes',             icon: '❄️', scope: 1 },
+  '4B1': { poste_num: 4, label: 'Réfrigérants véhicules (moy.)', icon: '🌡️', scope: 1 },
+  '4B2': { poste_num: 4, label: 'Réfrigérants véhicules (data)', icon: '🌡️', scope: 1 },
+  '6A1': { poste_num: 6, label: 'Électricité — réseau',           icon: '⚡', scope: 2 },
+  '6B1': { poste_num: 6, label: 'Électricité — marché',           icon: '🌿', scope: 2 },
 }
 
 /* ── Default form data ───────────────────────────────────────── */
 const DEFAULT_FORM: Record<string, Record<string, string>> = {
   '1A1': { fuel: 'Gaz naturel', qty: '' },
   '2A1': { fuel: 'Essence', qty: '' },
-  '2A3': { fuel: 'Essence', amount: '', pricePerL: '1.70' },
+  '2A3': { fuel: 'Essence', estimateQty: '' },
   '2B1': { fuel: 'Essence', km: '', l100km: '10' },
-  '4A1': { refrigerant: 'R410A', kg: '' },
-  '4B1': { count: '' },
-  '4B2': { refrigerant: 'R410A', kg: '' },
-  '6A1': { province: 'QC', kwh: '' },
-  '6B1': { kwh: '' },
+  '4A1': { refrigerant: 'R-134a', qtyInEquipment: '', leakObserved: '' },
+  '4B1': { refrigerant: 'R-134a', qtyInEquipment: '', leakObserved: '', climatisation: 'Oui' },
+  '4B2': { refrigerant: 'R-134a', qtyInEquipment: '', leakObserved: '' },
+  '6A1': { province: 'QuÃ©bec', kwh: '' },
+  '6B1': { kwh: '', carbonIntensity: '' },
 }
 
 /* ── DB-backed refs (same tables as category forms) ──────────── */
 type WizardRefs = {
-  fixedEF:  Array<{ label: string; gco2: number; gch4: number; gn2o: number; kwh: number }>
-  mobileEF: Array<{ carburant: string; type_vehicule: string; co2: number; ch4: number; n2o: number; co2eq: number; kwh: number }>
+  fixedEF: Array<{ label: string; unit?: string; gco2: number; gch4: number; gn2o: number; kwh: number }>
+  mobileEF: Array<{ carburant: string; type_vehicule: string; unit?: string; co2: number; ch4: number; n2o: number; co2eq: number; kwh: number }>
   prpCO2: number
   prpCH4: number
   prpN2O: number
@@ -121,8 +132,11 @@ function computeResults(code: string, fd: Record<string, any>, refs: WizardRefs 
     const k = norm(fuel)
     return refs.mobileEF.find(e =>
       norm(e.carburant) === k ||
+      norm(e.type_vehicule) === k ||
       norm(e.carburant).includes(k) ||
-      k.includes(norm(e.carburant))
+      norm(e.type_vehicule).includes(k) ||
+      k.includes(norm(e.carburant)) ||
+      k.includes(norm(e.type_vehicule))
     )
   }
 
@@ -161,8 +175,7 @@ function computeResults(code: string, fd: Record<string, any>, refs: WizardRefs 
 
   /* ── 2A3 Véhicules — dépenses $ ─── */
   if (code === '2A3') {
-    const ppl    = parseFloat(fd.pricePerL) || 1.70
-    const liters = ppl > 0 ? (parseFloat(fd.amount) || 0) / ppl : 0
+    const liters = parseFloat(fd.estimateQty) || 0
     return mobileCalc(findMobile(fd.fuel), liters)
   }
 
@@ -215,6 +228,87 @@ type FleetRow = {
   fuites_lbs: string; climatisation: boolean;
 }
 
+
+function normalizeWizardFormData(code: string, fd: Record<string, string>) {
+  if (code === '2A3') {
+    return {
+      ...fd,
+      estimateQty: fd.estimateQty ?? '',
+    }
+  }
+
+  if (code === '4A1' || code === '4B1' || code === '4B2') {
+    return {
+      ...fd,
+      refrigerant: fd.refrigerant ?? 'R-134a',
+      qtyInEquipment: fd.qtyInEquipment ?? '',
+      leakObserved: fd.leakObserved ?? '',
+    }
+  }
+
+  if (code === '6B1') {
+    return {
+      ...fd,
+      carbonIntensity: fd.carbonIntensity ?? '',
+    }
+  }
+
+  return fd
+}
+
+function computeWizardResults(code: string, fd: Record<string, string>, refs: WizardRefs | null) {
+  const normalized = normalizeWizardFormData(code, fd)
+  if (!refs) return computeResults(code, normalized, refs)
+
+  if (code === '4A1' || code === '4B1' || code === '4B2') {
+    const qtyInEquipment = parseFloat(normalized.qtyInEquipment) || 0
+    const leakObserved = normalized.leakObserved === '' ? 0 : (parseFloat(normalized.leakObserved) || 0)
+    const gwp =
+      refs.refrigerantGWP[normalized.refrigerant]
+      ?? refs.refrigerantGWP[String(normalized.refrigerant ?? '').replace('R-', 'R')]
+      ?? 0
+
+    if (qtyInEquipment === 0 || gwp === 0) {
+      return {
+        total_ges_tco2e: 0,
+        total_co2_gco2e: 0,
+        total_ges_ch4_gco2e: 0,
+        total_ges_n2o_gco2e: 0,
+        total_ges_gco2e: 0,
+        total_energie_kwh: 0,
+      }
+    }
+
+    const lbsPerKg = 2.20462
+    const leakKg = code === '4A1' ? leakObserved : leakObserved / lbsPerKg
+    const total_g = leakKg * gwp * 1000
+
+    return {
+      total_co2_gco2e: total_g,
+      total_ges_ch4_gco2e: 0,
+      total_ges_n2o_gco2e: 0,
+      total_ges_gco2e: total_g,
+      total_ges_tco2e: total_g / 1e6,
+      total_energie_kwh: 0,
+    }
+  }
+
+  if (code === '6B1') {
+    const kwhVal = parseFloat(normalized.kwh) || 0
+    const carbonIntensity = parseFloat(normalized.carbonIntensity) || 0
+    const total_g = carbonIntensity * kwhVal
+    return {
+      total_co2_gco2e: total_g,
+      total_ges_ch4_gco2e: 0,
+      total_ges_n2o_gco2e: 0,
+      total_ges_gco2e: total_g,
+      total_ges_tco2e: total_g / 1e6,
+      total_energie_kwh: kwhVal,
+    }
+  }
+
+  return computeResults(code, normalized, refs)
+}
 
 async function parseFleetExcel(file: File): Promise<FleetRow[]> {
   const form = new FormData()
@@ -408,7 +502,25 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
     const amount = d.amount ?? d.montant ?? d.total
     if (amount != null) updateField('amount', String(amount))
 
-    if (d.province) updateField('province', String(d.province).toUpperCase().slice(0, 2))
+    if (d.province) {
+      const rawProvince = String(d.province).trim()
+      const provinceMap: Record<string, string> = {
+        QC: 'QuÃ©bec',
+        ON: 'Ontario',
+        BC: 'Colombie-Britannique',
+        AB: 'Alberta',
+        MB: 'Manitoba',
+        SK: 'Saskatchewan',
+        NS: 'Nouvelle-Ã‰cosse',
+        NB: 'Nouveau-Brunswick',
+        PE: 'ÃŽle-du-Prince-Ã‰douard',
+        NL: 'Terre-Neuve-et-Labrador',
+        NU: 'Nunavut',
+        NT: 'Territoires du Nord-Ouest',
+        YT: 'Yukon',
+      }
+      updateField('province', provinceMap[rawProvince.toUpperCase()] ?? rawProvince)
+    }
 
     const fuel = d.fuel_type ?? d.carburant
     if (fuel) updateField('fuel', fuel)
@@ -495,6 +607,39 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
 
   /* ── Build data payload compatible with each category form's prefill ── */
   const buildData = (code: string, fd: Record<string, string>) => {
+    if (code === '1A1') {
+      return {
+        wizard: true,
+        rows: [{
+          equipment: '',
+          description: '',
+          date: '',
+          site: '',
+          product: '',
+          reference: '',
+          usageAndFuel: fd.fuel ?? '',
+          qty: fd.qty ?? '',
+          unit: (COMBUSTION_FUELS.find(f => f.label === fd.fuel)?.unit ?? ''),
+        }],
+      }
+    }
+
+    if (code === '2A1') {
+      return {
+        wizard: true,
+        groups: [{
+          vehicle: 'Wizard',
+          fuelType: fd.fuel ?? '',
+          rows: [{
+            details: '',
+            date: '',
+            invoiceNumber: '',
+            qty: fd.qty ?? '',
+          }],
+        }],
+      }
+    }
+
     // 2A3 expects { rows: A3Row[] }
     if (code === '2A3') {
       return {
@@ -503,13 +648,86 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
           vehicle: fd.fuel ?? '',
           type: fd.fuel ?? '',
           date: '',
-          cost: fd.amount ?? '',
-          avgPrice: fd.pricePerL ?? '1.70',
-          estimateQty: '',
+          cost: '',
+          avgPrice: '',
+          estimateQty: fd.estimateQty ?? '',
           reference: '',
         }],
       }
     }
+
+    if (code === '4A1') {
+      return {
+        wizard: true,
+        rows: [{
+          equipment: 'Wizard',
+          description: '',
+          date: '',
+          months: '',
+          site: '',
+          product: '',
+          reference: '',
+          equipmentType: '',
+          refrigerantType: fd.refrigerant ?? '',
+          qty: fd.qtyInEquipment ?? '',
+          leaks: fd.leakObserved ?? '',
+        }],
+      }
+    }
+
+    if (code === '4B1' || code === '4B2') {
+      return {
+        wizard: true,
+        rows: [{
+          vehicle: 'Wizard',
+          date: '',
+          description: '',
+          months: '',
+          site: '',
+          product: '',
+          reference: '',
+          refrigerationType: '',
+          refrigerant: fd.refrigerant ?? '',
+          qtyInEquipment: fd.qtyInEquipment ?? '',
+          leakObserved: fd.leakObserved ?? '',
+          climatisation: fd.climatisation ?? 'Oui',
+        }],
+      }
+    }
+
+    if (code === '6A1') {
+      return {
+        wizard: true,
+        counters: [{ number: 'Wizard', address: '', province: fd.province ?? '' }],
+        invoices: [{
+          number: 'Wizard',
+          address: '',
+          province: fd.province ?? '',
+          date: '',
+          consumption: fd.kwh ?? '',
+          reference: '',
+        }],
+      }
+    }
+
+    if (code === '6B1') {
+      return {
+        wizard: true,
+        counters: [{ number: 'Wizard', address: '', province: '' }],
+        invoices: [{
+          number: 'Wizard',
+          address: '',
+          province: '',
+          date: '',
+          site: '',
+          product: '',
+          consumption: fd.kwh ?? '',
+          carbonIntensity: fd.carbonIntensity ?? '',
+          reference: '',
+        }],
+      }
+    }
+
     // All other sources: flat formData (category forms read prefillData directly)
     return { wizard: true, ...fd }
   }
@@ -518,9 +736,31 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
   const handleSave = async () => {
     if (!userId) return
     const step = steps[current]
-    const results = computeResults(step.source_code, step.formData, refs)
+    const normalizedFormData = normalizeWizardFormData(step.source_code, step.formData)
+    let results = computeWizardResults(step.source_code, normalizedFormData, refs)
     setSaving(true)
     try {
+      if (step.source_code === '4A1' || step.source_code === '4B1') {
+        const webhookPayload = {
+          user_id: userId,
+          poste_num: step.poste_num,
+          source_code: step.source_code,
+          data: buildData(step.source_code, normalizedFormData),
+        }
+
+        try {
+          const webhookRes = await fetch(`https://allposteswebhook-129138384907.us-central1.run.app/submit/${step.source_code}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(webhookPayload),
+          })
+          const webhookData = await webhookRes.json()
+          if (webhookRes.ok && Array.isArray(webhookData.results) && webhookData.results.length > 0) {
+            results = webhookData.results[0]
+          }
+        } catch {}
+      }
+
       const res = await fetch('/api/4submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -528,7 +768,7 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
           user_id: userId,
           poste_num: step.poste_num,
           source_code: step.source_code,
-          data: buildData(step.source_code, step.formData),
+          data: buildData(step.source_code, normalizedFormData),
           results: [results],
         }),
       })
@@ -765,7 +1005,7 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
   /* ── Active step ── */
   const step = steps[current]
   const pct = Math.round((current / steps.length) * 100)
-  const results = computeResults(step.source_code, step.formData, refs)
+  const results = computeWizardResults(step.source_code, step.formData, refs)
   const tco2e = results.total_ges_tco2e
 
   return (
@@ -799,7 +1039,14 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
             Données de la source
           </Text>
           <SourceForm
-            sourceCode={step.source_code}
+            sourceCode={
+              step.source_code === '2A3' ? '2A3-wizard'
+              : step.source_code === '4A1' ? '4A1-wizard'
+              : step.source_code === '4B1' ? '4B1-wizard'
+              : step.source_code === '4B2' ? '4B2-wizard'
+              : step.source_code === '6B1' ? '6B1-wizard'
+              : step.source_code
+            }
             formData={step.formData}
             onChange={updateField}
           />
@@ -1010,6 +1257,22 @@ function SourceForm({ sourceCode, formData, onChange }: {
     </VStack>
   )
 
+  if (sourceCode === '2A3-wizard') return (
+    <VStack spacing={4} align="stretch">
+      <Box>
+        {label('Type de carburant')}
+        <Select {...IS} value={formData.fuel} onChange={e => onChange('fuel', e.target.value)}>
+          {MOBILE_FUELS.map(f => <option key={f.label} value={f.label}>{f.label}</option>)}
+        </Select>
+      </Box>
+      <Box>
+        {label('QuantitÃ© totale (L)')}
+        <Input {...IS} type="number" placeholder="0" value={formData.estimateQty}
+          onChange={e => onChange('estimateQty', e.target.value)} />
+      </Box>
+    </VStack>
+  )
+
   if (sourceCode === '2A3') return (
     <VStack spacing={4} align="stretch">
       <Box>
@@ -1048,6 +1311,59 @@ function SourceForm({ sourceCode, formData, onChange }: {
         {label('Consommation moyenne (L/100 km)')}
         <Input {...IS} type="number" placeholder="10" value={formData.l100km}
           onChange={e => onChange('l100km', e.target.value)} />
+      </Box>
+    </VStack>
+  )
+
+  if (sourceCode === '4A1-wizard' || sourceCode === '4B2-wizard') return (
+    <VStack spacing={4} align="stretch">
+      <Box>
+        {label('Type de rÃ©frigÃ©rant')}
+        <Select {...IS} value={formData.refrigerant} onChange={e => onChange('refrigerant', e.target.value)}>
+          {REFRIGERANTS.map(r => (
+            <option key={r.label} value={r.label}>{r.label} â€” PRG {r.prg.toLocaleString('fr-CA')}</option>
+          ))}
+        </Select>
+      </Box>
+      <Box>
+        {label(sourceCode === '4A1-wizard' ? 'Charge de rÃ©frigÃ©rant (kg)' : 'Charge de rÃ©frigÃ©rant (lbs)')}
+        <Input {...IS} type="number" placeholder="0" value={formData.qtyInEquipment}
+          onChange={e => onChange('qtyInEquipment', e.target.value)} />
+      </Box>
+      <Box>
+        {label(sourceCode === '4A1-wizard' ? 'Fuite observÃ©e (kg)' : 'Fuite observÃ©e (lbs)')}
+        <Input {...IS} type="number" placeholder="0" value={formData.leakObserved}
+          onChange={e => onChange('leakObserved', e.target.value)} />
+      </Box>
+    </VStack>
+  )
+
+  if (sourceCode === '4B1-wizard') return (
+    <VStack spacing={4} align="stretch">
+      <Box>
+        {label('Type de rÃ©frigÃ©rant')}
+        <Select {...IS} value={formData.refrigerant} onChange={e => onChange('refrigerant', e.target.value)}>
+          {REFRIGERANTS.map(r => (
+            <option key={r.label} value={r.label}>{r.label} â€” PRG {r.prg.toLocaleString('fr-CA')}</option>
+          ))}
+        </Select>
+      </Box>
+      <Box>
+        {label('Charge de rÃ©frigÃ©rant (lbs)')}
+        <Input {...IS} type="number" placeholder="0" value={formData.qtyInEquipment}
+          onChange={e => onChange('qtyInEquipment', e.target.value)} />
+      </Box>
+      <Box>
+        {label('Fuite observÃ©e (lbs)')}
+        <Input {...IS} type="number" placeholder="0" value={formData.leakObserved}
+          onChange={e => onChange('leakObserved', e.target.value)} />
+      </Box>
+      <Box>
+        {label('Climatisation prÃ©sente')}
+        <Select {...IS} value={formData.climatisation} onChange={e => onChange('climatisation', e.target.value)}>
+          <option value="Oui">Oui</option>
+          <option value="Non">Non</option>
+        </Select>
       </Box>
     </VStack>
   )
@@ -1104,6 +1420,21 @@ function SourceForm({ sourceCode, formData, onChange }: {
     </VStack>
   )
 
+  if (sourceCode === '6B1-wizard') return (
+    <VStack spacing={4} align="stretch">
+      <Box>
+        {label('Consommation totale (kWh)')}
+        <Input {...IS} type="number" placeholder="0" value={formData.kwh}
+          onChange={e => onChange('kwh', e.target.value)} />
+      </Box>
+      <Box>
+        {label('IntensitÃ© carbone (gCOâ‚‚e/kWh)')}
+        <Input {...IS} type="number" placeholder="0" value={formData.carbonIntensity}
+          onChange={e => onChange('carbonIntensity', e.target.value)} />
+      </Box>
+    </VStack>
+  )
+
   if (sourceCode === '6B1') return (
     <VStack spacing={4} align="stretch">
       <Box>
@@ -1125,3 +1456,4 @@ function SourceForm({ sourceCode, formData, onChange }: {
     </Box>
   )
 }
+

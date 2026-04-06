@@ -1,6 +1,17 @@
 // pages/api/get-source.ts
 import { supabase } from '../../lib/supabaseClient';
 
+const LEGACY_POSTE_NUM_BY_SOURCE = {
+  '2A1': 1,
+  '2A3': 1,
+  '2B1': 1,
+  '4A1': 1,
+  '4B1': 1,
+  '4B2': 1,
+  '6A1': 2,
+  '6B1': 2,
+};
+
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
     return res.status(405).json({ error: "Method not allowed" });
@@ -57,14 +68,44 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: psErr.message });
     }
 
+    let resolvedPosteSource = posteSource;
+
+    if (!resolvedPosteSource) {
+      const legacyPosteNum = LEGACY_POSTE_NUM_BY_SOURCE[String(source_code)];
+
+      if (legacyPosteNum && Number(legacyPosteNum) !== Number(poste_num)) {
+        const { data: legacyPoste, error: legacyPosteErr } = await supabase
+          .from('postes')
+          .select('id')
+          .eq('company_id', userProfile.company_id)
+          .eq('num', legacyPosteNum)
+          .single();
+
+        if (!legacyPosteErr && legacyPoste?.id) {
+          const { data: legacyPosteSource, error: legacyPsErr } = await supabase
+            .from('poste_sources')
+            .select('id, data, results, enabled, label')
+            .eq('poste_id', legacyPoste.id)
+            .eq('source_code', source_code)
+            .maybeSingle();
+
+          if (legacyPsErr) {
+            console.error("Supabase legacy fetch error (poste_sources):", legacyPsErr);
+          } else if (legacyPosteSource) {
+            resolvedPosteSource = legacyPosteSource;
+          }
+        }
+      }
+    }
+
     return res.status(200).json({
       success: true,
-      posteSourceId: posteSource?.id ?? null,
-      data: posteSource?.data ?? null,
-      results: posteSource?.results ?? null,
+      posteSourceId: resolvedPosteSource?.id ?? null,
+      data: resolvedPosteSource?.data ?? null,
+      results: resolvedPosteSource?.results ?? null,
       meta: {
-        enabled: posteSource?.enabled ?? null,
-        label: posteSource?.label ?? null,
+        enabled: resolvedPosteSource?.enabled ?? null,
+        label: resolvedPosteSource?.label ?? null,
       },
     });
 
