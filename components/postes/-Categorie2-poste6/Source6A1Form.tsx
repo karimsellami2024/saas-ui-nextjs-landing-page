@@ -114,6 +114,7 @@ export function SourceAForm({
   const toast = useToast();
 
   const [provinceOptions, setProvinceOptions] = useState<string[]>([]);
+  const [siteOptions, setSiteOptions] = useState<string[]>([]);
   const [compteurs, setCompteurs] = useState<CompteurGroup[]>([
     { number: "", address: "", province: "", details: [{ date: "", consumption: "", reference: "" }] },
   ]);
@@ -254,6 +255,24 @@ export function SourceAForm({
       .then((res) => res.json())
       .then((data) => setProvinceOptions(data.provinces || []))
       .catch(() => setProvinceOptions([]));
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: userRes } = await supabase.auth.getUser();
+        const user = userRes?.user;
+        if (!user?.id) return;
+        const { data: profile } = await supabase
+          .from("user_profiles").select("company_id").eq("id", user.id).single();
+        if (!profile?.company_id) return;
+        const { data: company } = await supabase
+          .from("companies").select("production_sites").eq("id", profile.company_id).single();
+        const sites = ((company?.production_sites as any[]) || [])
+          .map((s: any) => s?.nom).filter(Boolean) as string[];
+        setSiteOptions(sites);
+      } catch {}
+    })();
   }, []);
 
   const isDefaultEmptyForm = (groups: CompteurGroup[]) => {
@@ -1026,9 +1045,9 @@ export function SourceAForm({
                                 }}
                               >
                                 <option value="">Sélectionner…</option>
-                                <option value="Usine 1 - Assemblage">Usine 1 - Assemblage</option>
-                                <option value="Usine 2 - Production">Usine 2 - Production</option>
-                                <option value="Bureau - Admin">Bureau - Admin</option>
+                                {siteOptions.map((s) => (
+                                  <option key={s} value={s}>{s}</option>
+                                ))}
                               </Select>
                             </Box>
 

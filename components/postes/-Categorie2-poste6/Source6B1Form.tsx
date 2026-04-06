@@ -104,6 +104,8 @@ export function Source6B1Form({
   const toast = useToast();
 
   const [provinceOptions, setProvinceOptions] = useState<string[]>([]);
+  const [siteOptions, setSiteOptions] = useState<string[]>([]);
+  const [productOptions, setProductOptions] = useState<string[]>([]);
   const [compteurs, setCompteurs] = useState<CompteurGroup[]>([
     {
       number: "",
@@ -160,6 +162,28 @@ export function Source6B1Form({
       .then((res) => res.json())
       .then((data) => setProvinceOptions(data.provinces || []))
       .catch(() => setProvinceOptions([]));
+  }, []);
+
+  // Fetch sites and products from company data
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: userRes } = await supabase.auth.getUser();
+        const user = userRes?.user;
+        if (!user?.id) return;
+        const { data: profile } = await supabase
+          .from("user_profiles").select("company_id").eq("id", user.id).single();
+        if (!profile?.company_id) return;
+        const { data: company } = await supabase
+          .from("companies").select("production_sites, products").eq("id", profile.company_id).single();
+        const sites = ((company?.production_sites as any[]) || [])
+          .map((s: any) => s?.nom).filter(Boolean) as string[];
+        const prods = ((company?.products as any[]) || [])
+          .map((p: any) => p?.nom).filter(Boolean) as string[];
+        setSiteOptions(sites);
+        setProductOptions(prods);
+      } catch {}
+    })();
   }, []);
 
   // Load PRP refs
@@ -956,10 +980,9 @@ export function Source6B1Form({
                             </Box>
 
                             {/* Site */}
-                            <Input
+                            <Select
                               value={row.site}
                               onChange={(e) => updateDetailField(gIdx, dIdx, "site", e.target.value)}
-                              placeholder="Site"
                               h="42px"
                               rounded="lg"
                               bg="white"
@@ -968,18 +991,21 @@ export function Source6B1Form({
                               fontFamily="Montserrat"
                               fontSize="14px"
                               color={FIGMA.text}
-                              _placeholder={{ color: FIGMA.muted }}
                               _focus={{
                                 borderColor: FIGMA.green,
                                 boxShadow: `0 0 0 1px ${FIGMA.green}`,
                               }}
-                            />
+                            >
+                              <option value="">Sélectionner…</option>
+                              {siteOptions.map((s) => (
+                                <option key={s} value={s}>{s}</option>
+                              ))}
+                            </Select>
 
                             {/* Product */}
-                            <Input
+                            <Select
                               value={row.product}
                               onChange={(e) => updateDetailField(gIdx, dIdx, "product", e.target.value)}
-                              placeholder="Produit"
                               h="42px"
                               rounded="lg"
                               bg="white"
@@ -988,12 +1014,16 @@ export function Source6B1Form({
                               fontFamily="Montserrat"
                               fontSize="14px"
                               color={FIGMA.text}
-                              _placeholder={{ color: FIGMA.muted }}
                               _focus={{
                                 borderColor: FIGMA.green,
                                 boxShadow: `0 0 0 1px ${FIGMA.green}`,
                               }}
-                            />
+                            >
+                              <option value="">Sélectionner…</option>
+                              {productOptions.map((p) => (
+                                <option key={p} value={p}>{p}</option>
+                              ))}
+                            </Select>
 
                             {/* Consumption */}
                             <Input

@@ -91,6 +91,10 @@ export default function ProductionAndProductsPage() {
   const [companyReferences, setCompanyReferences] = useState<string[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [autoSaving, setAutoSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const initialLoadDoneRef = useRef(false);
 
   // Company info state
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -204,6 +208,7 @@ export default function ProductionAndProductsPage() {
           .single();
         if (compErr) throw compErr;
 
+        initialLoadDoneRef.current = false;
         setLieux(Array.isArray(companyData?.production_sites) && companyData.production_sites.length > 0 ? companyData.production_sites as Lieu[] : [{ ...emptyLieu }]);
         setProducts(Array.isArray(companyData?.products) && companyData.products.length > 0 ? companyData.products as ProductItem[] : [{ ...emptyProduct }]);
         setServices(Array.isArray(companyData?.services) && companyData.services.length > 0 ? companyData.services as ServiceItem[] : [{ ...emptyService }]);
@@ -423,6 +428,48 @@ export default function ProductionAndProductsPage() {
       setSaving(false);
     }
   };
+
+  // Mark initial load done once company data is fetched
+  useEffect(() => {
+    if (!companyLoading) {
+      // Wait one tick so state settles before we start watching
+      const t = setTimeout(() => { initialLoadDoneRef.current = true; }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [companyLoading]);
+
+  // Autosave lieux, products, services on change (debounced 1.2s)
+  useEffect(() => {
+    if (!initialLoadDoneRef.current) return;
+    if (!companyId) return;
+
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    setJustSaved(false);
+
+    autoSaveTimerRef.current = setTimeout(async () => {
+      setAutoSaving(true);
+      try {
+        const res = await fetch("/api/company-info", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            company_id: companyId,
+            production_sites: lieux,
+            products,
+            services,
+          }),
+        });
+        if (res.ok) {
+          setJustSaved(true);
+          setTimeout(() => setJustSaved(false), 2500);
+        }
+      } catch {}
+      finally { setAutoSaving(false); }
+    }, 1200);
+
+    return () => { if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lieux, products, services]);
 
   if (companyLoading)
     return (
@@ -1099,7 +1146,16 @@ export default function ProductionAndProductsPage() {
       )}
 
       {/* Save Button */}
-      <Box textAlign="right">
+      <Box display="flex" alignItems="center" justifyContent="flex-end" gap={3}>
+        {autoSaving && (
+          <HStack spacing={2}>
+            <Spinner size="xs" color={COL.accent} />
+            <Text fontSize="13px" color={COL.textMuted} fontStyle="italic">Sauvegarde en cours…</Text>
+          </HStack>
+        )}
+        {justSaved && !autoSaving && (
+          <Text fontSize="13px" color="#588157" fontWeight={600}>✓ Sauvegardé</Text>
+        )}
         <Button
           bg={COL.accent}
           color="white"
