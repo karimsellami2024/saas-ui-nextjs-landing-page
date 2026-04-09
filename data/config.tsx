@@ -61,30 +61,31 @@ const siteConfig = {
     ],
   },
   signup: {
-    title: 'Start building with Saas UI',
+    title: 'Mesurez et réduisez vos émissions GES',
     features: [
       {
         icon: FiCheck,
-        title: 'Accessible',
-        description: 'All components strictly follow WAI-ARIA standards.',
+        title: 'Conforme ISO 14064 & GHG Protocol',
+        description:
+          'Calculez vos émissions Scope 1, 2 et 3 selon les normes internationalement reconnues.',
       },
       {
         icon: FiCheck,
-        title: 'Themable',
+        title: 'Facteurs d\'émission officiels',
         description:
-          'Fully customize all components to your brand with theme support and style props.',
+          'Données ECCC et ADEME intégrées — vos résultats sont précis et défendables pour vos rapports.',
       },
       {
         icon: FiCheck,
-        title: 'Composable',
+        title: 'Bilan en temps réel',
         description:
-          'Compose components to fit your needs and mix them together to create new ones.',
+          'Chaque saisie met à jour instantanément votre bilan carbone en tCO₂eq par catégorie.',
       },
       {
         icon: FiCheck,
-        title: 'Productive',
+        title: 'Assistant GES intégré',
         description:
-          'Designed to reduce boilerplate and fully typed, build your product at speed.',
+          'Un assistant IA contextuel vous guide à chaque étape de la collecte et de l\'analyse.',
       },
     ],
   },

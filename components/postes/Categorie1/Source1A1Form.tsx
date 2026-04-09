@@ -22,18 +22,23 @@ import { Plus, Trash2, Copy } from "lucide-react";
 import { supabase } from "../../../lib/supabaseClient";
 import { usePrefillPosteSource } from "components/postes/HookForGetDataSource";
 import { CheckCircleIcon } from "@chakra-ui/icons";
-import { FiZap, FiMapPin, FiCalendar, FiFileText } from "react-icons/fi";
+import { FiZap, FiFileText } from "react-icons/fi";
+
+export type Source1AEntry = {
+  date: string;
+  qty: string;
+  unit: string;
+  reference: string;
+};
 
 export type Source1ARow = {
   equipment: string;
   description: string;
-  date: string;
   site: string;
   product: string;
-  reference: string;
-  usageAndFuel: string; // J11
-  qty: string; // K11
+  usageAndFuel: string;
   unit: string;
+  entries: Source1AEntry[];
 };
 
 type GesResult = {
@@ -57,23 +62,33 @@ export interface Source1AFormProps {
 }
 
 const FUEL_OPTIONS = [
-  "Génératrice - Mazout [L]",
-  "Chauffage - Bois [kg]",
+  "Chauffage - Gaz naturel [m3]",
   "Chauffage - Propane [L]",
+  "Chauffage - Mazout [L]",
+  "Chauffage - Bois [kg]",
+  "Génératrice - Essence [L]",
+  "Génératrice - Diesel [L]",
+  "Génératrice - Mazout [L]",
+  "Soudure - Acétylène [kg]",
+  "Soudure - Argoshield [kg]",
+  "Autre - Gaz naturel [m3]",
+  "Autre - Propane [L]",
+  "Autre - Propane [kg]",
+  "Autre - Propane [lbs]",
 ];
-const UNIT_OPTIONS = ["L", "kg"];
+const UNIT_OPTIONS = ["L", "kg", "m3", "lbs"];
+
+const emptyEntry = (unit = ""): Source1AEntry => ({ date: "", qty: "", unit, reference: "" });
 
 const DEFAULT_ROWS: Source1ARow[] = [
   {
     equipment: "",
     description: "",
-    date: "",
     site: "",
     product: "",
-    reference: "",
     usageAndFuel: "",
-    qty: "",
     unit: "",
+    entries: [emptyEntry()],
   },
 ];
 
@@ -172,17 +187,9 @@ export function Source1AForm({
     if (!rows || rows.length === 0) return true;
     if (rows.length !== 1) return false;
     const r = rows[0];
-    return (
-      !r.equipment &&
-      !r.description &&
-      !r.date &&
-      !r.site &&
-      !r.product &&
-      !r.reference &&
-      !r.usageAndFuel &&
-      !r.qty &&
-      !r.unit
-    );
+    const entriesEmpty = !r.entries || r.entries.length === 0 ||
+      r.entries.every(e => !e.date && !e.qty && !e.reference);
+    return !r.equipment && !r.description && !r.site && !r.product && !r.usageAndFuel && entriesEmpty;
   }, [rows]);
 
   // --------------------------
@@ -303,17 +310,36 @@ export function Source1AForm({
           }
           if (parsed?.rows && Array.isArray(parsed.rows)) {
             setRows(
-              parsed.rows.map((r: any) => ({
-                equipment: r.equipment ?? "",
-                description: r.description ?? "",
-                date: r.date ?? "",
-                site: r.site ?? "",
-                product: r.product ?? "",
-                reference: r.reference ?? "",
-                usageAndFuel: r.usageAndFuel ?? r.fuel ?? "",
-                qty: String(r.qty ?? ""),
-                unit: r.unit ?? "",
-              }))
+              parsed.rows.map((r: any) => {
+                const unit = r.unit ?? "";
+                // New format: has entries array
+                if (Array.isArray(r.entries) && r.entries.length > 0) {
+                  return {
+                    equipment: r.equipment ?? "",
+                    description: r.description ?? "",
+                    site: r.site ?? "",
+                    product: r.product ?? "",
+                    usageAndFuel: r.usageAndFuel ?? r.fuel ?? "",
+                    unit,
+                    entries: r.entries.map((e: any) => ({
+                      date: e.date ?? "",
+                      qty: String(e.qty ?? ""),
+                      unit: e.unit ?? unit,
+                      reference: e.reference ?? "",
+                    })),
+                  };
+                }
+                // Legacy flat format: migrate date/qty/reference into a single entry
+                return {
+                  equipment: r.equipment ?? "",
+                  description: r.description ?? "",
+                  site: r.site ?? "",
+                  product: r.product ?? "",
+                  usageAndFuel: r.usageAndFuel ?? r.fuel ?? "",
+                  unit,
+                  entries: [{ date: r.date ?? "", qty: String(r.qty ?? ""), unit, reference: r.reference ?? "" }],
+                };
+              })
             );
           } else if (!rows?.length) {
             setRows(DEFAULT_ROWS);
@@ -410,8 +436,8 @@ export function Source1AForm({
         row.site &&
         row.product &&
         row.usageAndFuel &&
-        row.qty !== "" &&
-        row.unit
+        row.unit &&
+        row.entries?.some(e => e.qty !== "")
     );
 
   // --------------------------
@@ -422,7 +448,7 @@ export function Source1AForm({
 
     return (rws || []).map((row) => {
       const label = String(row.usageAndFuel || "").trim();
-      const qty = toNum(row.qty, 0);
+      const qty = (row.entries || []).reduce((sum, e) => sum + toNum(e.qty, 0), 0);
 
       if (!label || qty === 0) {
         return {
@@ -479,13 +505,16 @@ export function Source1AForm({
     rws.map((row) => ({
       equipment: row.equipment,
       description: row.description,
-      date: row.date,
       site: row.site,
       product: row.product,
-      reference: row.reference,
       usageAndFuel: row.usageAndFuel,
-      qty: toNum(row.qty, 0),
       unit: row.unit,
+      entries: (row.entries || []).map(e => ({
+        date: e.date,
+        qty: toNum(e.qty, 0),
+        unit: e.unit,
+        reference: e.reference,
+      })),
     }));
 
   const saveDraft = async () => {
@@ -644,61 +673,93 @@ export function Source1AForm({
     setSubmitting(false);
   };
 
-  // row helpers
+  // --- Row helpers ---
   const addRow = () =>
-    setRows((prev) => [
-      ...prev,
-      {
-        equipment: "",
-        description: "",
-        date: "",
-        site: "",
-        product: "",
-        reference: "",
-        usageAndFuel: "",
-        qty: "",
-        unit: "",
-      },
-    ]);
+    setRows((prev) => [...prev, {
+      equipment: "", description: "", site: "", product: "",
+      usageAndFuel: "", unit: "", entries: [emptyEntry()],
+    }]);
 
   const duplicateRow = (idx: number) =>
     setRows((prev) => {
       const copy = [...prev];
-      copy.splice(idx + 1, 0, { ...prev[idx] });
+      copy.splice(idx + 1, 0, { ...prev[idx], entries: prev[idx].entries.map(e => ({ ...e })) });
       return copy;
     });
 
-  const updateRowField = (idx: number, key: keyof Source1ARow, value: string) => {
+  const updateRowField = (idx: number, key: keyof Omit<Source1ARow, "entries">, value: string) => {
     setRows((prev) => {
       const copy = [...prev];
-      copy[idx][key] = value;
+      (copy[idx] as any)[key] = value;
       return copy;
     });
   };
 
-  const removeRow = (idx: number) => {
-    setRows((prev) => prev.filter((_, i) => i !== idx));
-  };
+  const removeRow = (idx: number) => setRows((prev) => prev.filter((_, i) => i !== idx));
 
   const onFuelChange = (idx: number, value: string) => {
     setRows((prev) => {
       const copy = [...prev];
-      copy[idx].usageAndFuel = value;
+      copy[idx] = { ...copy[idx], usageAndFuel: value };
       const unit = parseUnitFromFuel(value);
-      if (unit && !copy[idx].unit) copy[idx].unit = unit;
+      if (unit) {
+        copy[idx].unit = unit;
+        copy[idx].entries = copy[idx].entries.map(e => ({ ...e, unit }));
+      }
       return copy;
     });
   };
 
+  // --- Entry helpers ---
+  const addEntry = (rowIdx: number, afterIdx?: number) =>
+    setRows((prev) => {
+      const copy = [...prev];
+      const row = { ...copy[rowIdx] };
+      const newEntry = emptyEntry(row.unit);
+      const insertAt = afterIdx != null ? afterIdx + 1 : row.entries.length;
+      row.entries = [
+        ...row.entries.slice(0, insertAt),
+        newEntry,
+        ...row.entries.slice(insertAt),
+      ];
+      copy[rowIdx] = row;
+      return copy;
+    });
+
+  const updateEntry = (rowIdx: number, entryIdx: number, key: keyof Source1AEntry, value: string) =>
+    setRows((prev) => {
+      const copy = [...prev];
+      const row = { ...copy[rowIdx] };
+      row.entries = [...row.entries];
+      row.entries[entryIdx] = { ...row.entries[entryIdx], [key]: value };
+      copy[rowIdx] = row;
+      return copy;
+    });
+
+  const removeEntry = (rowIdx: number, entryIdx: number) =>
+    setRows((prev) => {
+      const copy = [...prev];
+      const row = { ...copy[rowIdx] };
+      if (row.entries.length <= 1) return prev;
+      row.entries = row.entries.filter((_, i) => i !== entryIdx);
+      copy[rowIdx] = row;
+      return copy;
+    });
+
   const resultsSummary = useMemo(() => {
     if (!Array.isArray(gesResults) || gesResults.length === 0) return null;
+    const allZero = gesResults.every(r =>
+      toNum((r as any)["total_ges_gco2e"]) === 0 &&
+      toNum((r as any)["total_energie_kwh"]) === 0
+    );
+    if (allZero) return null;
     return {
-      co2: sumField(gesResults, "total_co2_gco2e"),
-      ch4: sumField(gesResults, "total_ges_ch4_gco2e"),
-      n2o: sumField(gesResults, "total_ges_n2o_gco2e"),
+      co2:    sumField(gesResults, "total_co2_gco2e"),
+      ch4:    sumField(gesResults, "total_ges_ch4_gco2e"),
+      n2o:    sumField(gesResults, "total_ges_n2o_gco2e"),
       totalG: sumField(gesResults, "total_ges_gco2e"),
-      totalT: sumField(gesResults, "total_ges_tco2e"),
-      kwh: sumField(gesResults, "total_energie_kwh"),
+      totalT: sumField(gesResults, "total_ges_tco2e", true),
+      kwh:    sumField(gesResults, "total_energie_kwh"),
     };
   }, [gesResults]);
 
@@ -760,7 +821,7 @@ export function Source1AForm({
                 textTransform="uppercase"
                 letterSpacing="wide"
               >
-                Poste 1A1
+                Catégorie 1 – Émissions directes
               </Badge>
             </HStack>
 
@@ -771,8 +832,13 @@ export function Source1AForm({
               fontSize={{ base: "xl", md: "2xl" }}
               color={FIGMA.text}
             >
-              Chauffage des bâtiments et équipements fixes – Source 1A1
+              Sous-catégorie 1.1 – Combustion fixe
             </Heading>
+
+            <Text fontSize="sm" color={FIGMA.muted} maxW="600px" lineHeight="1.6">
+              Cette sous-catégorie comptabilise les émissions provenant de la combustion dans des équipements
+              dits « fixes » comme un système de chauffage, une génératrice, une station de soudure, des fours, etc.
+            </Text>
 
             {prefillError && (
               <Text fontSize="sm" color="red.500">
@@ -817,259 +883,211 @@ export function Source1AForm({
         </Flex>
       </Box>
 
-      {/* Table header (desktop) */}
-      <Box
-        bg={`linear-gradient(135deg, ${FIGMA.green} 0%, ${FIGMA.greenLight} 100%)`}
-        color="white"
-        h="50px"
-        rounded="xl"
-        px={6}
-        display={{ base: "none", lg: "flex" }}
-        alignItems="center"
-        mb={4}
-        boxShadow="0 2px 8px rgba(52, 78, 65, 0.2)"
-      >
-        <Grid
-          w="full"
-          templateColumns="1.3fr 1.2fr 1fr 1.15fr 1.15fr 1.2fr 1.6fr 0.85fr 0.75fr 96px"
-          columnGap={4}
-          alignItems="center"
+      {/* Results summary — shown at top for easy access (fix #27) */}
+      {!!resultsSummary && (
+        <Box
+          bg="white"
+          rounded="xl"
+          px={6}
+          py={4}
+          boxShadow={FIGMA.cardShadow}
+          animation={`${fadeInUp} 0.5s ease-out`}
         >
-          {[
-            { label: "Source de combustion", icon: FiZap },
-            { label: "Description", icon: FiFileText },
-            { label: "Date", icon: FiCalendar },
-            { label: "Site", icon: FiMapPin },
-            { label: "Produit", icon: FiFileText },
-            { label: "Références", icon: FiFileText },
-            { label: "Utilisation & combustible", icon: FiZap },
-            { label: "Quantité", icon: FiZap },
-            { label: "Unité", icon: FiZap },
-          ].map(({ label, icon }) => (
-            <HStack key={label} justify="center" spacing={2}>
-              <Icon as={icon} boxSize={4} />
-              <Text fontFamily="Montserrat" fontWeight={600} fontSize="14px">
-                {label}
-              </Text>
-            </HStack>
-          ))}
-          <Text textAlign="right" fontFamily="Montserrat" fontWeight={600} fontSize="14px">
-            Actions
-          </Text>
-        </Grid>
+          <HStack mb={3} spacing={2}>
+            <Icon as={FiFileText} color={FIGMA.green} boxSize={4} />
+            <Text fontFamily="Inter" fontWeight={700} color={FIGMA.text} fontSize="md">
+              Calculs et résultats (récapitulatif)
+            </Text>
+          </HStack>
+          <Grid templateColumns={{ base: "1fr 1fr", md: "repeat(3, 1fr)", lg: "repeat(6, 1fr)" }} gap={3}>
+            <ResultCard FIGMA={FIGMA} label="CO₂" unit="gCO₂e" value={resultsSummary.co2} isGrams />
+            <ResultCard FIGMA={FIGMA} label="CH₄" unit="gCO₂e" value={resultsSummary.ch4} isGrams />
+            <ResultCard FIGMA={FIGMA} label="N₂O" unit="gCO₂e" value={resultsSummary.n2o} isGrams />
+            <ResultCard FIGMA={FIGMA} label="Total GES" unit="gCO₂e" value={resultsSummary.totalG} isGrams />
+            <ResultCard FIGMA={FIGMA} label="Total GES" unit="tCO₂e" value={resultsSummary.totalT} isGrams={false} />
+            <ResultCard FIGMA={FIGMA} label="Énergie" unit="kWh" value={resultsSummary.kwh} isGrams={false} />
+          </Grid>
+        </Box>
+      )}
+
+      {/* Methodology label bar */}
+      <Box display={{ base: "none", lg: "block" }} mb={1}>
+        <Text fontSize="xs" color={FIGMA.muted} fontFamily="Montserrat" fontWeight={600} px={2}>
+          Sous-catégorie 1.1 – Combustion fixe &nbsp;·&nbsp; Méthodologie 1.1A1 – Calcul des émissions de la combustion fixe à partir des quantités de carburant
+        </Text>
       </Box>
 
-      {/* Main form card */}
-      <Box bg="white" rounded="xl" p={6} boxShadow={FIGMA.cardShadow} transition="all 0.3s">
-        <Stack spacing={6}>
-          {rows.map((row, idx) => (
+
+      {/* Equipment cards */}
+      <Stack spacing={4}>
+        {rows.map((row, idx) => {
+          const totalQty = (row.entries || []).reduce((sum, e) => sum + toNum(e.qty, 0), 0);
+          return (
             <Box
               key={idx}
-              bg={FIGMA.bg}
+              bg="white"
               rounded="xl"
-              p={4}
-              border="2px solid"
+              border="1.5px solid"
               borderColor={FIGMA.border}
+              boxShadow={FIGMA.cardShadow}
+              overflow="hidden"
               transition="all 0.3s"
               _hover={{ borderColor: FIGMA.green }}
               animation={`${fadeInUp} 0.4s ease-out ${idx * 0.04}s both`}
             >
-              <Flex justify="space-between" align="center" mb={4} flexWrap="wrap" gap={3}>
-                <HStack spacing={3}>
-                  <Box
-                    w="40px"
-                    h="40px"
-                    rounded="lg"
-                    bg="white"
-                    boxShadow={FIGMA.inputShadow}
-                    display="flex"
-                    alignItems="center"
-                    justifyContent="center"
-                  >
-                    <Text fontFamily="Montserrat" fontSize="lg" fontWeight={700} color={FIGMA.green}>
-                      {idx + 1}
-                    </Text>
-                  </Box>
-                  <VStack align="flex-start" spacing={0}>
-                    <Text fontFamily="Inter" fontWeight={600} color={FIGMA.text} fontSize="sm">
-                      {row.equipment || "Nouvelle ligne"}
-                    </Text>
-                    <Text fontFamily="Montserrat" fontSize="xs" color={FIGMA.muted}>
-                      Remplissez les champs requis
-                    </Text>
-                  </VStack>
-                </HStack>
+              {/* ── Card header ── */}
+              <Box bg={FIGMA.bg} px={4} py={3} borderBottom="1px solid" borderColor={FIGMA.border}>
+                <Flex align="flex-start" gap={3} flexWrap="wrap">
+                  {/* Row number + Equipment name */}
+                  <HStack spacing={3} flex="0 0 auto" align="flex-start">
+                    <Box
+                      w="36px" h="36px" flexShrink={0}
+                      rounded="lg" bg="white"
+                      boxShadow={FIGMA.inputShadow}
+                      display="flex" alignItems="center" justifyContent="center"
+                      mt="18px"
+                    >
+                      <Text fontFamily="Montserrat" fontSize="md" fontWeight={700} color={FIGMA.green}>
+                        {idx + 1}
+                      </Text>
+                    </Box>
+                    <Box minW="140px">
+                      <Text fontFamily="Montserrat" fontSize="11px" color={FIGMA.green} fontWeight="700" mb={0.5}>
+                        {row.equipment || "Équipement"}
+                      </Text>
+                      <Text fontFamily="Montserrat" fontSize="10px" color={FIGMA.muted}>
+                        Remplissez les champs requis
+                      </Text>
+                      <Box mt={1}>
+                        <FigmaInput
+                          value={row.equipment}
+                          onChange={(v) => updateRowField(idx, "equipment", v)}
+                          placeholder="Chaudière, génératrice…"
+                          FIGMA={FIGMA}
+                        />
+                      </Box>
+                    </Box>
+                  </HStack>
 
-                <HStack spacing={2}>
-                  <MiniIconBtn
-                    icon={Copy}
-                    ariaLabel="Dupliquer la ligne"
-                    onClick={() => duplicateRow(idx)}
-                    FIGMA={FIGMA}
-                  />
-                  <MiniIconBtn
-                    icon={Trash2}
-                    ariaLabel="Supprimer la ligne"
-                    onClick={() => removeRow(idx)}
-                    FIGMA={FIGMA}
-                    danger
-                  />
-                </HStack>
-              </Flex>
+                  {/* Description */}
+                  <LabeledField label="Description" muted={FIGMA.muted}>
+                    <FigmaInput
+                      value={row.description}
+                      onChange={(v) => updateRowField(idx, "description", v)}
+                      placeholder="Facultatif"
+                      FIGMA={FIGMA}
+                    />
+                  </LabeledField>
 
-              <Grid
-                templateColumns={{
-                  base: "1fr",
-                  lg: "1.3fr 1.2fr 1fr 1.15fr 1.15fr 1.2fr 1.6fr 0.85fr 0.75fr",
-                }}
-                columnGap={4}
-                rowGap={3}
-                alignItems="center"
-              >
-                <GridItem>
-                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
-                    Équipement
-                  </Text>
-                  <FigmaInput
-                    value={row.equipment}
-                    onChange={(v) => updateRowField(idx, "equipment", v)}
-                    placeholder="Chaudière, génératrice…"
-                    FIGMA={FIGMA}
-                  />
-                </GridItem>
+                  {/* Site */}
+                  <LabeledField label="Site" muted={FIGMA.muted}>
+                    <FigmaSelect value={row.site} onChange={(v) => updateRowField(idx, "site", v)} FIGMA={FIGMA} placeholder="Sélectionner…">
+                      {(siteOptions.length ? siteOptions : [row.site].filter(Boolean)).map((s) => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </FigmaSelect>
+                  </LabeledField>
 
-                <GridItem>
-                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
-                    Description
-                  </Text>
-                  <FigmaInput
-                    value={row.description}
-                    onChange={(v) => updateRowField(idx, "description", v)}
-                    placeholder="Facultatif"
-                    FIGMA={FIGMA}
-                  />
-                </GridItem>
+                  {/* Produit / Service */}
+                  <LabeledField label="Produit / Service" muted={FIGMA.muted}>
+                    <FigmaSelect value={row.product} onChange={(v) => updateRowField(idx, "product", v)} FIGMA={FIGMA} placeholder="Sélectionner…">
+                      {(productOptions.length ? productOptions : [row.product].filter(Boolean)).map((p) => (
+                        <option key={p} value={p}>{p}</option>
+                      ))}
+                    </FigmaSelect>
+                  </LabeledField>
 
-                <GridItem>
-                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
-                    Date
-                  </Text>
-                  <FigmaInput
-                    type="date"
-                    value={row.date}
-                    onChange={(v) => updateRowField(idx, "date", v)}
-                    FIGMA={FIGMA}
-                  />
-                </GridItem>
+                  {/* Usage / Carburant */}
+                  <LabeledField label="Usage / Carburant" muted={FIGMA.muted}>
+                    <FigmaSelect value={row.usageAndFuel} onChange={(v) => onFuelChange(idx, v)} FIGMA={FIGMA} placeholder="(Sélectionner)">
+                      {FUEL_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </FigmaSelect>
+                  </LabeledField>
 
-                <GridItem>
-                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
-                    Site
-                  </Text>
-                  <FigmaSelect
-                    value={row.site}
-                    onChange={(v) => updateRowField(idx, "site", v)}
-                    FIGMA={FIGMA}
-                    placeholder="Sélectionner…"
-                  >
-                    {(siteOptions.length ? siteOptions : [row.site].filter(Boolean)).map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </FigmaSelect>
-                </GridItem>
+                  {/* Quantité totale (computed, readonly) */}
+                  <LabeledField label="Quantité total" muted={FIGMA.muted}>
+                    <Box
+                      h="42px" minW="90px" px={3}
+                      rounded="lg" bg="white"
+                      border="1.5px solid" borderColor={FIGMA.green}
+                      display="flex" alignItems="center" justifyContent="center"
+                      boxShadow={FIGMA.inputShadow}
+                    >
+                      <Text fontFamily="Montserrat" fontSize="14px" fontWeight={700} color={FIGMA.green}>
+                        {totalQty > 0
+                          ? totalQty.toLocaleString("fr-CA", { maximumFractionDigits: 2 })
+                          : "—"}
+                      </Text>
+                    </Box>
+                  </LabeledField>
 
-                <GridItem>
-                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
-                    Produit / Service
-                  </Text>
-                  <FigmaSelect
-                    value={row.product}
-                    onChange={(v) => updateRowField(idx, "product", v)}
-                    FIGMA={FIGMA}
-                    placeholder="Sélectionner…"
-                  >
-                    {(productOptions.length ? productOptions : [row.product].filter(Boolean)).map((p) => (
-                      <option key={p} value={p}>
-                        {p}
-                      </option>
-                    ))}
-                  </FigmaSelect>
-                </GridItem>
+                  {/* Unité */}
+                  <LabeledField label="Unité" muted={FIGMA.muted}>
+                    <FigmaSelect value={row.unit} onChange={(v) => updateRowField(idx, "unit", v)} FIGMA={FIGMA} placeholder="Unité">
+                      {UNIT_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                      ))}
+                    </FigmaSelect>
+                  </LabeledField>
 
-                <GridItem>
-                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
-                    Référence
-                  </Text>
-                  <FigmaSelect
-                    value={row.reference}
-                    onChange={(v) => updateRowField(idx, "reference", v)}
-                    FIGMA={FIGMA}
-                    placeholder={referenceOptions.length ? "Sélectionner…" : "Aucune référence"}
-                  >
-                    {referenceOptions.map((r) => (
-                      <option key={r} value={r}>
-                        {r}
-                      </option>
-                    ))}
-                  </FigmaSelect>
-                </GridItem>
+                  {/* Actions */}
+                  <HStack spacing={2} alignSelf="flex-end" pb={1} ml="auto">
+                    <MiniIconBtn icon={Copy} ariaLabel="Dupliquer" onClick={() => duplicateRow(idx)} FIGMA={FIGMA} />
+                    <MiniIconBtn icon={Trash2} ariaLabel="Supprimer" onClick={() => removeRow(idx)} FIGMA={FIGMA} danger />
+                  </HStack>
+                </Flex>
+              </Box>
 
-                <GridItem>
-                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
-                    Usage / Carburant
-                  </Text>
-                  <FigmaSelect
-                    value={row.usageAndFuel}
-                    onChange={(v) => onFuelChange(idx, v)}
-                    FIGMA={FIGMA}
-                    placeholder="(Sélectionner)"
-                  >
-                    {FUEL_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </FigmaSelect>
-                </GridItem>
+              {/* ── Entries sub-table ── */}
+              <Box px={4} py={3}>
+                {/* Column labels */}
+                <Grid templateColumns="1fr 1fr 90px 1fr 160px" columnGap={3} mb={2} px={1}>
+                  {["Date", "Quantité", "Unité", "Référence", ""].map((h) => (
+                    <Text key={h} fontSize="11px" color={FIGMA.muted} fontWeight="600" fontFamily="Montserrat">{h}</Text>
+                  ))}
+                </Grid>
 
-                <GridItem>
-                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
-                    Quantité
-                  </Text>
-                  <FigmaInput
-                    type="number"
-                    value={row.qty}
-                    onChange={(v) => updateRowField(idx, "qty", v)}
-                    placeholder="0.00"
-                    FIGMA={FIGMA}
-                    textAlign="center"
-                  />
-                </GridItem>
-
-                <GridItem>
-                  <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
-                    Unité
-                  </Text>
-                  <FigmaSelect
-                    value={row.unit}
-                    onChange={(v) => updateRowField(idx, "unit", v)}
-                    FIGMA={FIGMA}
-                    placeholder="Unité"
-                  >
-                    {UNIT_OPTIONS.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </FigmaSelect>
-                </GridItem>
-              </Grid>
+                <Stack spacing={2}>
+                  {(row.entries || []).map((entry, eIdx) => (
+                    <Grid key={eIdx} templateColumns="1fr 1fr 90px 1fr 160px" columnGap={3} alignItems="center">
+                      <FigmaInput type="date" value={entry.date} onChange={(v) => updateEntry(idx, eIdx, "date", v)} FIGMA={FIGMA} />
+                      <FigmaInput type="number" value={entry.qty} onChange={(v) => updateEntry(idx, eIdx, "qty", v)} placeholder="0" FIGMA={FIGMA} textAlign="center" />
+                      <FigmaSelect value={entry.unit || row.unit} onChange={(v) => updateEntry(idx, eIdx, "unit", v)} FIGMA={FIGMA} placeholder="Unité">
+                        {UNIT_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
+                      </FigmaSelect>
+                      <FigmaSelect value={entry.reference} onChange={(v) => updateEntry(idx, eIdx, "reference", v)} FIGMA={FIGMA} placeholder={referenceOptions.length ? "Sélectionner…" : "Aucune réf."}>
+                        {referenceOptions.map((r) => <option key={r} value={r}>{r}</option>)}
+                      </FigmaSelect>
+                      <HStack spacing={2}>
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          borderColor={FIGMA.green}
+                          color={FIGMA.green}
+                          rounded="full"
+                          px={3}
+                          fontFamily="Inter"
+                          fontWeight={600}
+                          fontSize="11px"
+                          _hover={{ bg: FIGMA.greenSoft }}
+                          onClick={() => addEntry(idx, eIdx)}
+                        >
+                          + Ajouter une ligne
+                        </Button>
+                        {row.entries.length > 1 && (
+                          <MiniIconBtn icon={Trash2} ariaLabel="Supprimer cette ligne" onClick={() => removeEntry(idx, eIdx)} FIGMA={FIGMA} danger />
+                        )}
+                      </HStack>
+                    </Grid>
+                  ))}
+                </Stack>
+              </Box>
             </Box>
-          ))}
-        </Stack>
-      </Box>
+          );
+        })}
+      </Stack>
 
       {/* Bottom actions */}
       <HStack mt={6} spacing={4} flexWrap="wrap">
@@ -1117,33 +1135,6 @@ export function Source1AForm({
         </Button>
       </HStack>
 
-      {/* Results */}
-      {!!resultsSummary && (
-        <Box
-          mt={6}
-          bg="white"
-          rounded="xl"
-          p={6}
-          boxShadow={FIGMA.cardShadow}
-          animation={`${fadeInUp} 0.6s ease-out`}
-        >
-          <HStack mb={4} spacing={2}>
-            <Icon as={FiFileText} color={FIGMA.green} boxSize={5} />
-            <Text fontFamily="Inter" fontWeight={700} color={FIGMA.text} fontSize="lg">
-              Calculs et résultats (récapitulatif)
-            </Text>
-          </HStack>
-
-          <Grid templateColumns={{ base: "1fr", md: "repeat(3, 1fr)" }} gap={6}>
-            <ResultCard FIGMA={FIGMA} label="CO₂ [gCO₂e]" value={resultsSummary.co2} />
-            <ResultCard FIGMA={FIGMA} label="CH₄ [gCO₂e]" value={resultsSummary.ch4} />
-            <ResultCard FIGMA={FIGMA} label="N₂O [gCO₂e]" value={resultsSummary.n2o} />
-            <ResultCard FIGMA={FIGMA} label="Total GES [gCO₂e]" value={resultsSummary.totalG} />
-            <ResultCard FIGMA={FIGMA} label="Total GES [tCO₂e]" value={resultsSummary.totalT} />
-            <ResultCard FIGMA={FIGMA} label="Énergie [kWh]" value={resultsSummary.kwh} />
-          </Grid>
-        </Box>
-      )}
     </Box>
   );
 }
@@ -1279,35 +1270,52 @@ function MiniIconBtn({
 function ResultCard({
   FIGMA,
   label,
+  unit,
   value,
+  isGrams,
 }: {
   FIGMA: any;
   label: string;
+  unit: string;
   value: string;
+  isGrams: boolean;
 }) {
   return (
     <Box
       bg={FIGMA.bg}
-      p={4}
+      p={3}
       rounded="lg"
       border="2px solid"
       borderColor={FIGMA.border}
       transition="all 0.3s"
       _hover={{ borderColor: FIGMA.green, transform: "translateY(-2px)" }}
     >
-      <Text fontSize="xs" color={FIGMA.muted} fontFamily="Montserrat" mb={2} textTransform="uppercase">
+      <Text fontSize="10px" color={FIGMA.muted} fontFamily="Montserrat" mb={1} textTransform="uppercase" letterSpacing="wide">
         {label}
       </Text>
-      <Text fontSize="2xl" fontWeight={700} color={FIGMA.green} fontFamily="Inter">
-        {value}
+      <Text fontSize="lg" fontWeight={700} color={FIGMA.green} fontFamily="Inter" lineHeight="1.2">
+        {value}{" "}
+        <Text as="span" fontSize="11px" fontWeight={500} color={FIGMA.muted}>
+          {unit}
+        </Text>
       </Text>
     </Box>
   );
 }
 
-function sumField(results: GesResult[], key: keyof GesResult): string {
+// Fix #28-31: proper decimal rules per unit type
+function sumField(results: GesResult[], key: keyof GesResult, isTonnes = false): string {
   const s = results.reduce((acc, r) => acc + (toNum((r as any)[key]) || 0), 0);
-  return Number(s).toLocaleString("fr-CA", { maximumFractionDigits: 3 });
+  if (isTonnes) {
+    // tCO₂e — always 2 decimal places
+    return Number(s).toLocaleString("fr-CA", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  // gCO₂e — no decimals unless very small (< 1), then 2 significant figures
+  if (s === 0) return "0";
+  if (Math.abs(s) < 1) {
+    return Number(s).toLocaleString("fr-CA", { maximumSignificantDigits: 2 });
+  }
+  return Number(s).toLocaleString("fr-CA", { maximumFractionDigits: 0 });
 }
 
 

@@ -26,6 +26,7 @@ import Categorie5Page from "#components/postes/Categorie5/main";
 
 import NotificationsPage from "#components/postes/entreprise";
 import WizardPage from "#components/postes/WizardPage";
+import UserSourcesPopup from "#components/UserSourcesPopup";
 import SaisieGuidePage from "#components/postes/SaisieGuidePage";
 import RapportPage from "#components/postes/RapportPage";
 import { HiddenPostePlaceholder } from "../../components/postes/HiddenPostePlaceholder";
@@ -202,6 +203,8 @@ const POSTE_META: Record<string, { groupTitle: string; posteTitle: string; descr
 
 export default function Section() {
   const [userId, setUserId] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [showSourcesPopup, setShowSourcesPopup] = useState(false);
   const [posteVisibility, setPosteVisibility] = useState<Record<string, boolean>>({});
   const [postes, setPostes] = useState<PosteRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -216,7 +219,22 @@ export default function Section() {
     (async () => {
       setLoading(true);
       const { data: { user } } = await supabase.auth.getUser();
-      setUserId(user?.id ?? null);
+      const uid = user?.id ?? null;
+      setUserId(uid);
+      if (uid) {
+        const { data: profile } = await supabase
+          .from("user_profiles").select("role").eq("id", uid).single();
+        const role = profile?.role ?? null;
+        setUserRole(role);
+        // Show sources popup once per session for "user" role accounts
+        if (role === "user" && typeof sessionStorage !== "undefined") {
+          const key = `cq_sources_popup_${uid}`;
+          if (!sessionStorage.getItem(key)) {
+            setShowSourcesPopup(true);
+            sessionStorage.setItem(key, "1");
+          }
+        }
+      }
       setLoading(false);
     })();
   }, []);
@@ -361,6 +379,15 @@ export default function Section() {
 
   return (
     <Box display="flex" bg={pageBg} minH="100vh">
+      {/* Sources popup for "user" role — shown once per session */}
+      {userId && showSourcesPopup && (
+        <UserSourcesPopup
+          userId={userId}
+          isOpen={showSourcesPopup}
+          onClose={() => setShowSourcesPopup(false)}
+        />
+      )}
+
       <SidebarRail
         activeGroup={isBilan ? null : activeGroup}
         activeTop={activeTop}

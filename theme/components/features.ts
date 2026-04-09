@@ -69,11 +69,8 @@ export const Feature = {
       mb: 4,
       mr: 4,
       p: 2,
-      bg: mode(
-        'primary.100',
-        transparentize('primary.500', 0.2)(props.theme)
-      )(props),
-      color: mode('primary.700', 'primary.400')(props),
+      bg: mode('#EAF1EC', 'rgba(38,74,59,0.35)')(props),
+      color: mode('#264a3b', '#A3B18A')(props),
       float: 'left',
     },
   }),

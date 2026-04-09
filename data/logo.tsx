@@ -5,7 +5,9 @@ export const Logo = (props) => (
   <Image
     src="static\images\b3870fbc-678f-444c-85a4-e1c61cf36519_removalai_preview.png"
     alt="Logo Carbone Quebec"
-    height="80px" // adjust as needed
+    objectFit="contain"
+    height="60px"
+    width="auto"
     {...props}
   />
 );

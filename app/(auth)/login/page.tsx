@@ -46,8 +46,7 @@ export default function Login() {
     const boot = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user) {
-        const role = session.user.user_metadata?.role
-        router.replace(role === 'admin' ? '/admin' : '/')
+        router.replace('/')
         return
       }
       setChecking(false)
@@ -56,8 +55,7 @@ export default function Login() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        const role = session.user.user_metadata?.role
-        router.replace(role === 'admin' ? '/admin' : '/')
+        router.replace('/')
       }
     })
 

@@ -26,7 +26,7 @@ const COL = {
   border: 'rgba(0,0,0,0.08)',
 };
 
-const POSTE_LABEL_FALLBACK = 'Catégorie 1 - Émissions directs';
+const POSTE_LABEL_FALLBACK = 'Catégorie 1 – Émissions directes';
 
 /* ===================== TYPES ===================== */
 // Poste 2 types

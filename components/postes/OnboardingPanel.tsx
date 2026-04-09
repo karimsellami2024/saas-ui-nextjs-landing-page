@@ -42,6 +42,7 @@ export default function OnboardingPanel() {
       {
         type: 'scopes',
         headerTitle: 'Structure du calculateur — 6 catégories ISO 14064',
+        image: '/onboarding/onboarding-2.png',
         primaryLabel: 'Compris !',
       },
       {
@@ -129,11 +130,11 @@ export default function OnboardingPanel() {
                   Bienvenue dans votre espace de calcul{'\n'}des émissions de GES.
                 </Heading>
 
-                <Text fontSize="12px" color={muted} whiteSpace="pre-line" lineHeight="1.5" maxW="360px">
-                  Cette plateforme vous permet de mesurer, de suivre et de comprendre{'\n'}
-                  l'empreinte carbone de votre organisation.{'\n\n'}
-                  Conforme à la norme ISO 14064 et au GHG Protocol, le calculateur{'\n'}
-                  couvre les Scopes 1, 2 et 3.
+                <Text fontSize="12px" color={muted} lineHeight="1.5" maxW="380px">
+                  Cette plateforme vous permet de mesurer, de suivre et de comprendre l&apos;empreinte carbone de votre organisation.
+                </Text>
+                <Text fontSize="12px" color={muted} lineHeight="1.5" maxW="380px">
+                  Conforme à la norme ISO 14064 et au GHG Protocol, le calculateur couvre les Scopes 1, 2 et 3.
                 </Text>
 
                 <HStack spacing={3} pt={2}>
@@ -161,6 +162,12 @@ export default function OnboardingPanel() {
             {/* ── Slide 2: Scopes & categories ── */}
             {s.type === 'scopes' && (
               <VStack spacing={5} textAlign="center">
+                <Box w="160px" h="110px" position="relative" mt={1}>
+                  {s.image
+                    ? <Image src={s.image} alt="Scopes" fill style={{ objectFit: 'contain' }} priority />
+                    : <Box w="100%" h="100%" bg="#F1F1F1" borderRadius="12px" />
+                  }
+                </Box>
                 <Text fontSize="12px" color={muted} maxW="440px" lineHeight="1.5">
                   Le calculateur est structuré en <strong>6 catégories ISO 14064</strong>, réparties{' '}
                   en trois scopes d'émissions reconnus internationalement.

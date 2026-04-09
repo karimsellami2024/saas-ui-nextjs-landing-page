@@ -6,7 +6,7 @@ import {
   Box, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Text, Spinner,
   IconButton, HStack, useToast, Select, Tag, TagLabel, TagCloseButton, Wrap, WrapItem,
   useColorModeValue, Switch, NumberInput, NumberInputField, NumberInputStepper,
-  NumberIncrementStepper, NumberDecrementStepper, VStack
+  NumberIncrementStepper, NumberDecrementStepper, VStack, Heading, Divider, Badge
 } from "@chakra-ui/react";
 import { CloseIcon } from "@chakra-ui/icons";
 import { supabase } from "../../lib/supabaseClient";
@@ -30,27 +30,27 @@ type ServiceItem = { nom: string; description: string; quantite: string; unite: 
 type VehicleItem = {
   qty: number;
   details: string; annee: string; marque: string; modele: string;
-  transmission: string; distance_km: string; type_carburant: string; conso_l_100km: string;
+  distance_km: string; type_carburant: string; conso_l_100km: string;
   type_equipement_refrigeration: string; type_refrigerant: string; charge_lbs: string;
-  fuites_lbs?: string; climatisation: boolean;
+  climatisation: boolean;
 };
 
 // ---- Defaults you asked for ----
 const DEFAULT_EQUIP = "Climatisation - Automobile";
 const DEFAULT_REFRIG = "R134a";
-const DEFAULT_CHARGE = "1000";
+const DEFAULT_CHARGE = "1";
 
 const emptyLieu: Lieu = { nom: "", description: "", adresse: "" };
 const emptyProduct: ProductItem = { nom: "", description: "", quantite: "", unite: "" };
 const emptyService: ServiceItem = { nom: "", description: "", quantite: "", unite: "" };
 const emptyVehicle: VehicleItem = {
   qty: 1,
-  details: "", annee: "", marque: "", modele: "", transmission: "", distance_km: "",
+  details: "", annee: "", marque: "", modele: "", distance_km: "",
   type_carburant: "", conso_l_100km: "",
   type_equipement_refrigeration: DEFAULT_EQUIP,
   type_refrigerant: DEFAULT_REFRIG,
   charge_lbs: DEFAULT_CHARGE,
-  fuites_lbs: "", climatisation: false,
+  climatisation: false,
 };
 
 // Options pour les champs réfrigération
@@ -84,6 +84,9 @@ export default function ProductionAndProductsPage() {
   const [services, setServices] = useState<ServiceItem[]>([{ ...emptyService }]);
   const [vehicles, setVehicles] = useState<VehicleItem[]>([{ ...emptyVehicle }]);
   const [lookupLoadingIndex, setLookupLoadingIndex] = useState<number | null>(null);
+  const [expandedDetailRow, setExpandedDetailRow] = useState<number | null>(null);
+  const [showProducts, setShowProducts] = useState<boolean>(true);
+  const [showServices, setShowServices] = useState<boolean>(true);
 
   const [expandOnSave, setExpandOnSave] = useState<boolean>(false);
 
@@ -102,6 +105,16 @@ export default function ProductionAndProductsPage() {
   const [showSourceModal, setShowSourceModal] = useState(false);
   const [fleetImporting, setFleetImporting] = useState(false);
   const fleetFileRef = useRef<HTMLInputElement>(null);
+
+  // Admin panel state
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminUsers, setAdminUsers] = useState<any[]>([]);
+  const [adminPostes, setAdminPostes] = useState<any[]>([]);
+  const [adminSourcesByPoste, setAdminSourcesByPoste] = useState<Record<string, any[]>>({});
+  const [adminVisibilities, setAdminVisibilities] = useState<any[]>([]);
+  const [newEmployee, setNewEmployee] = useState({ email: '', password: '' });
+  const [creating, setCreating] = useState(false);
 
   // === Catalog (Année / Marque / Modèle) loaded from public JSON ===
   const [catalog, setCatalog] = useState<VehicleRow[]>([]);
@@ -165,14 +178,12 @@ export default function ProductionAndProductsPage() {
       annee: v?.annee ?? "",
       marque: v?.marque ?? "",
       modele: v?.modele ?? "",
-      transmission: v?.transmission ?? "",
       distance_km: v?.distance_km ?? "",
       type_carburant: v?.type_carburant ?? v?.type ?? v?.carburant ?? "",
       conso_l_100km: v?.conso_l_100km ?? "",
       type_equipement_refrigeration: v?.type_equipement_refrigeration || DEFAULT_EQUIP,
       type_refrigerant: v?.type_refrigerant || DEFAULT_REFRIG,
       charge_lbs: (v?.charge_lbs != null && String(v?.charge_lbs) !== "") ? String(v?.charge_lbs) : DEFAULT_CHARGE,
-      fuites_lbs: v?.fuites_lbs != null ? String(v?.fuites_lbs) : "",
       climatisation: typeof v?.climatisation === "boolean" ? v.climatisation : Boolean(v?.clim),
     }));
   }
@@ -192,7 +203,7 @@ export default function ProductionAndProductsPage() {
         }
 
         const { data: profile, error: profErr } = await supabase
-          .from("user_profiles").select("company_id").eq("id", user.id).single();
+          .from("user_profiles").select("company_id, role").eq("id", user.id).single();
         if (profErr) throw profErr;
         if (!profile?.company_id) {
           toast({ status: "error", title: "Impossible de trouver la compagnie de l'utilisateur." });
@@ -200,6 +211,7 @@ export default function ProductionAndProductsPage() {
           return;
         }
         setCompanyId(profile.company_id);
+        setUserRole(profile.role ?? null);
 
         const { data: companyData, error: compErr } = await supabase
           .from("companies")
@@ -223,6 +235,104 @@ export default function ProductionAndProductsPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Load admin data once role + companyId are known
+  useEffect(() => {
+    if (userRole !== "admin" || !companyId) return;
+    (async () => {
+      setAdminLoading(true);
+      try {
+        // Fetch postes for this company
+        const { data: postes } = await supabase
+          .from("postes").select("id, label, num, enabled")
+          .eq("enabled", true).eq("company_id", companyId);
+        const posteList = postes ?? [];
+        setAdminPostes(posteList);
+
+        // Fetch sources for those postes
+        const posteIds = posteList.map((p: any) => p.id);
+        let srcByPoste: Record<string, any[]> = {};
+        if (posteIds.length > 0) {
+          const { data: allSrc } = await supabase
+            .from("poste_sources").select("id, poste_id, source_code, label, enabled")
+            .in("poste_id", posteIds);
+          posteIds.forEach((pid: string) => {
+            srcByPoste[pid] = (allSrc ?? []).filter((s: any) => s.poste_id === pid);
+          });
+        }
+        setAdminSourcesByPoste(srcByPoste);
+
+        // Fetch company users
+        const { data: users } = await supabase
+          .from("full_user_profiles").select("*").eq("company_id", companyId);
+        setAdminUsers(users ?? []);
+
+        // Fetch visibility rows
+        const userIds = (users ?? []).map((u: any) => u.id);
+        if (userIds.length > 0 && posteIds.length > 0) {
+          const { data: vis } = await supabase
+            .from("poste_source_visibility").select("*")
+            .in("user_id", userIds).in("poste_id", posteIds);
+          setAdminVisibilities(vis ?? []);
+        }
+      } finally {
+        setAdminLoading(false);
+      }
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userRole, companyId]);
+
+  // Admin: toggle source visibility for a user
+  const handleAdminToggle = async (user_id: string, poste_id: string, source_code: string, is_hidden: boolean) => {
+    const resp = await fetch("/api/admin/set-poste-source-visibility", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id, poste_id, source_code, is_hidden }),
+    });
+    if (!resp.ok) {
+      const r = await resp.json();
+      toast({ status: "error", title: "Erreur", description: r.error || "Une erreur est survenue", duration: 4000, isClosable: true });
+      return;
+    }
+    setAdminVisibilities(prev => {
+      const idx = prev.findIndex(v => v.user_id === user_id && v.poste_id === poste_id && v.source_code === source_code);
+      if (idx !== -1) { const n = [...prev]; n[idx] = { ...n[idx], is_hidden }; return n; }
+      return [...prev, { user_id, poste_id, source_code, is_hidden }];
+    });
+    toast({ status: "success", title: is_hidden ? "Source masquée" : "Source affichée", duration: 1500 });
+  };
+
+  // Admin: create new employee account
+  const handleAdminCreateEmployee = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!companyId) return;
+    setCreating(true);
+    try {
+      const { data, error } = await supabase.auth.signUp({
+        email: newEmployee.email,
+        password: newEmployee.password,
+      });
+      if (error) throw error;
+      if (data.user) {
+        const { error: insertError } = await supabase.from("user_profiles").insert([{
+          id: data.user.id,
+          company_id: companyId,
+          role: "user",
+        }]);
+        if (insertError) throw insertError;
+        // Refresh user list
+        const { data: users } = await supabase
+          .from("full_user_profiles").select("*").eq("company_id", companyId);
+        setAdminUsers(users ?? []);
+      }
+      toast({ status: "success", title: "Compte créé !", description: "Un email d'activation a été envoyé.", duration: 5000, isClosable: true });
+      setNewEmployee({ email: '', password: '' });
+    } catch (err: any) {
+      toast({ status: "error", title: "Erreur à la création", description: err.message, duration: 7000, isClosable: true });
+    } finally {
+      setCreating(false);
+    }
+  };
 
   // --- Add/Remove/Update logic ---
   const addLieu = () => setLieux(prev => [...prev, { ...emptyLieu }]);
@@ -673,21 +783,34 @@ export default function ProductionAndProductsPage() {
         borderColor={COL.border}
         boxShadow={cardShadow}
       >
-        <HStack justify="space-between" mb={3}>
-          <Text fontWeight="semibold" fontSize="md" color={COL.textBody}>
-            Produits
-          </Text>
-          <Button
-            size="sm"
-            bg={COL.accent}
-            color="white"
-            _hover={{ bg: "#1f3b30" }}
-            onClick={addProduct}
-          >
-            Ajouter un produit
-          </Button>
+        <HStack justify="space-between" mb={showProducts ? 3 : 0}>
+          <HStack spacing={3}>
+            <Text fontWeight="semibold" fontSize="md" color={COL.textBody}>
+              Produits
+            </Text>
+            <Button
+              size="xs"
+              variant="ghost"
+              color={COL.textMuted}
+              onClick={() => setShowProducts(p => !p)}
+              px={2}
+            >
+              {showProducts ? "▲ Masquer" : "▼ Afficher"}
+            </Button>
+          </HStack>
+          {showProducts && (
+            <Button
+              size="sm"
+              bg={COL.accent}
+              color="white"
+              _hover={{ bg: "#1f3b30" }}
+              onClick={addProduct}
+            >
+              Ajouter un produit
+            </Button>
+          )}
         </HStack>
-        <Box overflowX="auto">
+        {showProducts && <Box overflowX="auto">
           <Table variant="simple" size="sm">
             <Thead bg={COL.surfaceMuted}>
               <Tr>
@@ -751,7 +874,7 @@ export default function ProductionAndProductsPage() {
               ))}
             </Tbody>
           </Table>
-        </Box>
+        </Box>}
       </Box>
 
       {/* Services */}
@@ -763,21 +886,34 @@ export default function ProductionAndProductsPage() {
         borderColor={COL.border}
         boxShadow={cardShadow}
       >
-        <HStack justify="space-between" mb={3}>
-          <Text fontWeight="semibold" fontSize="md" color={COL.textBody}>
-            Services
-          </Text>
-          <Button
-            size="sm"
-            bg={COL.accent}
-            color="white"
-            _hover={{ bg: "#1f3b30" }}
-            onClick={addService}
-          >
-            Ajouter un service
-          </Button>
+        <HStack justify="space-between" mb={showServices ? 3 : 0}>
+          <HStack spacing={3}>
+            <Text fontWeight="semibold" fontSize="md" color={COL.textBody}>
+              Services
+            </Text>
+            <Button
+              size="xs"
+              variant="ghost"
+              color={COL.textMuted}
+              onClick={() => setShowServices(s => !s)}
+              px={2}
+            >
+              {showServices ? "▲ Masquer" : "▼ Afficher"}
+            </Button>
+          </HStack>
+          {showServices && (
+            <Button
+              size="sm"
+              bg={COL.accent}
+              color="white"
+              _hover={{ bg: "#1f3b30" }}
+              onClick={addService}
+            >
+              Ajouter un service
+            </Button>
+          )}
         </HStack>
-        <Box overflowX="auto">
+        {showServices && <Box overflowX="auto">
           <Table variant="simple" size="sm">
             <Thead bg={COL.surfaceMuted}>
               <Tr>
@@ -832,7 +968,7 @@ export default function ProductionAndProductsPage() {
               ))}
             </Tbody>
           </Table>
-        </Box>
+        </Box>}
       </Box>
 
       {/* Flotte de véhicules */}
@@ -899,16 +1035,13 @@ export default function ProductionAndProductsPage() {
           <Table variant="simple" size="sm">
             <Thead bg={COL.surfaceMuted}>
               <Tr>
-                <Th>QTÉ</Th>
-                <Th>Détails</Th>
+                <Th w="60px">QTÉ</Th>
+                <Th minW="200px">Détails</Th>
                 <Th colSpan={3}>Année / Marque / Modèle</Th>
-                <Th>Transmission</Th>
                 <Th>Type / carburant</Th>
                 <Th>Conso. [L/100km]</Th>
-                <Th>Équipement frigo</Th>
                 <Th>Réfrigérant</Th>
                 <Th>Charge [lbs]</Th>
-                <Th>Fuites [lbs]</Th>
                 <Th>Clim</Th>
                 <Th w="40px"></Th>
               </Tr>
@@ -922,16 +1055,16 @@ export default function ProductionAndProductsPage() {
 
                 return (
                   <Tr key={`veh-${i}`}>
-                    <Td>
+                    <Td w="60px">
                       <NumberInput
                         size="sm"
                         min={1}
                         max={9999}
                         value={veh.qty ?? 1}
                         onChange={(_, num) => updateVehicle(i, "qty", clampInt(num))}
-                        w="80px"
+                        w="60px"
                       >
-                        <NumberInputField />
+                        <NumberInputField px={1} />
                         <NumberInputStepper>
                           <NumberIncrementStepper />
                           <NumberDecrementStepper />
@@ -939,12 +1072,16 @@ export default function ProductionAndProductsPage() {
                       </NumberInput>
                     </Td>
 
-                    <Td>
+                    <Td minW="200px">
                       <Input
                         value={veh.details || ""}
                         onChange={e => updateVehicle(i, "details", e.target.value)}
                         size="sm"
                         placeholder="Plaque, usage, notes…"
+                        minW={expandedDetailRow === i ? "340px" : "200px"}
+                        transition="min-width 0.2s"
+                        onFocus={() => setExpandedDetailRow(i)}
+                        onBlur={() => setExpandedDetailRow(null)}
                       />
                     </Td>
 
@@ -1012,15 +1149,6 @@ export default function ProductionAndProductsPage() {
                     </Td>
 
                     <Td>
-                      <Input
-                        value={veh.transmission || ""}
-                        onChange={e => updateVehicle(i, "transmission", e.target.value)}
-                        size="sm"
-                        placeholder="Manuelle / Auto"
-                      />
-                    </Td>
-
-                    <Td>
                       <VehicleSelect
                         value={veh.type_carburant || ""}
                         onChange={(val: string) => updateVehicle(i, "type_carburant", val)}
@@ -1036,19 +1164,7 @@ export default function ProductionAndProductsPage() {
                       />
                     </Td>
 
-                    <Td>
-                      <Select
-                        placeholder="Sélectionner"
-                        value={veh.type_equipement_refrigeration || ""}
-                        onChange={e => updateVehicle(i, "type_equipement_refrigeration", e.target.value)}
-                        size="sm"
-                      >
-                        {REFRIG_EQUIP_OPTIONS.map(opt => (
-                          <option key={opt} value={opt}>{opt}</option>
-                        ))}
-                      </Select>
-                    </Td>
-
+                    {/* Équipement Frigo column hidden — default "Climatisation Automobile" always applied */}
                     <Td>
                       <Select
                         placeholder="Sélectionner"
@@ -1070,17 +1186,6 @@ export default function ProductionAndProductsPage() {
                         onChange={e => updateVehicle(i, "charge_lbs", e.target.value)}
                         size="sm"
                         placeholder="ex: 12.5"
-                      />
-                    </Td>
-
-                    <Td>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={veh.fuites_lbs || ""}
-                        onChange={e => updateVehicle(i, "fuites_lbs", e.target.value)}
-                        size="sm"
-                        placeholder="ex: 0.3"
                       />
                     </Td>
 
@@ -1145,6 +1250,130 @@ export default function ProductionAndProductsPage() {
           forceOpen={showSourceModal}
           onClose={() => setShowSourceModal(false)}
         />
+      )}
+
+      {/* Admin Panel — visible only to admins */}
+      {userRole === "admin" && (
+        <Box
+          bg={COL.surface}
+          p={{ base: 4, md: 5 }}
+          rounded="2xl"
+          border="1px solid"
+          borderColor="#264a3b"
+          boxShadow={cardShadow}
+        >
+          <Heading size="sm" color={COL.textBody} mb={1}>Gestion des utilisateurs</Heading>
+          <Text fontSize="sm" color={COL.textMuted} mb={4}>
+            Créez des comptes employés et gérez la visibilité des sources d'émissions par utilisateur.
+          </Text>
+
+          {/* Create employee form */}
+          <Box bg={COL.surfaceMuted} p={4} rounded="xl" mb={5}>
+            <Text fontWeight="600" fontSize="sm" color={COL.textBody} mb={3}>Créer un compte utilisateur</Text>
+            <form onSubmit={handleAdminCreateEmployee}>
+              <HStack spacing={3} flexWrap="wrap">
+                <Input
+                  placeholder="Email"
+                  type="email"
+                  required
+                  value={newEmployee.email}
+                  onChange={e => setNewEmployee(n => ({ ...n, email: e.target.value }))}
+                  size="sm"
+                  maxW="230px"
+                  bg="white"
+                />
+                <Input
+                  placeholder="Mot de passe (min. 6 car.)"
+                  type="password"
+                  required
+                  minLength={6}
+                  value={newEmployee.password}
+                  onChange={e => setNewEmployee(n => ({ ...n, password: e.target.value }))}
+                  size="sm"
+                  maxW="230px"
+                  bg="white"
+                />
+                <Button
+                  type="submit"
+                  size="sm"
+                  bg={COL.accent}
+                  color="white"
+                  _hover={{ bg: "#1f3b30" }}
+                  isLoading={creating}
+                  isDisabled={!newEmployee.email || !newEmployee.password}
+                >
+                  Créer
+                </Button>
+              </HStack>
+              <Text fontSize="xs" color={COL.textMuted} mt={2}>
+                L'utilisateur sera assigné à votre entreprise avec le rôle "utilisateur".
+              </Text>
+            </form>
+          </Box>
+
+          <Divider mb={4} />
+
+          {/* Per-user source visibility table */}
+          <Text fontWeight="600" fontSize="sm" color={COL.textBody} mb={3}>
+            Visibilité des sources par utilisateur
+          </Text>
+
+          {adminLoading ? (
+            <HStack spacing={2}><Spinner size="sm" /><Text fontSize="sm" color={COL.textMuted}>Chargement…</Text></HStack>
+          ) : adminUsers.filter(u => u.role === "user").length === 0 ? (
+            <Text fontSize="sm" color={COL.textMuted}>
+              Aucun utilisateur dans votre organisation. Créez des comptes ci-dessus.
+            </Text>
+          ) : (
+            <Box overflowX="auto">
+              <Table size="sm" variant="simple">
+                <Thead bg={COL.surfaceMuted}>
+                  <Tr>
+                    <Th minW="180px">Utilisateur</Th>
+                    {adminPostes.map(p =>
+                      (adminSourcesByPoste[p.id] || []).map(s => (
+                        <Th key={p.id + s.source_code} textAlign="center" fontSize="10px" whiteSpace="normal" maxW="90px" px={2}>
+                          <Badge colorScheme="green" fontSize="10px" mb={0.5}>{s.source_code}</Badge>
+                          <br />
+                          <Text as="span" fontWeight="normal" color={COL.textMuted} fontSize="9px">{s.label}</Text>
+                        </Th>
+                      ))
+                    )}
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {adminUsers.filter(u => u.role === "user").map(user => (
+                    <Tr key={user.id}>
+                      <Td>
+                        <Text fontSize="sm" fontWeight="600" color={COL.textBody}>{user.email}</Text>
+                      </Td>
+                      {adminPostes.map(p =>
+                        (adminSourcesByPoste[p.id] || []).map(s => {
+                          const isHidden = adminVisibilities.find(
+                            v => v.user_id === user.id && v.poste_id === p.id && v.source_code === s.source_code
+                          )?.is_hidden || false;
+                          return (
+                            <Td key={p.id + s.source_code} textAlign="center">
+                              <Switch
+                                isChecked={!isHidden}
+                                colorScheme="green"
+                                size="sm"
+                                onChange={e => handleAdminToggle(user.id, p.id, s.source_code, !e.target.checked)}
+                              />
+                              <Text fontSize="9px" color={isHidden ? "red.400" : "green.500"} mt={0.5}>
+                                {isHidden ? "OFF" : "ON"}
+                              </Text>
+                            </Td>
+                          );
+                        })
+                      )}
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </Box>
+          )}
+        </Box>
       )}
 
       {/* Save Button */}

@@ -72,12 +72,9 @@ export default function SignUp() {
         >
           <Box pe="20">
             <NextLink href="/">
-              <Box
-                as={siteConfig.logo}
-                width="160px"
-                ms="4"
-                mb={{ base: 0, lg: 16 }}
-              />
+              <Box ms="4" mb={{ base: 0, lg: 16 }} display="inline-block">
+                <siteConfig.logo height="60px" width="auto" />
+              </Box>
             </NextLink>
 
             <Features
