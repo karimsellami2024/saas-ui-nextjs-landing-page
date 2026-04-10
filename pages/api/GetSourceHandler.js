@@ -21,7 +21,8 @@ export default async function handler(req, res) {
     const {
       user_id: userId,     // from query string ?user_id=...&poste_num=...&source_code=...
       poste_num,
-      source_code
+      source_code,
+      submission_id,
     } = req.query;
 
     if (!userId) {
@@ -56,12 +57,17 @@ export default async function handler(req, res) {
     const posteId = poste.id;
 
     // --- 3. Fetch poste_sources row for this poste + source_code ---
-    const { data: posteSource, error: psErr } = await supabase
+    let psQuery = supabase
       .from('poste_sources')
       .select('id, data, results, enabled, label')
       .eq('poste_id', posteId)
-      .eq('source_code', source_code)
-      .maybeSingle();
+      .eq('source_code', source_code);
+
+    if (submission_id) {
+      psQuery = psQuery.eq('submission_id', submission_id);
+    }
+
+    const { data: posteSource, error: psErr } = await psQuery.maybeSingle();
 
     if (psErr) {
       console.error("Supabase fetch error (poste_sources):", psErr);

@@ -49,7 +49,7 @@ export default function SignUp() {
       window.localStorage.setItem('company_name', companyName)
     }
 
-    router.push('/intro')
+    router.push('/bilans')
   }
 
   return (

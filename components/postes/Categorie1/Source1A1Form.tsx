@@ -59,6 +59,7 @@ export interface Source1AFormProps {
   userId?: string | null;
   gesResults?: GesResult[];
   setGesResults: (results: GesResult[]) => void;
+  bilanId?: string;
 }
 
 const FUEL_OPTIONS = [
@@ -139,6 +140,7 @@ export function Source1AForm({
   userId: propUserId,
   gesResults = [],
   setGesResults,
+  bilanId,
 }: Source1AFormProps) {
   const toast = useToast();
 
@@ -531,6 +533,7 @@ export function Source1AForm({
       poste_source_id: posteSourceId,
       poste_num: 1,
       source_code: "1A1",
+      submission_id: bilanId ?? null,
       data: { rows: makeSanitizedRows(rows) },
       results: computeResults(rows, refs),
     };
@@ -627,6 +630,7 @@ export function Source1AForm({
       poste_source_id: posteSourceId,
       poste_num: 1,
       source_code: "1A1",
+      submission_id: bilanId ?? null,
       data: { rows: makeSanitizedRows(rows) },
       results: computeResults(rows, refs),
     };
@@ -1134,6 +1138,33 @@ export function Source1AForm({
           Soumettre
         </Button>
       </HStack>
+
+      {/* Results — below submit button */}
+      {!!resultsSummary && (
+        <Box
+          mt={6}
+          bg="white"
+          rounded="xl"
+          p={6}
+          boxShadow={FIGMA.cardShadow}
+          animation={`${fadeInUp} 0.5s ease-out`}
+        >
+          <HStack mb={4} spacing={2}>
+            <Icon as={FiFileText} color={FIGMA.green} boxSize={5} />
+            <Text fontFamily="Inter" fontWeight={700} color={FIGMA.text} fontSize="lg">
+              Calculs et résultats
+            </Text>
+          </HStack>
+          <Grid templateColumns={{ base: "1fr 1fr", md: "repeat(3, 1fr)", lg: "repeat(6, 1fr)" }} gap={4}>
+            <ResultCard FIGMA={FIGMA} label="CO₂" unit="gCO₂e" value={resultsSummary.co2} isGrams />
+            <ResultCard FIGMA={FIGMA} label="CH₄" unit="gCO₂e" value={resultsSummary.ch4} isGrams />
+            <ResultCard FIGMA={FIGMA} label="N₂O" unit="gCO₂e" value={resultsSummary.n2o} isGrams />
+            <ResultCard FIGMA={FIGMA} label="Total GES" unit="gCO₂e" value={resultsSummary.totalG} isGrams />
+            <ResultCard FIGMA={FIGMA} label="Total GES" unit="tCO₂e" value={resultsSummary.totalT} isGrams={false} />
+            <ResultCard FIGMA={FIGMA} label="Énergie" unit="kWh" value={resultsSummary.kwh} isGrams={false} />
+          </Grid>
+        </Box>
+      )}
 
     </Box>
   );

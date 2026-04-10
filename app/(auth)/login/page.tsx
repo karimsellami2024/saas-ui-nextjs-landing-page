@@ -46,7 +46,7 @@ export default function Login() {
     const boot = async () => {
       const { data: { session } } = await supabase.auth.getSession()
       if (session?.user) {
-        router.replace('/')
+        router.replace('/bilans')
         return
       }
       setChecking(false)
@@ -55,7 +55,7 @@ export default function Login() {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
-        router.replace('/')
+        router.replace('/bilans')
       }
     })
 

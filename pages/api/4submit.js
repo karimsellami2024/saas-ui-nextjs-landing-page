@@ -12,6 +12,7 @@ export default async function handler(req, res) {
       poste_num,           // required: e.g., 4
       source_code,         // required: '4A1', '4B1', etc.
       poste_source_id,
+      submission_id,       // optional: links this entry to a specific bilan
       results              // <-- Accept results from frontend (should be GES totals or array)
     } = req.body;
 
@@ -50,16 +51,23 @@ export default async function handler(req, res) {
     const posteId = poste.id;
 
     // --- 3. Upsert poste_sources (save results from frontend) ---
+    // When a submission_id is present we upsert per (poste_id, source_code, submission_id)
+    // so different bilans never overwrite each other.
+    const upsertRow = {
+      poste_id: posteId,
+      source_code,
+      data,
+      results,
+    };
+    if (submission_id) upsertRow.submission_id = submission_id;
+
+    const conflictCols = submission_id
+      ? ['poste_id', 'source_code', 'submission_id']
+      : ['poste_id', 'source_code'];
+
     const { data: updated, error: updateErr } = await supabase
       .from('poste_sources')
-      .upsert([{
-        poste_id: posteId,
-        source_code,
-        data,
-        results, // <--- Use results from frontend!
-      }], {
-        onConflict: ['poste_id', 'source_code']
-      })
+      .upsert([upsertRow], { onConflict: conflictCols.join(',') })
       .select();
 
     if (updateErr) {

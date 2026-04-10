@@ -201,7 +201,7 @@ const POSTE_META: Record<string, { groupTitle: string; posteTitle: string; descr
   },
 };
 
-export default function Section() {
+export default function Section({ bilanId }: { bilanId?: string }) {
   const [userId, setUserId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [showSourcesPopup, setShowSourcesPopup] = useState(false);
@@ -522,7 +522,7 @@ export default function Section() {
             {["combustion_fixes","combustion_mobiles","refrigerants","procedes","sols"].includes(String(selectedMenu)) &&
               renderOrPlaceholder(
                 String(selectedMenu),
-                <Categorie1Page activeSubKey={String(selectedMenu)} />
+                <Categorie1Page activeSubKey={String(selectedMenu)} bilanId={bilanId} />
               )
             }
 
@@ -530,7 +530,7 @@ export default function Section() {
             {["products","autre_energie"].includes(String(selectedMenu)) &&
               renderOrPlaceholder(
                 String(selectedMenu),
-                <Categorie2EnergiePage activeSubKey={String(selectedMenu)} />
+                <Categorie2EnergiePage activeSubKey={String(selectedMenu)} bilanId={bilanId} />
               )
             }
 
@@ -538,7 +538,7 @@ export default function Section() {
             {["p31","p32","p33","p34","p35"].includes(String(selectedMenu)) &&
               renderOrPlaceholder(
                 String(selectedMenu),
-                <Categorie3Page activeSubKey={String(selectedMenu)} />
+                <Categorie3Page activeSubKey={String(selectedMenu)} bilanId={bilanId} />
               )
             }
 
@@ -546,7 +546,7 @@ export default function Section() {
             {["p41","p43"].includes(String(selectedMenu)) &&
               renderOrPlaceholder(
                 String(selectedMenu),
-                <Categorie4Page activeSubKey={String(selectedMenu)} />
+                <Categorie4Page activeSubKey={String(selectedMenu)} bilanId={bilanId} />
               )
             }
 
@@ -554,7 +554,7 @@ export default function Section() {
             {["p51","p52"].includes(String(selectedMenu)) &&
               renderOrPlaceholder(
                 String(selectedMenu),
-                <Categorie5Page activeSubKey={String(selectedMenu)} />
+                <Categorie5Page activeSubKey={String(selectedMenu)} bilanId={bilanId} />
               )
             }
 

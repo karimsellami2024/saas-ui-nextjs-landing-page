@@ -68,9 +68,10 @@ const SUBKEY_TO_SOURCE_CODES: Record<SubKey, string[]> = {
 type Props = {
   /** comes from Section.tsx (selected pill key) */
   activeSubKey: SubKey | string;
+  bilanId?: string;
 };
 
-export default function Categorie1Page({ activeSubKey }: Props) {
+export default function Categorie1Page({ activeSubKey, bilanId }: Props) {
   /* ===================== GLOBAL CONFIG ===================== */
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
@@ -301,6 +302,7 @@ export default function Categorie1Page({ activeSubKey }: Props) {
             userId={userId}
             gesResults={ges1A1}
             setGesResults={setGes1A1}
+            bilanId={bilanId}
           />
         </Box>
       );
