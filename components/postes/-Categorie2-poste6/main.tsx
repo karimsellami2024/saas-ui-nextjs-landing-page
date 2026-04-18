@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Heading, Spinner, Text, useColorModeValue } from '@chakra-ui/react';
+import { Box, Button, HStack, Heading, Spinner, Text, useColorModeValue } from '@chakra-ui/react';
 import { supabase } from '../../../lib/supabaseClient';
 import { SourceAForm } from './Source6A1Form';      // 6A1
 import { Source6B1Form } from './Source6B1Form';   // 6B1
@@ -20,9 +20,11 @@ const SUBKEY_TO_SOURCE_CODES: Record<SubKey, string[]> = {
 type Props = {
   /** pass selectedMenu from Section.tsx: "products" | "autre_energie" */
   activeSubKey: SubKey | string;
+  bilanId?: string;
+  onNextSource?: () => void;
 };
 
-export default function Categorie2EnergiePage({ activeSubKey }: Props) {
+export default function Categorie2EnergiePage({ activeSubKey, bilanId, onNextSource }: Props) {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
 
@@ -106,9 +108,10 @@ export default function Categorie2EnergiePage({ activeSubKey }: Props) {
         <Box key={code} mb={6}>
           <SourceAForm
             posteId={posteSourceId}
-            posteNum={2} // ✅ now Poste 2
+            posteNum={2}
             posteLabel="6A1 - Électricité provenant du réseau électrique (Location based)"
             userId={userId}
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -119,9 +122,10 @@ export default function Categorie2EnergiePage({ activeSubKey }: Props) {
         <Box key={code} mb={0}>
           <Source6B1Form
             posteId={posteSourceId}
-            posteNum={2} // ✅ now Poste 2
+            posteNum={2}
             posteLabel="6B1 - Électricité provenant du réseau électrique (Market based)"
             userId={userId}
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -164,6 +168,32 @@ export default function Categorie2EnergiePage({ activeSubKey }: Props) {
             }
             return getFormForSource(source);
           })
+        )}
+
+        {!loading && userId && (
+          <HStack justify="flex-end" mt={6} spacing={4}>
+            <Button
+              variant="outline"
+              borderColor="#1f3f33"
+              color="#1f3f33"
+              _hover={{ bg: "#e8f0ea" }}
+              size="md"
+              px={6}
+            >
+              Valider Page
+            </Button>
+            <Button
+              bg="#1f3f33"
+              color="white"
+              _hover={{ bg: "#2d5c4a" }}
+              size="md"
+              px={6}
+              isDisabled={!onNextSource}
+              onClick={onNextSource}
+            >
+              Prochaine Source →
+            </Button>
+          </HStack>
         )}
       </Box>
     </Box>

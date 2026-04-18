@@ -111,6 +111,24 @@ const isoToPosteNum: Record<IsoCategoryKey, number> = {
   cat6: 6,
 };
 
+const ALL_SOURCES_IN_ORDER = [
+  "combustion_fixes", "combustion_mobiles", "procedes", "refrigerants", "sols",
+  "products", "autre_energie",
+  "p31", "p32", "p33", "p34", "p35",
+  "p41", "p43",
+  "p51", "p52",
+];
+
+const DISABLED_SOURCES = new Set(["procedes", "sols", "autre_energie"]);
+
+const SOURCE_TO_POSTE_NUM: Record<string, number> = {
+  combustion_fixes: 1, combustion_mobiles: 1, procedes: 1, refrigerants: 1, sols: 1,
+  products: 2, autre_energie: 2,
+  p31: 3, p32: 3, p33: 3, p34: 3, p35: 3,
+  p41: 4, p43: 4,
+  p51: 5, p52: 5,
+};
+
 const POSTE_META: Record<string, { groupTitle: string; posteTitle: string; description: string }> = {
   combustion_fixes: {
     groupTitle: "Émissions directs",
@@ -209,6 +227,7 @@ export default function Section({ bilanId }: { bilanId?: string }) {
   const [postes, setPostes] = useState<PosteRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalTco2e, setTotalTco2e] = useState<number>(0);
+  const [posteIds, setPosteIds] = useState<string[]>([]);
 
   const [selectedMenu, setSelectedMenu] = useState<TopKey | string>("dashboard");
   const [activeTop, setActiveTop] = useState<TopKey>("dashboard");
@@ -239,6 +258,16 @@ export default function Section({ bilanId }: { bilanId?: string }) {
     })();
   }, []);
 
+  const fetchTotal = async (uid: string) => {
+    const qs = new URLSearchParams({ user_id: uid });
+    if (bilanId) qs.set("bilan_id", bilanId);
+    const dashRes = await fetch(`/api/dashboard?${qs}`);
+    if (dashRes.ok) {
+      const dashData = await dashRes.json();
+      setTotalTco2e(dashData.summary?.total_tCO2eq ?? 0);
+    }
+  };
+
   useEffect(() => {
     if (!userId) return;
     (async () => {
@@ -259,7 +288,9 @@ export default function Section({ bilanId }: { bilanId?: string }) {
             .select("id, label, num")
             .eq("company_id", companyId)
             .order("num", { ascending: true });
-          setPostes((postesData ?? []) as PosteRow[]);
+          const rows = (postesData ?? []) as PosteRow[];
+          setPostes(rows);
+          setPosteIds(rows.map((p) => p.id));
         }
 
         const { data: visRows } = await supabase
@@ -271,16 +302,36 @@ export default function Section({ bilanId }: { bilanId?: string }) {
         (visRows ?? []).forEach((row: any) => { visMap[row.poste_id] = row.is_hidden; });
         setPosteVisibility(visMap);
 
-        const dashRes = await fetch(`/api/dashboard?user_id=${userId}`);
-        if (dashRes.ok) {
-          const dashData = await dashRes.json();
-          setTotalTco2e(dashData.summary?.total_tCO2eq ?? 0);
-        }
+        await fetchTotal(userId);
       } finally {
         setLoading(false);
       }
     })();
   }, [userId]);
+
+  // Realtime: refresh total whenever any poste_source row is inserted or updated
+  useEffect(() => {
+    if (!userId || posteIds.length === 0) return;
+
+    const channel = supabase
+      .channel("poste_sources_total")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "poste_sources",
+        },
+        () => {
+          fetchTotal(userId);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userId, posteIds]);
 
   useEffect(() => {
     if (typeof selectedMenu !== "string") return;
@@ -314,6 +365,26 @@ export default function Section({ bilanId }: { bilanId?: string }) {
     ["p31", "p32", "p33", "p34", "p35"].includes(k) ||
     ["p41", "p43"].includes(k) ||
     ["p51", "p52"].includes(k);
+
+  const getNextVisibleSource = (currentKey: string): string | null => {
+    const idx = ALL_SOURCES_IN_ORDER.indexOf(currentKey);
+    if (idx === -1) return null;
+    for (let i = idx + 1; i < ALL_SOURCES_IN_ORDER.length; i++) {
+      const key = ALL_SOURCES_IN_ORDER[i];
+      if (DISABLED_SOURCES.has(key)) continue;
+      const posteNum = SOURCE_TO_POSTE_NUM[key];
+      const poste = postes.find(p => Number(p.num) === posteNum);
+      if (poste && posteVisibility[poste.id]) continue;
+      return key;
+    }
+    return null;
+  };
+
+  const nextVisibleSource = useMemo(() => {
+    if (!isPosteKey(String(selectedMenu))) return null;
+    return getNextVisibleSource(String(selectedMenu));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMenu, postes, posteVisibility]);
 
   const currentMeta = typeof selectedMenu === "string" ? POSTE_META[selectedMenu] : undefined;
   const groupTitle = currentMeta?.groupTitle ?? "Section";
@@ -522,7 +593,11 @@ export default function Section({ bilanId }: { bilanId?: string }) {
             {["combustion_fixes","combustion_mobiles","refrigerants","procedes","sols"].includes(String(selectedMenu)) &&
               renderOrPlaceholder(
                 String(selectedMenu),
-                <Categorie1Page activeSubKey={String(selectedMenu)} bilanId={bilanId} />
+                <Categorie1Page
+                  activeSubKey={String(selectedMenu)}
+                  bilanId={bilanId}
+                  onNextSource={nextVisibleSource ? () => setSelectedMenu(nextVisibleSource) : undefined}
+                />
               )
             }
 
@@ -530,7 +605,11 @@ export default function Section({ bilanId }: { bilanId?: string }) {
             {["products","autre_energie"].includes(String(selectedMenu)) &&
               renderOrPlaceholder(
                 String(selectedMenu),
-                <Categorie2EnergiePage activeSubKey={String(selectedMenu)} bilanId={bilanId} />
+                <Categorie2EnergiePage
+                  activeSubKey={String(selectedMenu)}
+                  bilanId={bilanId}
+                  onNextSource={nextVisibleSource ? () => setSelectedMenu(nextVisibleSource) : undefined}
+                />
               )
             }
 
@@ -538,7 +617,11 @@ export default function Section({ bilanId }: { bilanId?: string }) {
             {["p31","p32","p33","p34","p35"].includes(String(selectedMenu)) &&
               renderOrPlaceholder(
                 String(selectedMenu),
-                <Categorie3Page activeSubKey={String(selectedMenu)} bilanId={bilanId} />
+                <Categorie3Page
+                  activeSubKey={String(selectedMenu)}
+                  bilanId={bilanId}
+                  onNextSource={nextVisibleSource ? () => setSelectedMenu(nextVisibleSource) : undefined}
+                />
               )
             }
 
@@ -546,7 +629,11 @@ export default function Section({ bilanId }: { bilanId?: string }) {
             {["p41","p43"].includes(String(selectedMenu)) &&
               renderOrPlaceholder(
                 String(selectedMenu),
-                <Categorie4Page activeSubKey={String(selectedMenu)} bilanId={bilanId} />
+                <Categorie4Page
+                  activeSubKey={String(selectedMenu)}
+                  bilanId={bilanId}
+                  onNextSource={nextVisibleSource ? () => setSelectedMenu(nextVisibleSource) : undefined}
+                />
               )
             }
 
@@ -554,11 +641,15 @@ export default function Section({ bilanId }: { bilanId?: string }) {
             {["p51","p52"].includes(String(selectedMenu)) &&
               renderOrPlaceholder(
                 String(selectedMenu),
-                <Categorie5Page activeSubKey={String(selectedMenu)} bilanId={bilanId} />
+                <Categorie5Page
+                  activeSubKey={String(selectedMenu)}
+                  bilanId={bilanId}
+                  onNextSource={nextVisibleSource ? () => setSelectedMenu(nextVisibleSource) : undefined}
+                />
               )
             }
 
-            {selectedMenu === "rapport" && <RapportPage />}
+            {selectedMenu === "rapport" && <RapportPage bilanId={bilanId} />}
           </Stack>
         )}
       </Box>

@@ -58,7 +58,7 @@ export default async function handler(req, res) {
   // 4. Get all enabled sources for those postes
   const { data: sources, error: sourceError } = await supabase
     .from("poste_sources")
-    .select("id, poste_id, source_code, label, enabled") // Added 'id' to select
+    .select("id, poste_id, source_code, label, enabled")
     .in("poste_id", posteIds)
     .eq("enabled", true);
 

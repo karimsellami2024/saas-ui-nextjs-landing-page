@@ -1065,29 +1065,6 @@ export function Source1AForm({
         >
           Ajouter une ligne
         </Button>
-
-        <Button
-          bg={FIGMA.green}
-          color="white"
-          rounded="full"
-          h="44px"
-          px={8}
-          _hover={{
-            bg: FIGMA.greenLight,
-            transform: "translateY(-2px)",
-            boxShadow: FIGMA.hoverShadow,
-          }}
-          _active={{ transform: "translateY(0)" }}
-          boxShadow={FIGMA.buttonShadow}
-          onClick={handleSubmit}
-          fontFamily="Inter"
-          fontWeight={600}
-          isLoading={submitting}
-          loadingText="Sauvegarde…"
-          transition="all 0.2s"
-        >
-          Soumettre
-        </Button>
       </HStack>
 
       {/* Results */}

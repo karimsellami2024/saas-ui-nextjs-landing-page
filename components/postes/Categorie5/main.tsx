@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
+  Button,
+  HStack,
   Heading,
   Spinner,
   Text,
@@ -31,6 +33,8 @@ type SubKey = "p51" | "p52";
 
 type Props = {
   activeSubKey: SubKey | string;
+  bilanId?: string;
+  onNextSource?: () => void;
 };
 
 export const SUBKEY_TO_SOURCE_CODES: Record<SubKey, string[]> = {
@@ -52,7 +56,7 @@ const matchesAllowed = (code: string, allowed: string[]) => {
 };
 
 /* ===================== COMPONENT ===================== */
-export default function Categorie5Main({ activeSubKey }: Props) {
+export default function Categorie5Main({ activeSubKey, bilanId, onNextSource }: Props) {
   const pageBg = useColorModeValue(COL.bg, "#222e32");
   const subKey = (activeSubKey as SubKey) || "p51";
   const title = LABEL_BY_SUBKEY[subKey] ?? POSTE_LABEL_FALLBACK;
@@ -227,6 +231,32 @@ export default function Categorie5Main({ activeSubKey }: Props) {
           </Box>
         ) : (
           filteredSources.map(renderSource)
+        )}
+
+        {!loading && userId && (
+          <HStack justify="flex-end" mt={6} spacing={4}>
+            <Button
+              variant="outline"
+              borderColor={COL.greenBar}
+              color={COL.greenBar}
+              _hover={{ bg: "#e8f0ea" }}
+              size="md"
+              px={6}
+            >
+              Valider Page
+            </Button>
+            <Button
+              bg={COL.greenBar}
+              color="white"
+              _hover={{ bg: "#2d5c4a" }}
+              size="md"
+              px={6}
+              isDisabled={!onNextSource}
+              onClick={onNextSource}
+            >
+              Prochaine Source →
+            </Button>
+          </HStack>
         )}
       </Stack>
     </Box>

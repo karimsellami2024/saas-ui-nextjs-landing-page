@@ -27,6 +27,7 @@ import {
 } from "@chakra-ui/icons";
 import { FiCalendar, FiFileText, FiMapPin, FiZap } from "react-icons/fi";
 import { supabase } from "../../../lib/supabaseClient";
+import { ReferenceSelect } from '../ReferenceSelect';
 
 export type Source4B1Row = {
   vehicle: string;
@@ -67,6 +68,7 @@ export interface Source4B1FormProps {
   updateRow: (idx: number, key: keyof Source4B1Row, value: string) => void;
   posteSourceId: string;
   userId: string;
+  bilanId?: string;
   gesResults?: GesResult[];
   setGesResults: (results: GesResult[]) => void;
 }
@@ -176,6 +178,7 @@ export function Source4B1Form({
       user_id: userId,
       poste_source_id: posteSourceId,
       source_code: "4B1",
+      submission_id: bilanId ?? null,
       poste_num: 4,
       data: { rows: sanitizedRows },
     };
@@ -497,7 +500,7 @@ export function Source4B1Form({
                     </GridItem>
 
                     <GridItem>
-                      <FigmaInput FIGMA={FIGMA} value={row.reference} onChange={(v) => updateRow(idx, "reference", v)} placeholder="Références" />
+                      <ReferenceSelect userId={userId} value={row.reference} onChange={(v) => updateRow(idx, "reference", v)} />
                     </GridItem>
 
                     <GridItem>
@@ -552,25 +555,6 @@ export function Source4B1Form({
                 transition="all 0.2s"
               >
                 Ajouter une ligne
-              </Button>
-
-              <Button
-                bg={FIGMA.green}
-                color="white"
-                rounded="full"
-                h="44px"
-                px={8}
-                _hover={{ bg: FIGMA.greenLight, transform: "translateY(-2px)", boxShadow: FIGMA.hoverShadow }}
-                _active={{ transform: "translateY(0)" }}
-                boxShadow={FIGMA.buttonShadow}
-                onClick={handleSubmit}
-                isLoading={loading}
-                loadingText="Calcul…"
-                fontFamily="Inter"
-                fontWeight={600}
-                transition="all 0.2s"
-              >
-                Calculer et soumettre
               </Button>
             </HStack>
           </Stack>

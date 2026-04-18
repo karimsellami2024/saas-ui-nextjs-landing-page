@@ -9,6 +9,7 @@ import {
   HStack,
   Icon,
   Input,
+  Select,
   Spinner,
   Text,
   VStack,
@@ -103,6 +104,8 @@ export function Source2A3Form({
 }: Source2A3FormProps) {
   const [loading, setLoading] = useState(false);
   const [refs, setRefs] = useState<Refs | null>(null);
+  const [siteOptions, setSiteOptions] = useState<string[]>([]);
+  const [referenceOptions, setReferenceOptions] = useState<string[]>([]);
 
   const inputBorder = useColorModeValue("#E8ECE7", "#2f3a36");
 
@@ -181,6 +184,38 @@ export function Source2A3Form({
       }
     })();
   }, []);
+
+  // Load site + reference options from company profile
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("company_id")
+          .eq("id", userId)
+          .single();
+        if (!profile?.company_id) return;
+
+        const { data: company } = await supabase
+          .from("companies")
+          .select("production_sites, company_references")
+          .eq("id", profile.company_id)
+          .single();
+
+        const uniq = (arr: string[]) => Array.from(new Set(arr));
+        const sites = Array.isArray(company?.production_sites)
+          ? (company.production_sites as any[]).map((s) => String(s?.nom ?? "")).filter(Boolean)
+          : [];
+        const refs = Array.isArray(company?.company_references)
+          ? (company.company_references as any[]).map((r) => String(r)).filter(Boolean)
+          : [];
+
+        setSiteOptions(uniq(sites));
+        setReferenceOptions(uniq(refs));
+      } catch {}
+    })();
+  }, [userId]);
 
   useEffect(() => {
     if (Array.isArray((prefillData as any)?.rows) && (prefillData as any).rows.length) {
@@ -399,11 +434,12 @@ export function Source2A3Form({
 
                 <GridItem colSpan={{ base: 1, md: 3 }}>
                   <FieldLabel>Nom du site</FieldLabel>
-                  <PillInput
-                    placeholder="ex. Site principal Montreal"
+                  <PillSelect
+                    placeholder="Sélectionner…"
                     value={row.cost}
                     onChange={(v: string) => updateA3Row(idx, "cost", v)}
                     inputBorder={inputBorder}
+                    options={siteOptions}
                   />
                 </GridItem>
 
@@ -436,19 +472,20 @@ export function Source2A3Form({
                 </GridItem>
 
                 <GridItem>
-                  <FieldLabel>Reference</FieldLabel>
-                  <PillInput
-                    placeholder="No facture ou note"
+                  <FieldLabel>Référence</FieldLabel>
+                  <PillSelect
+                    placeholder="Sélectionner…"
                     value={row.reference}
                     onChange={(v: string) => updateA3Row(idx, "reference", v)}
                     inputBorder={inputBorder}
+                    options={referenceOptions}
                   />
                 </GridItem>
 
                 <GridItem>
-                  <FieldLabel>Commentaires</FieldLabel>
+                  <FieldLabel>Commentaires <span style={{ fontWeight: 400 }}>(optionnel)</span></FieldLabel>
                   <PillInput
-                    placeholder="Commentaires"
+                    placeholder="Commentaires (optionnel)"
                     value={row.avgPrice}
                     onChange={(v: string) => updateA3Row(idx, "avgPrice", v)}
                     inputBorder={inputBorder}
@@ -504,16 +541,6 @@ export function Source2A3Form({
           >
             Ajouter un vehicule
           </Button>
-          <Button
-            colorScheme="blue"
-            rounded="full"
-            px={6}
-            h="44px"
-            onClick={handle2A3Submit}
-            isLoading={loading}
-          >
-            Soumettre
-          </Button>
         </HStack>
 
         {Array.isArray(gesResults) && gesResults.length > 0 && (
@@ -550,6 +577,27 @@ function PillInput({ value, onChange, placeholder, inputBorder }: any) {
       boxShadow="0 2px 4px rgba(0,0,0,0.06)"
       fontSize="sm"
     />
+  );
+}
+
+function PillSelect({ value, onChange, placeholder, options, inputBorder }: any) {
+  return (
+    <Select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      bg="white"
+      border="1px solid"
+      borderColor={inputBorder}
+      rounded="xl"
+      h="40px"
+      boxShadow="0 2px 4px rgba(0,0,0,0.06)"
+      fontSize="sm"
+    >
+      {(options.length ? options : value ? [value] : []).map((opt: string) => (
+        <option key={opt} value={opt}>{opt}</option>
+      ))}
+    </Select>
   );
 }
 

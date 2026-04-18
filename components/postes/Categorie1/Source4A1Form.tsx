@@ -22,6 +22,7 @@ import { CheckCircleIcon, ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icon
 import { FiCalendar, FiFileText, FiMapPin, FiZap } from "react-icons/fi";
 import { supabase } from "../../../lib/supabaseClient";
 import { usePrefillPosteSource } from "#components/postes/HookForGetDataSource";
+import { ReferenceSelect } from '../ReferenceSelect';
 
 export type Source4A1Row = {
   equipment: string;
@@ -63,6 +64,7 @@ export interface Source4A1FormProps {
   tableBg?: string;
   posteSourceId: string | null;
   userId?: string | null;
+  bilanId?: string;
   gesResults?: GesResult[];
   setGesResults: (results: GesResult[]) => void;
 }
@@ -301,6 +303,7 @@ export function Source4A1Form({
       user_id: userId,
       poste_source_id: posteSourceId,
       source_code: "4A1",
+      submission_id: bilanId ?? null,
       poste_num: 4,
       data: { rows: makeSanitizedRows(rows) },
       results: gesResults ?? [],
@@ -361,6 +364,7 @@ export function Source4A1Form({
       user_id: userId,
       poste_source_id: posteSourceId,
       source_code: "4A1",
+      submission_id: bilanId ?? null,
       poste_num: 4,
       data: { rows: makeSanitizedRows(rows) },
     };
@@ -661,12 +665,7 @@ export function Source4A1Form({
                       />
                     </GridItem>
                     <GridItem>
-                      <FigmaInput
-                        FIGMA={FIGMA}
-                        value={row.reference}
-                        onChange={(v) => updateRow(idx, "reference", v)}
-                        placeholder="Références"
-                      />
+                      <ReferenceSelect userId={userId ?? ""} value={row.reference} onChange={(v) => updateRow(idx, "reference", v)} />
                     </GridItem>
 
                     <GridItem>
@@ -742,25 +741,6 @@ export function Source4A1Form({
                 transition="all 0.2s"
               >
                 Ajouter une ligne
-              </Button>
-
-              <Button
-                bg={FIGMA.green}
-                color="white"
-                rounded="full"
-                h="44px"
-                px={8}
-                _hover={{ bg: FIGMA.greenLight, transform: "translateY(-2px)", boxShadow: FIGMA.hoverShadow }}
-                _active={{ transform: "translateY(0)" }}
-                boxShadow={FIGMA.buttonShadow}
-                onClick={handleSubmit}
-                fontFamily="Inter"
-                fontWeight={600}
-                isLoading={submitting}
-                loadingText="Calcul…"
-                transition="all 0.2s"
-              >
-                Calculer et soumettre
               </Button>
             </HStack>
           </Stack>

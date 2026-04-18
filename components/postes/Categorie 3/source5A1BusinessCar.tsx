@@ -30,6 +30,7 @@ import {
 } from "@chakra-ui/icons";
 import { FiCalendar, FiFileText, FiMapPin, FiTruck } from "react-icons/fi";
 import { supabase } from "../../../lib/supabaseClient";
+import { ReferenceSelect } from '../ReferenceSelect';
 import { usePrefillPosteSource } from "components/postes/HookForGetDataSource";
 
 /** =======================
@@ -77,6 +78,7 @@ export interface Source35A1FormProps {
 
   posteSourceId: string | null;
   userId?: string | null;
+  bilanId?: string;
 
   gesResults?: GesResult35A1[];
   setGesResults?: (results: GesResult35A1[]) => void;
@@ -262,6 +264,7 @@ export function Source35A1Form({
   setRows: propSetRows,
   posteSourceId,
   userId: propUserId,
+  bilanId,
   gesResults: propGesResults,
   setGesResults: propSetGesResults,
 }: Source35A1FormProps) {
@@ -562,6 +565,7 @@ export function Source35A1Form({
       poste_source_id: posteSourceId,
       poste_num: 3,
       source_code: SOURCE_CODE,
+      submission_id: bilanId ?? null,
       data: { rows: makeSanitizedRows(rows) },
       results: computeResults(rows, refs),
     };
@@ -629,6 +633,7 @@ export function Source35A1Form({
       poste_source_id: posteSourceId,
       poste_num: 3,
       source_code: SOURCE_CODE,
+      submission_id: bilanId ?? null,
       data: { rows: makeSanitizedRows(rows) },
       results: computeResults(rows, refs),
     };
@@ -932,12 +937,7 @@ export function Source35A1Form({
                     </GridItem>
 
                     <GridItem>
-                      <FigmaSelect
-                        FIGMA={FIGMA}
-                        value={row.reference}
-                        onChange={(v) => updateRowField(idx, "reference", v)}
-                        placeholder={referenceOptions.length ? "Sélectionner" : "Aucune"}
-                        options={referenceOptions.length ? referenceOptions : []}
+                      <ReferenceSelect userId={userId ?? ""} value={row.reference} onChange={(v) => updateRowField(idx, "reference", v)}
                       />
                     </GridItem>
 
@@ -1024,24 +1024,6 @@ export function Source35A1Form({
                 _hover={{ bg: FIGMA.greenSoft, borderColor: FIGMA.green }}
               >
                 Ajouter une ligne
-              </Button>
-
-              <Button
-                bg={FIGMA.green}
-                color="white"
-                rounded="full"
-                h="44px"
-                px={8}
-                boxShadow={FIGMA.buttonShadow}
-                _hover={{ bg: FIGMA.greenLight, transform: "translateY(-2px)", boxShadow: FIGMA.hoverShadow }}
-                _active={{ transform: "translateY(0)" }}
-                onClick={handleSubmit}
-                isLoading={submitting}
-                loadingText="Sauvegarde…"
-                fontFamily="Inter"
-                fontWeight={600}
-              >
-                Calculer et soumettre
               </Button>
             </HStack>
 

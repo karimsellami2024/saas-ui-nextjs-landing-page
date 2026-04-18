@@ -105,11 +105,13 @@ export function SourceAForm({
   posteNum = 6,
   posteLabel = "6A1 - Électricité provenant du réseau électrique (Location based)",
   userId: propUserId,
+  bilanId,
 }: {
   posteId: string | null;
   posteNum?: number;
   posteLabel?: string;
   userId?: string | null;
+  bilanId?: string;
 }) {
   const toast = useToast();
 
@@ -509,7 +511,7 @@ export function SourceAForm({
         group.number &&
         group.address &&
         group.province &&
-        group.details.every((detail) => detail.date && detail.consumption)
+        group.details.every((detail) => detail.date && detail.consumption !== "")
     );
 
   const buildPayload = (groups: CompteurGroup[]) => {
@@ -587,6 +589,7 @@ export function SourceAForm({
         user_id: userId,
         poste_source_id: posteId,
         source_code: "6A1",
+        submission_id: bilanId ?? null,
         poste_num: 6,
         data: base,
         results,
@@ -638,6 +641,7 @@ export function SourceAForm({
       user_id: userId,
       poste_source_id: posteId,
       source_code: "6A1",
+      submission_id: bilanId ?? null,
       poste_num: 6,
       data,
     };
@@ -1182,12 +1186,12 @@ export function SourceAForm({
                               {/* Comments */}
                               <Box>
                                 <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">
-                                  Commentaires
+                                  Commentaires <Text as="span" fontWeight={400}>(optionnel)</Text>
                                 </Text>
                                 <Input
                                   value={group.commentaires ?? ""}
                                   onChange={(e) => updateCompteurUIField(gIdx, "commentaires", e.target.value)}
-                                  placeholder="Commentaires"
+                                  placeholder="Commentaires (optionnel)"
                                   h="42px"
                                   rounded="lg"
                                   bg="white"
@@ -1303,29 +1307,6 @@ export function SourceAForm({
           transition="all 0.2s"
         >
           Ajouter un compteur
-        </Button>
-
-        <Button
-          bg={FIGMA.green}
-          color="white"
-          rounded="full"
-          h="44px"
-          px={8}
-          _hover={{
-            bg: FIGMA.greenLight,
-            transform: "translateY(-2px)",
-            boxShadow: FIGMA.hoverShadow,
-          }}
-          _active={{ transform: "translateY(0)" }}
-          boxShadow={FIGMA.buttonShadow}
-          onClick={handleSubmit}
-          fontFamily="Inter"
-          fontWeight={600}
-          isLoading={loading}
-          loadingText="Calcul en cours…"
-          transition="all 0.2s"
-        >
-          Calculer et soumettre
         </Button>
       </HStack>
 

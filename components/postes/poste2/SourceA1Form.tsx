@@ -464,9 +464,6 @@ export function SourceA1Form({
       <Button mt={3} colorScheme="green" onClick={addVehicleGroup}>
         Ajouter un véhicule
       </Button>
-      <Button mt={3} ml={4} colorScheme="blue" onClick={handleA1Submit} isLoading={loading}>
-        Soumettre
-      </Button>
 
       <Box mt={6} bg="#e5f2fa" rounded="xl" boxShadow="md" p={4}>
         <Text fontWeight="bold" color={highlight} mb={2}>

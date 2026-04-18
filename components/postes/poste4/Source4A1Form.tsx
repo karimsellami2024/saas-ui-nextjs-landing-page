@@ -593,16 +593,6 @@ export function Source4A1Form({
         >
           Ajouter une ligne
         </Button>
-        <Button
-          colorScheme="blue"
-          rounded="full"
-          px={6}
-          h="44px"
-          onClick={handleSubmit}
-          isLoading={submitting}
-        >
-          Soumettre
-        </Button>
       </HStack>
 
       {/* Résultats */}

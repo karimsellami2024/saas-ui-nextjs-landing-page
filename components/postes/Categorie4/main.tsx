@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
+  Button,
+  HStack,
   Heading,
   Spinner,
   Text,
@@ -34,6 +36,8 @@ type SubKey = "p41" | "p43";
 
 type Props = {
   activeSubKey: SubKey | string;
+  bilanId?: string;
+  onNextSource?: () => void;
 };
 
 export const SUBKEY_TO_SOURCE_CODES: Record<SubKey, string[]> = {
@@ -55,7 +59,7 @@ const matchesAllowed = (code: string, allowed: string[]) => {
 };
 
 /* ===================== COMPONENT ===================== */
-export default function Categorie4Main({ activeSubKey }: Props) {
+export default function Categorie4Main({ activeSubKey, bilanId, onNextSource }: Props) {
   const pageBg = useColorModeValue(COL.bg, "#222e32");
   const subKey = (activeSubKey as SubKey) || "p41";
   const title = LABEL_BY_SUBKEY[subKey] ?? POSTE_LABEL_FALLBACK;
@@ -173,43 +177,50 @@ export default function Categorie4Main({ activeSubKey }: Props) {
 
     if (c === "4.1A2") return (
       <Box key={posteSourceId} mt={6}>
-        <Source4_1A2Form rows={rows4_1A2} setRows={setRows4_1A2} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1A2} setGesResults={setGes4_1A2} />
+        <Source4_1A2Form rows={rows4_1A2} setRows={setRows4_1A2} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1A2} setGesResults={setGes4_1A2}
+        bilanId={bilanId} />
       </Box>
     );
 
     if (c === "4.1B1") return (
       <Box key={posteSourceId} mt={6}>
-        <Source4_1B1Form rows={rows4_1B1} setRows={setRows4_1B1} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1B1} setGesResults={setGes4_1B1} />
+        <Source4_1B1Form rows={rows4_1B1} setRows={setRows4_1B1} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1B1} setGesResults={setGes4_1B1}
+        bilanId={bilanId} />
       </Box>
     );
 
     if (c === "4.1C1") return (
       <Box key={posteSourceId} mt={6}>
-        <Source4_1C1Form rows={rows4_1C1} setRows={setRows4_1C1} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1C1} setGesResults={setGes4_1C1} />
+        <Source4_1C1Form rows={rows4_1C1} setRows={setRows4_1C1} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1C1} setGesResults={setGes4_1C1}
+        bilanId={bilanId} />
       </Box>
     );
 
     if (c === "4.1D1") return (
       <Box key={posteSourceId} mt={6}>
-        <Source4_1D1Form rows={rows4_1D1} setRows={setRows4_1D1} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1D1} setGesResults={setGes4_1D1} />
+        <Source4_1D1Form rows={rows4_1D1} setRows={setRows4_1D1} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1D1} setGesResults={setGes4_1D1}
+        bilanId={bilanId} />
       </Box>
     );
 
     if (c === "4.1E1") return (
       <Box key={posteSourceId} mt={6}>
-        <Source4_1E1Form rows={rows4_1E1} setRows={setRows4_1E1} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1E1} setGesResults={setGes4_1E1} />
+        <Source4_1E1Form rows={rows4_1E1} setRows={setRows4_1E1} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1E1} setGesResults={setGes4_1E1}
+        bilanId={bilanId} />
       </Box>
     );
 
     if (c === "4.1E2") return (
       <Box key={posteSourceId} mt={6}>
-        <Source4_1E2Form rows={rows4_1E2} setRows={setRows4_1E2} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1E2} setGesResults={setGes4_1E2} />
+        <Source4_1E2Form rows={rows4_1E2} setRows={setRows4_1E2} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_1E2} setGesResults={setGes4_1E2}
+        bilanId={bilanId} />
       </Box>
     );
 
     if (c === "4.3A1") return (
       <Box key={posteSourceId} mt={6}>
-        <Source4_3A1Form rows={rows4_3A1} setRows={setRows4_3A1} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_3A1} setGesResults={setGes4_3A1} />
+        <Source4_3A1Form rows={rows4_3A1} setRows={setRows4_3A1} posteSourceId={posteSourceId} userId={userId} gesResults={ges4_3A1} setGesResults={setGes4_3A1}
+        bilanId={bilanId} />
       </Box>
     );
 
@@ -257,6 +268,32 @@ export default function Categorie4Main({ activeSubKey }: Props) {
           </Box>
         ) : (
           filteredSources.map(renderSource)
+        )}
+
+        {!loading && userId && (
+          <HStack justify="flex-end" mt={6} spacing={4}>
+            <Button
+              variant="outline"
+              borderColor={COL.greenBar}
+              color={COL.greenBar}
+              _hover={{ bg: "#e8f0ea" }}
+              size="md"
+              px={6}
+            >
+              Valider Page
+            </Button>
+            <Button
+              bg={COL.greenBar}
+              color="white"
+              _hover={{ bg: "#2d5c4a" }}
+              size="md"
+              px={6}
+              isDisabled={!onNextSource}
+              onClick={onNextSource}
+            >
+              Prochaine Source →
+            </Button>
+          </HStack>
         )}
       </Stack>
     </Box>

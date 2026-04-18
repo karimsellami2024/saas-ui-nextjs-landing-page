@@ -9,6 +9,7 @@ import { CheckCircleIcon } from "@chakra-ui/icons";
 import { Plus, Trash2, Copy } from "lucide-react";
 import { FiCalendar, FiMapPin, FiFileText, FiWifi } from "react-icons/fi";
 import { supabase } from "../../../lib/supabaseClient";
+import { ReferenceSelect } from '../ReferenceSelect';
 
 export type Source4_1B1Row = {
   description: string;
@@ -30,6 +31,7 @@ export interface Source4_1B1FormProps {
   setRows: React.Dispatch<React.SetStateAction<Source4_1B1Row[]>>;
   posteSourceId: string | null;
   userId?: string | null;
+  bilanId?: string;
   gesResults?: GesResult[];
   setGesResults: (r: GesResult[]) => void;
 }
@@ -60,7 +62,7 @@ const calcRow = (row: Source4_1B1Row) => {
   return { co2: kgCO2e * 1000, total: kgCO2e * 1000, tco2e: kgCO2e / 1000 };
 };
 
-export function Source4_1B1Form({ rows, setRows, posteSourceId, userId, gesResults=[], setGesResults }: Source4_1B1FormProps) {
+export function Source4_1B1Form({ rows, setRows, posteSourceId, userId, bilanId, gesResults=[], setGesResults }: Source4_1B1FormProps) {
   const [loading, setLoading]       = useState(true);
   const [autoSaving, setAutoSaving] = useState(false);
   const [savedOk, setSavedOk]       = useState(false);
@@ -75,6 +77,7 @@ export function Source4_1B1Form({ rows, setRows, posteSourceId, userId, gesResul
     (async () => {
       try {
         const qs = new URLSearchParams({ user_id: userId, poste_num: String(POSTE_NUM), source_code: SOURCE_CODE });
+        if (bilanId) qs.set("submission_id", bilanId);
         const res = await fetch(`/api/GetSourceHandler?${qs}`);
         if (res.ok) {
           const json = await res.json();
@@ -111,7 +114,7 @@ export function Source4_1B1Form({ rows, setRows, posteSourceId, userId, gesResul
       try {
         await fetch("/api/submit", {
           method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: userId, poste_num: POSTE_NUM, source_code: SOURCE_CODE, data: { rows: next } }),
+          body: JSON.stringify({ user_id: userId, poste_num: POSTE_NUM, source_code: SOURCE_CODE, submission_id: bilanId ?? null, data: { rows: next } }),
         });
         setSavedOk(true); setTimeout(() => setSavedOk(false), 2500);
         setGesResults(next.map(r => { const c=calcRow(r); return { total_co2_gco2e:c.co2, total_ges_gco2e:c.total, total_ges_tco2e:c.tco2e }; }));
@@ -206,8 +209,7 @@ export function Source4_1B1Form({ rows, setRows, posteSourceId, userId, gesResul
 
               <GridItem>
                 <Text fontSize="xs" color={FIGMA.muted} mb={1}><Icon as={FiFileText} mr={1}/>Référence (facultatif)</Text>
-                <Input size="sm" borderRadius={FIGMA.inputR} value={row.reference}
-                  onChange={e => updateRow(idx, "reference", e.target.value)} />
+                <ReferenceSelect size="sm" userId={userId ?? ""} value={row.reference} onChange={(v) => updateRow(idx, "reference", v)} />
               </GridItem>
             </Grid>
 

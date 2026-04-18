@@ -90,7 +90,7 @@ function Cmt({ k }: { k: CommentKey }) {
 
 const fmt = (n: number) => n > 0 ? n.toFixed(2) : '';
 
-export default function RapportPage() {
+export default function RapportPage({ bilanId }: { bilanId?: string }) {
   const [userId, setUserId]   = useState<string|null>(null);
   const [data, setData]       = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -103,10 +103,12 @@ export default function RapportPage() {
 
   useEffect(() => {
     if (!userId) return;
-    fetch(`/api/rapport?user_id=${userId}`)
+    const qs = new URLSearchParams({ user_id: userId });
+    if (bilanId) qs.set("bilan_id", bilanId);
+    fetch(`/api/rapport?${qs}`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { setData(d); setLoading(false); });
-  }, [userId]);
+  }, [userId, bilanId]);
 
   const download = async () => {
     if (!ref.current) return;

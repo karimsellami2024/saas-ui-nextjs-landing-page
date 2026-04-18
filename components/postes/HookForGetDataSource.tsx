@@ -12,7 +12,8 @@ export function usePrefillPosteSource(
   userId: string,
   posteNum: number,
   sourceCode: string,
-  defaultValue: any = {}
+  defaultValue: any = {},
+  submissionId?: string | null
 ) {
   const [loading, setLoading] = useState(true);
   const [error, setError]     = useState<string | null>(null);
@@ -30,6 +31,8 @@ export function usePrefillPosteSource(
           poste_num: String(posteNum),
           source_code: sourceCode,
         });
+        if (submissionId) qs.set("submission_id", submissionId);
+
         const res = await fetch(`/api/GetSourceHandler?${qs.toString()}`, { method: "GET" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const json: PrefillResponse = await res.json();
@@ -46,7 +49,7 @@ export function usePrefillPosteSource(
       }
     })();
     return () => { cancelled = true; };
-  }, [userId, posteNum, sourceCode]);
+  }, [userId, posteNum, sourceCode, submissionId]);
 
   return { loading, error, data, setData, results, setResults, posteSourceId };
 }

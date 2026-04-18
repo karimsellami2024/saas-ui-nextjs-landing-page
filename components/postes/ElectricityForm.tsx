@@ -324,9 +324,6 @@ export function ElectricityForm() {
             <Button mt={3} colorScheme="green" onClick={addCompteur}>
               Ajouter un compteur
             </Button>
-            <Button mt={3} ml={4} colorScheme="blue" onClick={handleSubmit}>
-              Soumettre
-            </Button>
             <Box mt={6} bg="#e5f2fa" rounded="xl" boxShadow="md" p={4}>
               <Text fontWeight="bold" color={olive} mb={2}>Calculs et résultats</Text>
               <Table size="sm" variant="simple">

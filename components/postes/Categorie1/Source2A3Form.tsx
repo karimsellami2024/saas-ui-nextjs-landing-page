@@ -9,17 +9,19 @@ import {
   Button,
   Icon,
   Input,
+  Select,
   Spinner,
   Badge,
   Flex,
   IconButton,
 } from "@chakra-ui/react";
 import { keyframes } from "@emotion/react";
-import { AddIcon, DeleteIcon, CopyIcon, ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
+import { AddIcon, DeleteIcon, CopyIcon, ChevronDownIcon, ChevronUpIcon, RepeatIcon } from "@chakra-ui/icons";
 import { Lock, Calendar, Truck, MapPin, Hash } from "lucide-react";
 import VehicleSelect from "#components/vehicleselect/VehicleSelect";
 import { usePrefillPosteSource } from "components/postes/HookForGetDataSource";
 import { supabase } from "../../../lib/supabaseClient";
+import { ReferenceSelect } from '../ReferenceSelect';
 
 /** =======================
  * Poste 2 · Source 2A3
@@ -53,6 +55,7 @@ export interface Source2A3FormProps {
   updateA3Row: (idx: number, key: keyof A3Row, value: string) => void;
   posteSourceId: string;
   userId: string;
+  bilanId?: string;
   gesResults?: GesResult[];
   setGesResults: (results: GesResult[]) => void;
   highlight?: string; // kept for compatibility (not used)
@@ -97,6 +100,11 @@ type Refs = {
   prpN2O: number;
 };
 
+type FleetVehicle = {
+  details?: string;
+  type_carburant?: string;
+};
+
 /* ---------------- animations + figma tokens ---------------- */
 
 const fadeInUp = keyframes`
@@ -135,6 +143,53 @@ export function Source2A3Form({
   const [loading, setLoading] = useState(false);
   const [refs, setRefs] = useState<Refs | null>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const [siteOptions, setSiteOptions] = useState<string[]>([]);
+  const [referenceOptions, setReferenceOptions] = useState<string[]>([]);
+
+  const [fleet, setFleet] = useState<FleetVehicle[]>([]);
+  const [loadingFleet, setLoadingFleet] = useState(true);
+
+  const loadFleet = async () => {
+    try {
+      setLoadingFleet(true);
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes?.user?.id;
+      if (!uid) return;
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("company_id")
+        .eq("id", uid)
+        .single();
+      if (!profile?.company_id) return;
+      const { data: company } = await supabase
+        .from("companies")
+        .select("vehicle_fleet")
+        .eq("id", profile.company_id)
+        .single();
+      const raw = (company as any)?.vehicle_fleet;
+      setFleet(
+        Array.isArray(raw)
+          ? raw.map((v: any) => ({
+              details: v.details ?? v.nom ?? "",
+              type_carburant: v.type_carburant ?? v.type ?? "",
+            }))
+          : []
+      );
+    } catch (err) {
+      console.error("2A3 fleet load error:", err);
+      setFleet([]);
+    } finally {
+      setLoadingFleet(false);
+    }
+  };
+
+  const onSelectRowVehicle = (idx: number, detailsValue: string) => {
+    const v = fleet.find((fv) => (fv.details ?? "") === detailsValue);
+    updateA3Row(idx, "vehicle", detailsValue);
+    if (v?.type_carburant) updateA3Row(idx, "type", v.type_carburant);
+  };
+
+  useEffect(() => { loadFleet(); }, []);
 
   const {
     loading: prefillLoading,
@@ -212,6 +267,38 @@ export function Source2A3Form({
       }
     })();
   }, []);
+
+  // Load site + reference options from company profile
+  useEffect(() => {
+    if (!userId) return;
+    (async () => {
+      try {
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("company_id")
+          .eq("id", userId)
+          .single();
+        if (!profile?.company_id) return;
+
+        const { data: company } = await supabase
+          .from("companies")
+          .select("production_sites, company_references")
+          .eq("id", profile.company_id)
+          .single();
+
+        const uniq = (arr: string[]) => Array.from(new Set(arr));
+        const sites = Array.isArray(company?.production_sites)
+          ? (company.production_sites as any[]).map((s) => String(s?.nom ?? "")).filter(Boolean)
+          : [];
+        const refs = Array.isArray(company?.company_references)
+          ? (company.company_references as any[]).map((r) => String(r)).filter(Boolean)
+          : [];
+
+        setSiteOptions(uniq(sites));
+        setReferenceOptions(uniq(refs));
+      } catch {}
+    })();
+  }, [userId]);
 
   // Prefill hydrate
   useEffect(() => {
@@ -326,6 +413,7 @@ export function Source2A3Form({
       poste_source_id: posteSourceId,
       poste_num: 2,
       source_code: "2A3",
+      submission_id: bilanId ?? null,
       data: { rows: sanitizedRows },
       results,
     };
@@ -403,14 +491,24 @@ export function Source2A3Form({
           </VStack>
 
           <HStack spacing={3} align="center">
-            {prefillLoading && (
+            {(prefillLoading || loadingFleet) && (
               <HStack spacing={2} color={FIGMA.muted}>
                 <Spinner size="sm" />
                 <Text fontSize="sm" fontFamily="Montserrat">
-                  Chargement…
+                  {loadingFleet ? "Chargement flotte…" : "Chargement…"}
                 </Text>
               </HStack>
             )}
+
+            <IconButton
+              aria-label="Rafraîchir la flotte"
+              icon={<RepeatIcon />}
+              size="sm"
+              variant="ghost"
+              color={FIGMA.muted}
+              _hover={{ color: FIGMA.green, bg: FIGMA.greenSoft }}
+              onClick={loadFleet}
+            />
 
             <IconButton
               aria-label={collapsed ? "Développer" : "Réduire"}
@@ -520,10 +618,15 @@ export function Source2A3Form({
                       <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
                         Véhicule
                       </Text>
-                      <FigmaInput
+                      <FigmaFleetSelect
                         value={row.vehicle}
-                        onChange={(v) => updateA3Row(idx, "vehicle", v)}
-                        placeholder="Véhicule"
+                        onChange={(v) => onSelectRowVehicle(idx, v)}
+                        placeholder={loadingFleet ? "Chargement…" : fleet.length ? "Choisir un véhicule" : "Aucun véhicule"}
+                        disabled={loadingFleet || fleet.length === 0}
+                        options={fleet.map((v, i) => ({
+                          value: v.details ?? "",
+                          label: v.details ?? `(Sans nom ${i + 1})`,
+                        }))}
                       />
                     </GridItem>
 
@@ -531,10 +634,11 @@ export function Source2A3Form({
                       <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
                         Nom du site
                       </Text>
-                      <FigmaInput
+                      <FigmaSelect
                         value={row.cost}
                         onChange={(v) => updateA3Row(idx, "cost", v)}
-                        placeholder="Nom du site"
+                        placeholder="Sélectionner…"
+                        options={siteOptions}
                       />
                     </GridItem>
 
@@ -565,11 +669,7 @@ export function Source2A3Form({
                       <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
                         Référence
                       </Text>
-                      <FigmaInput
-                        value={row.reference}
-                        onChange={(v) => updateA3Row(idx, "reference", v)}
-                        placeholder="Référence"
-                      />
+                      <ReferenceSelect userId={userId} value={row.reference} onChange={(v) => updateA3Row(idx, "reference", v)} />
                     </GridItem>
 
                     <GridItem>
@@ -624,12 +724,12 @@ export function Source2A3Form({
                   <HStack spacing={3} mt={3} flexWrap="wrap">
                     <Box flex={1} minW={{ base: "100%", md: "420px" }}>
                       <Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500" fontFamily="Montserrat">
-                        Commentaires
+                        Commentaires <Text as="span" fontWeight={400} color={FIGMA.muted}>(optionnel)</Text>
                       </Text>
                       <FigmaInput
                         value={row.avgPrice}
                         onChange={(v) => updateA3Row(idx, "avgPrice", v)}
-                        placeholder="Commentaires"
+                        placeholder="Commentaires (optionnel)"
                       />
                     </Box>
 
@@ -675,24 +775,6 @@ export function Source2A3Form({
                 _hover={{ bg: FIGMA.greenSoft, borderColor: FIGMA.green }}
               >
                 Ajouter une ligne
-              </Button>
-
-              <Button
-                bg={FIGMA.green}
-                color="white"
-                rounded="full"
-                h="44px"
-                px={8}
-                boxShadow={FIGMA.buttonShadow}
-                _hover={{ bg: FIGMA.greenLight, transform: "translateY(-2px)", boxShadow: FIGMA.hoverShadow }}
-                _active={{ transform: "translateY(0)" }}
-                onClick={handle2A3Submit}
-                isLoading={loading}
-                loadingText="Sauvegarde…"
-                fontFamily="Inter"
-                fontWeight={600}
-              >
-                Calculer et soumettre
               </Button>
             </HStack>
           </VStack>
@@ -769,6 +851,80 @@ function FigmaInput({
       }}
       transition="all 0.2s"
     />
+  );
+}
+
+function FigmaFleetSelect({
+  value,
+  onChange,
+  placeholder,
+  options,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+}) {
+  return (
+    <Select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      isDisabled={disabled}
+      h="42px"
+      rounded="lg"
+      bg="white"
+      borderColor={FIGMA.border}
+      boxShadow={FIGMA.inputShadow}
+      fontFamily="Montserrat"
+      fontSize="14px"
+      color={FIGMA.text}
+      _focus={{ borderColor: FIGMA.green, boxShadow: `0 0 0 1px ${FIGMA.green}` }}
+      transition="all 0.2s"
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </Select>
+  );
+}
+
+function FigmaSelect({
+  value,
+  onChange,
+  placeholder,
+  options,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  options: string[];
+}) {
+  return (
+    <Select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      h="42px"
+      rounded="lg"
+      bg="white"
+      borderColor={FIGMA.border}
+      boxShadow={FIGMA.inputShadow}
+      fontFamily="Montserrat"
+      fontSize="14px"
+      color={FIGMA.text}
+      _focus={{
+        borderColor: FIGMA.green,
+        boxShadow: `0 0 0 1px ${FIGMA.green}`,
+      }}
+      transition="all 0.2s"
+    >
+      {(options.length ? options : value ? [value] : []).map((opt) => (
+        <option key={opt} value={opt}>{opt}</option>
+      ))}
+    </Select>
   );
 }
 

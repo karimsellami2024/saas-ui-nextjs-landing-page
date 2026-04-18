@@ -3,6 +3,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Box,
+  Button,
+  HStack,
   Heading,
   Spinner,
   Text,
@@ -33,6 +35,8 @@ type SubKey = "p31" | "p32" | "p33" | "p34" | "p35";
 type Props = {
   /** comes from Section.tsx (selected pill key) */
   activeSubKey: SubKey | string;
+  bilanId?: string;
+  onNextSource?: () => void;
 };
 
 /**
@@ -90,7 +94,7 @@ const matchesAllowed = (code: string, allowed: string[]) => {
   return false;
 };
 
-export default function Categorie3Main({ activeSubKey }: Props) {
+export default function Categorie3Main({ activeSubKey, bilanId, onNextSource }: Props) {
   const pageBg = useColorModeValue(COL.bg, "#222e32");
   const subKey = (activeSubKey as SubKey) || "p31";
   const title = LABEL_BY_SUBKEY[subKey] ?? POSTE_LABEL_FALLBACK;
@@ -308,6 +312,7 @@ export default function Categorie3Main({ activeSubKey }: Props) {
             userId={userId}
             gesResults={ges33A1}
             setGesResults={setGes33A1}
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -324,6 +329,7 @@ export default function Categorie3Main({ activeSubKey }: Props) {
             userId={userId}
             gesResults={ges34A1}
             setGesResults={setGes34A1}
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -340,6 +346,7 @@ export default function Categorie3Main({ activeSubKey }: Props) {
             userId={userId}
             gesResults={ges34B1}
             setGesResults={setGes34B1}
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -356,6 +363,7 @@ export default function Categorie3Main({ activeSubKey }: Props) {
             userId={userId}
             gesResults={ges35A1}
             setGesResults={setGes35A1}
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -460,6 +468,32 @@ export default function Categorie3Main({ activeSubKey }: Props) {
           </Box>
         ) : (
           filteredSources.map(renderSource)
+        )}
+
+        {!loading && userId && (
+          <HStack justify="flex-end" mt={6} spacing={4}>
+            <Button
+              variant="outline"
+              borderColor={COL.greenBar}
+              color={COL.greenBar}
+              _hover={{ bg: "#e8f0ea" }}
+              size="md"
+              px={6}
+            >
+              Valider Page
+            </Button>
+            <Button
+              bg={COL.greenBar}
+              color="white"
+              _hover={{ bg: "#2d5c4a" }}
+              size="md"
+              px={6}
+              isDisabled={!onNextSource}
+              onClick={onNextSource}
+            >
+              Prochaine Source →
+            </Button>
+          </HStack>
         )}
       </Stack>
     </Box>

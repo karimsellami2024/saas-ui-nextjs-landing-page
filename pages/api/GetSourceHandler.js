@@ -1,4 +1,4 @@
-// pages/api/get-source.ts
+// pages/api/GetSourceHandler.js
 import { supabase } from '../../lib/supabaseClient';
 
 const LEGACY_POSTE_NUM_BY_SOURCE = {
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
 
   try {
     const {
-      user_id: userId,     // from query string ?user_id=...&poste_num=...&source_code=...
+      user_id: userId,
       poste_num,
       source_code,
       submission_id,
@@ -56,48 +56,44 @@ export default async function handler(req, res) {
     }
     const posteId = poste.id;
 
-    // --- 3. Fetch poste_sources row for this poste + source_code ---
-    let psQuery = supabase
+    // --- 3. Fetch poste_sources row by (poste_id, source_code) only ---
+    // The unique constraint is on (poste_id, source_code), so there is at most one row.
+    // submission_id on the row tracks which bilan last saved it.
+    const { data: posteSource, error: psErr } = await supabase
       .from('poste_sources')
-      .select('id, data, results, enabled, label')
+      .select('id, data, results, enabled, label, submission_id')
       .eq('poste_id', posteId)
-      .eq('source_code', source_code);
-
-    if (submission_id) {
-      psQuery = psQuery.eq('submission_id', submission_id);
-    }
-
-    const { data: posteSource, error: psErr } = await psQuery.maybeSingle();
+      .eq('source_code', source_code)
+      .maybeSingle();
 
     if (psErr) {
       console.error("Supabase fetch error (poste_sources):", psErr);
       return res.status(500).json({ error: psErr.message });
     }
 
-    let resolvedPosteSource = posteSource;
+    let resolvedPosteSource = posteSource ?? null;
 
+    // Legacy fallback: try alternate poste_num if not found
     if (!resolvedPosteSource) {
       const legacyPosteNum = LEGACY_POSTE_NUM_BY_SOURCE[String(source_code)];
 
       if (legacyPosteNum && Number(legacyPosteNum) !== Number(poste_num)) {
-        const { data: legacyPoste, error: legacyPosteErr } = await supabase
+        const { data: legacyPoste } = await supabase
           .from('postes')
           .select('id')
           .eq('company_id', userProfile.company_id)
           .eq('num', legacyPosteNum)
           .single();
 
-        if (!legacyPosteErr && legacyPoste?.id) {
+        if (legacyPoste?.id) {
           const { data: legacyPosteSource, error: legacyPsErr } = await supabase
             .from('poste_sources')
-            .select('id, data, results, enabled, label')
+            .select('id, data, results, enabled, label, submission_id')
             .eq('poste_id', legacyPoste.id)
             .eq('source_code', source_code)
             .maybeSingle();
 
-          if (legacyPsErr) {
-            console.error("Supabase legacy fetch error (poste_sources):", legacyPsErr);
-          } else if (legacyPosteSource) {
+          if (!legacyPsErr && legacyPosteSource) {
             resolvedPosteSource = legacyPosteSource;
           }
         }

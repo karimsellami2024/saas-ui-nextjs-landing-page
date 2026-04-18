@@ -9,6 +9,7 @@ import { CheckCircleIcon } from "@chakra-ui/icons";
 import { Plus, Trash2, Copy } from "lucide-react";
 import { FiCalendar, FiMapPin, FiFileText, FiZap } from "react-icons/fi";
 import { supabase } from "../../../lib/supabaseClient";
+import { ReferenceSelect } from '../ReferenceSelect';
 
 export type Source5_1A1Row = {
   description: string;
@@ -239,8 +240,7 @@ export function Source5_1A1Form({ rows, setRows, posteSourceId, userId, gesResul
 
               <GridItem>
                 <Text fontSize="xs" color={FIGMA.muted} mb={1}><Icon as={FiFileText} mr={1} />Référence (facultatif)</Text>
-                <Input size="sm" borderRadius={FIGMA.inputR} value={row.reference}
-                  onChange={e => updateRow(idx, "reference", e.target.value)} />
+                <ReferenceSelect size="sm" userId={userId ?? ""} value={row.reference} onChange={(v) => updateRow(idx, "reference", v)} />
               </GridItem>
             </Grid>
 

@@ -10,9 +10,19 @@ const toNumber = (v) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-const pickFirstObject = (results) => {
-  if (Array.isArray(results)) return results[0] || {};
-  return results || {};
+// Merge all result objects from a source into one by summing numeric fields.
+// Handles both single-object results and per-row array results.
+const mergeResults = (results) => {
+  const items = Array.isArray(results) ? results : [results || {}];
+  const merged = {};
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    for (const [k, v] of Object.entries(item)) {
+      const n = toNumber(v);
+      if (n !== 0) merged[k] = (merged[k] || 0) + n;
+    }
+  }
+  return merged;
 };
 
 // Energy metric extraction
@@ -39,7 +49,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const { user_id: userId } = req.query;
+  const { user_id: userId, bilan_id: bilanId } = req.query;
   if (!userId) {
     return res.status(400).json({ error: "Missing user_id" });
   }
@@ -73,10 +83,16 @@ export default async function handler(req, res) {
   const posteIds = postes.map(p => p.id);
 
   // 3) Get all sources for these postes (in one query)
-  const { data: sources, error: sourceErr } = await supabase
+  // One row per (poste_id, source_code) due to unique constraint.
+  // If bilan_id is provided, only include rows last saved for that bilan.
+  let sourcesQuery = supabase
     .from('poste_sources')
-    .select('poste_id, results, enabled')
+    .select('poste_id, results, enabled, submission_id')
     .in('poste_id', posteIds);
+  if (bilanId) {
+    sourcesQuery = sourcesQuery.eq('submission_id', bilanId);
+  }
+  const { data: sources, error: sourceErr } = await sourcesQuery;
 
   if (sourceErr) {
     return res.status(500).json({ error: sourceErr.message });
@@ -96,7 +112,7 @@ export default async function handler(req, res) {
     const poste = posteIdMap.get(s.poste_id);
     if (!poste) continue;
 
-    const src = pickFirstObject(s.results);
+    const src = mergeResults(s.results);
 
     // ---- GES ----
     if (!posteResultsMap[poste.id]) {

@@ -6,6 +6,7 @@ import {
   Spinner,
   Button,
   Input,
+  Select,
   VStack,
   HStack,
   Grid,
@@ -23,6 +24,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
   CheckCircleIcon,
+  RepeatIcon,
 } from "@chakra-ui/icons";
 import { FiCalendar, FiFileText, FiTruck, FiHash, FiDroplet } from "react-icons/fi";
 
@@ -75,6 +77,7 @@ export interface SourceA1FormProps {
 
   posteSourceId: string;
   userId: string;
+  bilanId?: string;
 
   gesResults?: GesResult[];
   setGesResults: (results: GesResult[]) => void;
@@ -114,6 +117,18 @@ type Refs = {
   prpCO2: number;
   prpCH4: number;
   prpN2O: number;
+};
+
+type FleetVehicle = {
+  details?: string;
+  annee?: string;
+  marque?: string;
+  modele?: string;
+  transmission?: string;
+  distance_km?: string;
+  type_carburant?: string;
+  conso_l_100km?: string;
+  clim?: string;
 };
 
 /* ---------------- animations + figma tokens ---------------- */
@@ -166,6 +181,58 @@ export function SourceA1Form({
   const [collapsed, setCollapsed] = useState(false);
   const [savingMsg, setSavingMsg] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+
+  const [fleet, setFleet] = useState<FleetVehicle[]>([]);
+  const [loadingFleet, setLoadingFleet] = useState(true);
+
+  const normalizeFleet = (arr: any[]): FleetVehicle[] => {
+    if (!Array.isArray(arr)) return [];
+    return arr.map((v: any) => ({
+      details: v.details ?? v.nom ?? "",
+      annee: v.annee ?? "",
+      marque: v.marque ?? "",
+      modele: v.modele ?? "",
+      transmission: v.transmission ?? "",
+      distance_km: v.distance_km ?? "",
+      type_carburant: v.type_carburant ?? v.type ?? "",
+      conso_l_100km: v.conso_l_100km ?? "",
+      clim: v.clim ?? "",
+    }));
+  };
+
+  const loadFleet = async () => {
+    try {
+      setLoadingFleet(true);
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes?.user?.id;
+      if (!uid) return;
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("company_id")
+        .eq("id", uid)
+        .single();
+      if (!profile?.company_id) return;
+      const { data: company } = await supabase
+        .from("companies")
+        .select("vehicle_fleet")
+        .eq("id", profile.company_id)
+        .single();
+      setFleet(normalizeFleet((company as any)?.vehicle_fleet ?? []));
+    } catch (err) {
+      console.error("2A1 fleet load error:", err);
+      setFleet([]);
+    } finally {
+      setLoadingFleet(false);
+    }
+  };
+
+  const onSelectGroupVehicle = (gIdx: number, detailsValue: string) => {
+    const v = fleet.find((fv) => (fv.details ?? "") === detailsValue);
+    updateGroupField(gIdx, "vehicle", detailsValue);
+    if (v?.type_carburant) updateGroupField(gIdx, "fuelType", v.type_carburant);
+  };
+
+  useEffect(() => { loadFleet(); }, []);
 
   const DEFAULT_FORM = { groups: [] as CarburantGroup[] };
   const {
@@ -390,6 +457,7 @@ export function SourceA1Form({
       user_id: userId,
       poste_source_id: posteSourceId,
       source_code: "2A1",
+      submission_id: bilanId ?? null,
       data: { groups: sanitizedGroups },
       results,
     };
@@ -486,6 +554,21 @@ export function SourceA1Form({
           </VStack>
 
           <HStack spacing={3} flexWrap="wrap" align="center">
+            {loadingFleet && (
+              <HStack spacing={2} color={FIGMA.muted}>
+                <Spinner size="sm" />
+                <Text fontSize="sm" fontFamily="Montserrat">Chargement flotte…</Text>
+              </HStack>
+            )}
+            <IconButton
+              aria-label="Rafraîchir la flotte"
+              icon={<RepeatIcon />}
+              size="sm"
+              variant="ghost"
+              color={FIGMA.muted}
+              _hover={{ color: FIGMA.green, bg: FIGMA.greenSoft }}
+              onClick={loadFleet}
+            />
             <Box minW="200px" px={3} py={2} rounded="lg" bg={savingMsg ? "white" : "transparent"} transition="all 0.3s">
               {loading && (
                 <HStack color={FIGMA.muted} animation={`${pulse} 1.5s ease-in-out infinite`}>
@@ -636,10 +719,15 @@ export function SourceA1Form({
                       alignItems="center"
                     >
                       <GridItem>
-                        <FigmaInput
+                        <FigmaFleetSelect
                           value={group.vehicle}
-                          onChange={(v) => updateGroupField(gIdx, "vehicle", v)}
-                          placeholder="Véhicule / Province"
+                          onChange={(v) => onSelectGroupVehicle(gIdx, v)}
+                          placeholder={loadingFleet ? "Chargement…" : fleet.length ? "Choisir un véhicule" : "Aucun véhicule"}
+                          disabled={loadingFleet || fleet.length === 0}
+                          options={fleet.map((v, i) => ({
+                            value: v.details ?? "",
+                            label: v.details ?? `(Sans nom ${i + 1})`,
+                          }))}
                         />
                       </GridItem>
 
@@ -805,24 +893,6 @@ export function SourceA1Form({
               >
                 Ajouter un véhicule
               </Button>
-
-              <Button
-                bg={FIGMA.green}
-                color="white"
-                rounded="full"
-                h="44px"
-                px={8}
-                boxShadow={FIGMA.buttonShadow}
-                _hover={{ bg: FIGMA.greenLight, transform: "translateY(-2px)", boxShadow: FIGMA.hoverShadow }}
-                _active={{ transform: "translateY(0)" }}
-                onClick={handleA1Submit}
-                isLoading={loading}
-                loadingText="Sauvegarde…"
-                fontFamily="Inter"
-                fontWeight={600}
-              >
-                Calculer et soumettre
-              </Button>
             </HStack>
           </VStack>
         )}
@@ -932,6 +1002,43 @@ function ReadPill({ label, value }: { label: string; value: string }) {
         {value}
       </Text>
     </Box>
+  );
+}
+
+function FigmaFleetSelect({
+  value,
+  onChange,
+  placeholder,
+  options,
+  disabled,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  options: { value: string; label: string }[];
+  disabled?: boolean;
+}) {
+  return (
+    <Select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      isDisabled={disabled}
+      h="42px"
+      rounded="lg"
+      bg="white"
+      borderColor={FIGMA.border}
+      boxShadow={FIGMA.inputShadow}
+      fontFamily="Montserrat"
+      fontSize="14px"
+      color={FIGMA.text}
+      _focus={{ borderColor: FIGMA.green, boxShadow: `0 0 0 1px ${FIGMA.green}` }}
+      transition="all 0.2s"
+    >
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>{o.label}</option>
+      ))}
+    </Select>
   );
 }
 

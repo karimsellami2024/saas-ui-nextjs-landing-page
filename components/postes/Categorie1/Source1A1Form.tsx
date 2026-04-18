@@ -21,6 +21,7 @@ import { keyframes } from "@emotion/react";
 import { Plus, Trash2, Copy } from "lucide-react";
 import { supabase } from "../../../lib/supabaseClient";
 import { usePrefillPosteSource } from "components/postes/HookForGetDataSource";
+import { ReferenceSelect } from '../ReferenceSelect';
 import { CheckCircleIcon } from "@chakra-ui/icons";
 import { FiZap, FiFileText } from "react-icons/fi";
 
@@ -1061,9 +1062,7 @@ export function Source1AForm({
                       <FigmaSelect value={entry.unit || row.unit} onChange={(v) => updateEntry(idx, eIdx, "unit", v)} FIGMA={FIGMA} placeholder="Unité">
                         {UNIT_OPTIONS.map((opt) => <option key={opt} value={opt}>{opt}</option>)}
                       </FigmaSelect>
-                      <FigmaSelect value={entry.reference} onChange={(v) => updateEntry(idx, eIdx, "reference", v)} FIGMA={FIGMA} placeholder={referenceOptions.length ? "Sélectionner…" : "Aucune réf."}>
-                        {referenceOptions.map((r) => <option key={r} value={r}>{r}</option>)}
-                      </FigmaSelect>
+                      <ReferenceSelect userId={userId ?? ""} value={entry.reference} onChange={(v) => updateEntry(idx, eIdx, "reference", v)} />
                       <HStack spacing={2}>
                         <Button
                           size="xs"
@@ -1113,29 +1112,6 @@ export function Source1AForm({
           transition="all 0.2s"
         >
           Ajouter une ligne
-        </Button>
-
-        <Button
-          bg={FIGMA.green}
-          color="white"
-          rounded="full"
-          h="44px"
-          px={8}
-          _hover={{
-            bg: FIGMA.greenLight,
-            transform: "translateY(-2px)",
-            boxShadow: FIGMA.hoverShadow,
-          }}
-          _active={{ transform: "translateY(0)" }}
-          boxShadow={FIGMA.buttonShadow}
-          onClick={handleSubmit}
-          fontFamily="Inter"
-          fontWeight={600}
-          isLoading={submitting}
-          loadingText="Sauvegarde…"
-          transition="all 0.2s"
-        >
-          Soumettre
         </Button>
       </HStack>
 

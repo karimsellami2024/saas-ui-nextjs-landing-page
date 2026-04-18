@@ -622,9 +622,6 @@ export function SourceB1Form({
         <Button onClick={addB1Row} bg={highlight} color="white" rounded="full" px={6} h="44px" _hover={{ opacity: 0.95 }}>
           Ajouter une ligne
         </Button>
-        <Button onClick={handle2B1Submit} colorScheme="blue" rounded="full" px={6} h="44px" isLoading={submitting}>
-          Soumettre
-        </Button>
       </HStack>
     </VStack>
   );

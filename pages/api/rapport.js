@@ -14,7 +14,7 @@ const pick = (results) => {
 export default async function handler(req, res) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
 
-  const { user_id: userId } = req.query;
+  const { user_id: userId, bilan_id: bilanId } = req.query;
   if (!userId) return res.status(400).json({ error: 'Missing user_id' });
 
   const { data: profile } = await supabase
@@ -39,10 +39,15 @@ export default async function handler(req, res) {
 
   const posteIds = (postes || []).map((p) => p.id);
 
-  const { data: sources } = await supabase
+  // One row per (poste_id, source_code) — filter by bilan_id if provided
+  let sourcesQuery = supabase
     .from('poste_sources')
     .select('source_code, results, enabled')
     .in('poste_id', posteIds);
+  if (bilanId) {
+    sourcesQuery = sourcesQuery.eq('submission_id', bilanId);
+  }
+  const { data: sources } = await sourcesQuery;
 
   // Aggregate per source_code
   const byCode = {};

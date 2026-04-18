@@ -36,6 +36,7 @@ export interface Source4B2FormProps {
   tableBg?: string;
   posteSourceId: string;
   userId: string;
+  bilanId?: string;
   gesResults?: GesResult[];
   setGesResults: (results: GesResult[]) => void;
 }
@@ -234,6 +235,7 @@ export function Source4B2Form({
       user_id: userId,
       poste_source_id: posteSourceId,
       source_code: "4B2",
+      submission_id: bilanId ?? null,
       poste_num: 4,
       data: { rows: sanitizedRows },
       results: computeResults(rows, refs),
@@ -426,15 +428,6 @@ export function Source4B2Form({
 
       <Button mt={3} colorScheme="blue" onClick={addRow}>
         Ajouter une ligne
-      </Button>
-      <Button
-        mt={3}
-        ml={4}
-        colorScheme="green"
-        onClick={handleSubmit}
-        isLoading={loading}
-      >
-        Soumettre
       </Button>
 
       <Box mt={6} bg="#e5f2fa" rounded="xl" boxShadow="md" p={4}>

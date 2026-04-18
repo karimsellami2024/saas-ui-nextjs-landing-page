@@ -20,6 +20,7 @@ import { keyframes } from "@emotion/react";
 import { RepeatIcon, AddIcon, DeleteIcon, CopyIcon, ChevronDownIcon, ChevronUpIcon } from "@chakra-ui/icons";
 import { Lock, Calendar, Truck, MapPin, Hash } from "lucide-react";
 import { supabase } from "../../../lib/supabaseClient";
+import { ReferenceSelect } from '../ReferenceSelect';
 import { usePrefillPosteSource } from "components/postes/HookForGetDataSource";
 
 /** =======================
@@ -56,6 +57,7 @@ type SourceB1FormProps = {
   addB1Row: () => void;
   posteSourceId: string;
   userId: string;
+  bilanId?: string;
   gesResults?: GesResult[];
   setGesResults?: (results: GesResult[]) => void;
 };
@@ -501,6 +503,7 @@ export function SourceB1Form({
       poste_source_id: posteSourceId,
       poste_num: 2,
       source_code: "2B1",
+      submission_id: bilanId ?? null,
       data: { rows: b1Rows },
       results: computed,
     };
@@ -704,7 +707,7 @@ export function SourceB1Form({
                       />
                     </GridItem>
 
-                    <GridItem><Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">Reference</Text><FigmaInput value={row.reference} onChange={(v) => updateRow(idx, { reference: v })} placeholder="RÃ©fÃ©rence" /></GridItem>
+                    <GridItem><Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">Référence</Text><ReferenceSelect userId={userId} value={row.reference} onChange={(v) => updateRow(idx, { reference: v })} /></GridItem>
                     <GridItem><Text mb={1} fontSize="12px" color={FIGMA.muted} fontWeight="500">Climatisation</Text><FigmaInput value={row.ac} onChange={(v) => updateRow(idx, { ac: v })} placeholder="Oui/Non" center /></GridItem>
 
                     <GridItem>
@@ -793,27 +796,6 @@ export function SourceB1Form({
                 _hover={{ bg: FIGMA.greenSoft, borderColor: FIGMA.green }}
               >
                 Ajouter une ligne
-              </Button>
-
-              <Button
-                bg={FIGMA.green}
-                color="white"
-                rounded="full"
-                h="44px"
-                px={8}
-                boxShadow={FIGMA.buttonShadow}
-                _hover={{
-                  bg: FIGMA.greenLight,
-                  transform: "translateY(-2px)",
-                  boxShadow: FIGMA.hoverShadow,
-                }}
-                _active={{ transform: "translateY(0)" }}
-                onClick={handle2B1Submit}
-                isLoading={submitting}
-                loadingText="Sauvegarde…"
-                fontWeight={600}
-              >
-                Calculer et soumettre
               </Button>
             </HStack>
           </VStack>

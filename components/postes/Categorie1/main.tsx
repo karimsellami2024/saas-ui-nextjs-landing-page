@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Box, Heading, Spinner, Text, Stack, useColorModeValue } from '@chakra-ui/react';
+import { Box, Button, HStack, Heading, Spinner, Text, Stack, useColorModeValue } from '@chakra-ui/react';
 import { supabase } from '../../../lib/supabaseClient';
 
 /* ===================== IMPORT YOUR EXISTING SOURCE FORMS ===================== */
@@ -69,9 +69,10 @@ type Props = {
   /** comes from Section.tsx (selected pill key) */
   activeSubKey: SubKey | string;
   bilanId?: string;
+  onNextSource?: () => void;
 };
 
-export default function Categorie1Page({ activeSubKey, bilanId }: Props) {
+export default function Categorie1Page({ activeSubKey, bilanId, onNextSource }: Props) {
   /* ===================== GLOBAL CONFIG ===================== */
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
@@ -327,6 +328,7 @@ export default function Categorie1Page({ activeSubKey, bilanId }: Props) {
             userId={userId}
             gesResults={ges2}
             setGesResults={setGes2}
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -347,6 +349,7 @@ export default function Categorie1Page({ activeSubKey, bilanId }: Props) {
             setGesResults={setGes2}
             highlight={COL.greenBar}
             tableBg={COL.section}
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -365,6 +368,7 @@ export default function Categorie1Page({ activeSubKey, bilanId }: Props) {
             setGesResults={setGes2}
             highlight={COL.greenBar}
             tableBg={COL.section}
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -386,6 +390,7 @@ export default function Categorie1Page({ activeSubKey, bilanId }: Props) {
             setGesResults={setGes4A1}
             highlight={COL.greenBar}
             tableBg={COL.section}
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -404,8 +409,7 @@ export default function Categorie1Page({ activeSubKey, bilanId }: Props) {
             userId={userId}
             gesResults={ges4B1}
             setGesResults={setGes4B1}
-            
-            
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -426,6 +430,7 @@ export default function Categorie1Page({ activeSubKey, bilanId }: Props) {
             setGesResults={setGes4B2}
             highlight={COL.greenBar}
             tableBg={COL.section}
+            bilanId={bilanId}
           />
         </Box>
       );
@@ -452,6 +457,32 @@ export default function Categorie1Page({ activeSubKey, bilanId }: Props) {
           </Text>
         ) : (
           filteredSources.map(renderSource)
+        )}
+
+        {!loading && userId && (
+          <HStack justify="flex-end" mt={6} spacing={4}>
+            <Button
+              variant="outline"
+              borderColor={COL.greenBar}
+              color={COL.greenBar}
+              _hover={{ bg: "#e8f0ea" }}
+              size="md"
+              px={6}
+            >
+              Valider Page
+            </Button>
+            <Button
+              bg={COL.greenBar}
+              color="white"
+              _hover={{ bg: "#2d5c4a" }}
+              size="md"
+              px={6}
+              isDisabled={!onNextSource}
+              onClick={onNextSource}
+            >
+              Prochaine Source →
+            </Button>
+          </HStack>
         )}
       </Stack>
     </Box>

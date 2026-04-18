@@ -12,18 +12,14 @@ export default async function handler(req, res) {
       poste_num = 2,
       source_code = '2A1',
       poste_source_id,
-      results // <-- NEW: Accept GES results from frontend!
+      submission_id,
+      results
     } = req.body;
 
-    // Validate required fields
     if (!userId) {
       return res.status(400).json({ error: "Missing required field: user_id" });
     }
-    if (
-      !data ||
-      (typeof data !== 'object') ||
-      (Array.isArray(data) && data.length === 0)
-    ) {
+    if (!data || typeof data !== 'object' || (Array.isArray(data) && data.length === 0)) {
       return res.status(400).json({ error: "Missing or invalid data" });
     }
 
@@ -34,7 +30,7 @@ export default async function handler(req, res) {
       .eq('id', userId)
       .single();
 
-    if (userProfileErr || !userProfile || !userProfile.company_id) {
+    if (userProfileErr || !userProfile?.company_id) {
       return res.status(400).json({ error: "User does not belong to any company" });
     }
 
@@ -46,44 +42,60 @@ export default async function handler(req, res) {
       .eq('num', poste_num)
       .single();
 
-    if (posteErr || !poste || !poste.id) {
+    if (posteErr || !poste?.id) {
       return res.status(400).json({ error: `Poste ${poste_num} not found for company` });
     }
     const posteId = poste.id;
 
-    // 3. Upsert poste_sources with provided results!
-    const { data: updated, error: updateErr } = await supabase
+    // 3. Find existing row by (poste_id, source_code) — unique constraint, no submission_id filter
+    const { data: existing } = await supabase
       .from('poste_sources')
-      .upsert([{
-        poste_id: posteId,
-        source_code: source_code,
-        data: data,
-        results: results, // <--- Write the results from frontend
-      }], {
-        onConflict: ['poste_id', 'source_code']
-      })
-      .select();
+      .select('id')
+      .eq('poste_id', posteId)
+      .eq('source_code', source_code)
+      .maybeSingle();
 
-    if (updateErr) {
-      console.error("Supabase upsert error (poste_sources):", updateErr);
-      return res.status(500).json({ error: updateErr.message });
-    }
+    let posteSourceIdFromDB = null;
 
-    // Extract posteSourceId from DB
-    const posteSourceIdFromDB =
-      updated && updated.length > 0
-        ? (updated[0].id || updated[0].posteSourceId)
-        : null;
+    const updatePayload = { data, results };
+    if (submission_id !== undefined) updatePayload.submission_id = submission_id ?? null;
 
-    if (poste_source_id && poste_source_id !== posteSourceIdFromDB) {
-      console.warn(`Provided poste_source_id (${poste_source_id}) does not match DB id (${posteSourceIdFromDB})`);
+    if (existing?.id) {
+      // UPDATE existing row (set submission_id to track which bilan last saved)
+      const { data: updated, error: updateErr } = await supabase
+        .from('poste_sources')
+        .update(updatePayload)
+        .eq('id', existing.id)
+        .select('id')
+        .single();
+
+      if (updateErr) {
+        console.error("Supabase update error (poste_sources):", updateErr);
+        return res.status(500).json({ error: updateErr.message });
+      }
+      posteSourceIdFromDB = updated?.id ?? existing.id;
+    } else {
+      // INSERT new row (only happens for brand-new sources not yet in DB)
+      const newRow = { poste_id: posteId, source_code, data, results };
+      if (submission_id) newRow.submission_id = submission_id;
+
+      const { data: inserted, error: insertErr } = await supabase
+        .from('poste_sources')
+        .insert([newRow])
+        .select('id')
+        .single();
+
+      if (insertErr) {
+        console.error("Supabase insert error (poste_sources):", insertErr);
+        return res.status(500).json({ error: insertErr.message });
+      }
+      posteSourceIdFromDB = inserted?.id ?? null;
     }
 
     return res.status(200).json({
       success: true,
       posteSourceId: posteSourceIdFromDB,
-      poste_source: updated && updated.length > 0 ? updated[0] : null,
-      results: results,
+      results,
     });
 
   } catch (err) {
@@ -91,118 +103,3 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: err?.message || "Something went wrong" });
   }
 }
-
-// import { supabase } from '../../lib/supabaseClient';
-
-// export default async function handler(req, res) {
-//   if (req.method !== 'POST') {
-//     return res.status(405).json({ error: "Method not allowed" });
-//   }
-
-//   try {
-//     const {
-//       user_id: userId,
-//       data,
-//       poste_num = 2,
-//       source_code = '2A1',
-//       poste_source_id
-//     } = req.body;
-
-//     // Validate required fields
-//     if (!userId) {
-//       return res.status(400).json({ error: "Missing required field: user_id" });
-//     }
-//     if (
-//       !data ||
-//       (typeof data !== 'object') ||
-//       (Array.isArray(data) && data.length === 0)
-//     ) {
-//       return res.status(400).json({ error: "Missing or invalid data" });
-//     }
-
-//     // --- 1. Get company_id for user ---
-//     const { data: userProfile, error: userProfileErr } = await supabase
-//       .from('user_profiles')
-//       .select('company_id')
-//       .eq('id', userId)
-//       .single();
-
-//     if (userProfileErr || !userProfile || !userProfile.company_id) {
-//       return res.status(400).json({ error: "User does not belong to any company" });
-//     }
-
-//     // --- 2. Get poste_id for this company + poste_num ---
-//     const { data: poste, error: posteErr } = await supabase
-//       .from('postes')
-//       .select('id')
-//       .eq('company_id', userProfile.company_id)
-//       .eq('num', poste_num)
-//       .single();
-
-//     if (posteErr || !poste || !poste.id) {
-//       return res.status(400).json({ error: `Poste ${poste_num} not found for company` });
-//     }
-//     const posteId = poste.id;
-
-//     // --- 3. Webhook call ---
-//     let resultData = null;
-//     // try {
-//     //   const response = await fetch(
-//     //     "https://poste2webhook-592102073404.us-central1.run.app/traitement",
-//     //     {
-//     //       method: "POST",
-//     //       headers: { "Content-Type": "application/json" },
-//     //       body: JSON.stringify(data),
-//     //     }
-//     //   );
-//     //   if (!response.ok) {
-//     //     const errorMsg = await response.text();
-//     //     return res.status(500).json({ error: `Webhook failed: ${errorMsg}` });
-//     //   }
-//     //   resultData = await response.json();
-//     // } catch (err) {
-//     //   console.warn("Webhook error (proceeding without results):", err);
-//     //   resultData = null;
-//     // }
-
-//     // --- 4. Upsert poste_sources ---
-//     const { data: updated, error: updateErr } = await supabase
-//       .from('poste_sources')
-//       .upsert([{
-//         poste_id: posteId,
-//         source_code: source_code,
-//         data: data,
-//         results: resultData,
-//       }], {
-//         onConflict: ['poste_id', 'source_code']
-//       })
-//       .select();
-
-//     if (updateErr) {
-//       console.error("Supabase upsert error (poste_sources):", updateErr);
-//       return res.status(500).json({ error: updateErr.message });
-//     }
-
-//     // Extract posteSourceId from DB
-//     const posteSourceIdFromDB =
-//       updated && updated.length > 0
-//         ? (updated[0].id || updated[0].posteSourceId)
-//         : null;
-
-//     if (poste_source_id && poste_source_id !== posteSourceIdFromDB) {
-//       console.warn(`Provided poste_source_id (${poste_source_id}) does not match DB id (${posteSourceIdFromDB})`);
-//     }
-
-//     return res.status(200).json({
-//       success: true,
-//       posteSourceId: posteSourceIdFromDB,
-//       poste_source: updated && updated.length > 0 ? updated[0] : null,
-//       results: resultData,
-//     });
-
-//   } catch (err) {
-//     console.error("Handler Exception:", err);
-//     return res.status(500).json({ error: err?.message || "Something went wrong" });
-//   }
-// }
-
