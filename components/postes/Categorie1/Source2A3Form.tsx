@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   HStack,
@@ -137,6 +137,7 @@ export function Source2A3Form({
   updateA3Row,
   posteSourceId,
   userId,
+  bilanId,
   gesResults = [],
   setGesResults,
 }: Source2A3FormProps) {
@@ -145,6 +146,34 @@ export function Source2A3Form({
   const [collapsed, setCollapsed] = useState(false);
   const [siteOptions, setSiteOptions] = useState<string[]>([]);
   const [referenceOptions, setReferenceOptions] = useState<string[]>([]);
+
+  const debounceRef2A3 = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedJSON2A3 = useRef<string>("");
+
+  const autoSave2A3 = async () => {
+    if (!userId || !posteSourceId || !refs) return;
+    const json = JSON.stringify(a3Rows);
+    if (json === lastSavedJSON2A3.current) return;
+    const results = computeResults(a3Rows, refs);
+    const payload = {
+      user_id: userId, poste_source_id: posteSourceId, poste_num: 2,
+      source_code: "2A3", submission_id: bilanId ?? null,
+      data: { rows: a3Rows.map(r => ({ ...r, site: r.cost, commentaires: r.avgPrice, estimateQty: toNum(r.estimateQty, 0) })) },
+      results,
+    };
+    try {
+      const res = await fetch("/api/2submit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) { lastSavedJSON2A3.current = json; setGesResults(results); }
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => {
+    if (!userId || !posteSourceId || !refs) return;
+    if (debounceRef2A3.current) clearTimeout(debounceRef2A3.current);
+    debounceRef2A3.current = setTimeout(autoSave2A3, 900);
+    return () => { if (debounceRef2A3.current) clearTimeout(debounceRef2A3.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [a3Rows, refs, userId, posteSourceId]);
 
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [loadingFleet, setLoadingFleet] = useState(true);

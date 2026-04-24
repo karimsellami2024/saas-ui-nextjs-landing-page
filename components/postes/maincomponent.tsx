@@ -129,6 +129,16 @@ const SOURCE_TO_POSTE_NUM: Record<string, number> = {
   p51: 5, p52: 5,
 };
 
+const SOURCE_TO_ISO: Record<string, IsoCategoryKey> = {
+  combustion_fixes: 'cat1', combustion_mobiles: 'cat1', procedes: 'cat1', refrigerants: 'cat1', sols: 'cat1',
+  products: 'cat2', autre_energie: 'cat2',
+  p31: 'cat3', p32: 'cat3', p33: 'cat3', p34: 'cat3', p35: 'cat3',
+  p41: 'cat4', p43: 'cat4',
+  p51: 'cat5', p52: 'cat5',
+};
+
+const CQ_LAST_SOURCE_KEY = 'cq_last_source';
+
 const POSTE_META: Record<string, { groupTitle: string; posteTitle: string; description: string }> = {
   combustion_fixes: {
     groupTitle: "Émissions directs",
@@ -226,13 +236,20 @@ export default function Section({ bilanId }: { bilanId?: string }) {
   const [posteVisibility, setPosteVisibility] = useState<Record<string, boolean>>({});
   const [postes, setPostes] = useState<PosteRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [totalTco2e, setTotalTco2e] = useState<number>(0);
+  const [catTotals, setCatTotals] = useState<Record<string, number>>({});
+  const totalTco2e = useMemo(
+    () => Object.values(catTotals).reduce((a, b) => a + b, 0),
+    [catTotals]
+  );
   const [posteIds, setPosteIds] = useState<string[]>([]);
 
   const [selectedMenu, setSelectedMenu] = useState<TopKey | string>("dashboard");
   const [activeTop, setActiveTop] = useState<TopKey>("dashboard");
   const [activeGroup, setActiveGroup] = useState<GroupKey | null>("direct");
   const [activeCategory, setActiveCategory] = useState<IsoCategoryKey>("cat1");
+  const [lastSource, setLastSource] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? localStorage.getItem(CQ_LAST_SOURCE_KEY) : null
+  );
 
   useEffect(() => {
     (async () => {
@@ -264,7 +281,7 @@ export default function Section({ bilanId }: { bilanId?: string }) {
     const dashRes = await fetch(`/api/dashboard?${qs}`);
     if (dashRes.ok) {
       const dashData = await dashRes.json();
-      setTotalTco2e(dashData.summary?.total_tCO2eq ?? 0);
+      // db total intentionally not stored here — per-category forms supply live totals via onGesChange
     }
   };
 
@@ -380,11 +397,56 @@ export default function Section({ bilanId }: { bilanId?: string }) {
     return null;
   };
 
+  const getPrevVisibleSource = (currentKey: string): string | null => {
+    const idx = ALL_SOURCES_IN_ORDER.indexOf(currentKey);
+    if (idx === -1) return null;
+    for (let i = idx - 1; i >= 0; i--) {
+      const key = ALL_SOURCES_IN_ORDER[i];
+      if (DISABLED_SOURCES.has(key)) continue;
+      const posteNum = SOURCE_TO_POSTE_NUM[key];
+      const poste = postes.find(p => Number(p.num) === posteNum);
+      if (poste && posteVisibility[poste.id]) continue;
+      return key;
+    }
+    return null;
+  };
+
   const nextVisibleSource = useMemo(() => {
     if (!isPosteKey(String(selectedMenu))) return null;
     return getNextVisibleSource(String(selectedMenu));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMenu, postes, posteVisibility]);
+
+  const prevVisibleSource = useMemo(() => {
+    if (!isPosteKey(String(selectedMenu))) return null;
+    return getPrevVisibleSource(String(selectedMenu));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMenu, postes, posteVisibility]);
+
+  const goToSource = (key: string) => {
+    setSelectedMenu(key);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  /* Save last source to localStorage whenever the user navigates to a source */
+  useEffect(() => {
+    const key = String(selectedMenu);
+    if (isPosteKey(key)) {
+      localStorage.setItem(CQ_LAST_SOURCE_KEY, key);
+      setLastSource(key);
+    }
+  }, [selectedMenu]);
+
+  /* Navigate back to the last visited source, restoring all sidebar state */
+  const resumeLastSource = (key: string) => {
+    const iso = SOURCE_TO_ISO[key];
+    if (iso) {
+      setActiveCategory(iso);
+      setActiveGroup(isoToGroup(iso));
+    }
+    setActiveTop("dashboard");
+    goToSource(key);
+  };
 
   const currentMeta = typeof selectedMenu === "string" ? POSTE_META[selectedMenu] : undefined;
   const groupTitle = currentMeta?.groupTitle ?? "Section";
@@ -491,7 +553,13 @@ export default function Section({ bilanId }: { bilanId?: string }) {
         color={COL.textBody}
       >
         {isDashboard ? (
-          <NewDashboard onStartGuide={() => setSelectedMenu("guide")} />
+          <NewDashboard
+            hasStarted={!!lastSource}
+            onStartGuide={() => {
+              if (lastSource) resumeLastSource(lastSource);
+              else setSelectedMenu("guide");
+            }}
+          />
         ) : selectedMenu === "guide" ? (
           <SaisieGuidePage
             onStartWizard={() => { setActiveTop("wizard"); setSelectedMenu("wizard"); setActiveGroup(null); }}
@@ -596,7 +664,9 @@ export default function Section({ bilanId }: { bilanId?: string }) {
                 <Categorie1Page
                   activeSubKey={String(selectedMenu)}
                   bilanId={bilanId}
-                  onNextSource={nextVisibleSource ? () => setSelectedMenu(nextVisibleSource) : undefined}
+                  onNextSource={nextVisibleSource ? () => goToSource(nextVisibleSource) : undefined}
+                  onPrevSource={prevVisibleSource ? () => goToSource(prevVisibleSource) : undefined}
+                  onGesChange={(t) => setCatTotals(prev => ({ ...prev, cat1: t }))}
                 />
               )
             }
@@ -608,7 +678,9 @@ export default function Section({ bilanId }: { bilanId?: string }) {
                 <Categorie2EnergiePage
                   activeSubKey={String(selectedMenu)}
                   bilanId={bilanId}
-                  onNextSource={nextVisibleSource ? () => setSelectedMenu(nextVisibleSource) : undefined}
+                  onNextSource={nextVisibleSource ? () => goToSource(nextVisibleSource) : undefined}
+                  onPrevSource={prevVisibleSource ? () => goToSource(prevVisibleSource) : undefined}
+                  onGesChange={(t) => setCatTotals(prev => ({ ...prev, cat2: t }))}
                 />
               )
             }
@@ -620,7 +692,9 @@ export default function Section({ bilanId }: { bilanId?: string }) {
                 <Categorie3Page
                   activeSubKey={String(selectedMenu)}
                   bilanId={bilanId}
-                  onNextSource={nextVisibleSource ? () => setSelectedMenu(nextVisibleSource) : undefined}
+                  onNextSource={nextVisibleSource ? () => goToSource(nextVisibleSource) : undefined}
+                  onPrevSource={prevVisibleSource ? () => goToSource(prevVisibleSource) : undefined}
+                  onGesChange={(t) => setCatTotals(prev => ({ ...prev, cat3: t }))}
                 />
               )
             }
@@ -632,7 +706,9 @@ export default function Section({ bilanId }: { bilanId?: string }) {
                 <Categorie4Page
                   activeSubKey={String(selectedMenu)}
                   bilanId={bilanId}
-                  onNextSource={nextVisibleSource ? () => setSelectedMenu(nextVisibleSource) : undefined}
+                  onNextSource={nextVisibleSource ? () => goToSource(nextVisibleSource) : undefined}
+                  onPrevSource={prevVisibleSource ? () => goToSource(prevVisibleSource) : undefined}
+                  onGesChange={(t) => setCatTotals(prev => ({ ...prev, cat4: t }))}
                 />
               )
             }
@@ -644,7 +720,9 @@ export default function Section({ bilanId }: { bilanId?: string }) {
                 <Categorie5Page
                   activeSubKey={String(selectedMenu)}
                   bilanId={bilanId}
-                  onNextSource={nextVisibleSource ? () => setSelectedMenu(nextVisibleSource) : undefined}
+                  onNextSource={nextVisibleSource ? () => goToSource(nextVisibleSource) : undefined}
+                  onPrevSource={prevVisibleSource ? () => goToSource(prevVisibleSource) : undefined}
+                  onGesChange={(t) => setCatTotals(prev => ({ ...prev, cat5: t }))}
                 />
               )
             }

@@ -35,6 +35,8 @@ type Props = {
   activeSubKey: SubKey | string;
   bilanId?: string;
   onNextSource?: () => void;
+  onPrevSource?: () => void;
+  onGesChange?: (tco2e: number) => void;
 };
 
 export const SUBKEY_TO_SOURCE_CODES: Record<SubKey, string[]> = {
@@ -56,7 +58,7 @@ const matchesAllowed = (code: string, allowed: string[]) => {
 };
 
 /* ===================== COMPONENT ===================== */
-export default function Categorie5Main({ activeSubKey, bilanId, onNextSource }: Props) {
+export default function Categorie5Main({ activeSubKey, bilanId, onNextSource, onPrevSource, onGesChange }: Props) {
   const pageBg = useColorModeValue(COL.bg, "#222e32");
   const subKey = (activeSubKey as SubKey) || "p51";
   const title = LABEL_BY_SUBKEY[subKey] ?? POSTE_LABEL_FALLBACK;
@@ -81,6 +83,14 @@ export default function Categorie5Main({ activeSubKey, bilanId, onNextSource }: 
 
   const [rows5_2B1, setRows5_2B1] = useState<Source5_2B1Row[]>([]);
   const [ges5_2B1, setGes5_2B1] = useState<any[]>([]);
+
+  /* ===================== LIVE TOTAL ===================== */
+  const totalTco2e = useMemo(() => {
+    const allGes = [...ges5_1A1, ...ges5_1B1, ...ges5_2A1, ...ges5_2B1];
+    return allGes.reduce((sum, r) => sum + (parseFloat(String(r?.total_ges_tco2e ?? 0)) || 0), 0);
+  }, [ges5_1A1, ges5_1B1, ges5_2A1, ges5_2B1]);
+
+  useEffect(() => { onGesChange?.(totalTco2e); }, [totalTco2e, onGesChange]);
 
   /* ===================== LOAD USER + POSTE CONFIG ===================== */
   useEffect(() => {
@@ -163,29 +173,29 @@ export default function Categorie5Main({ activeSubKey, bilanId, onNextSource }: 
 
     const c = norm(code);
 
-    // if (c === "5.1A1") return (
-    //   <Box key={posteSourceId} mt={6}>
-    //     <Source5_1A1Form rows={rows5_1A1} setRows={setRows5_1A1} posteSourceId={posteSourceId} userId={userId} gesResults={ges5_1A1} setGesResults={setGes5_1A1} />
-    //   </Box>
-    // );
+    if (c === "5.1A1") return (
+      <Box key={posteSourceId} mt={6}>
+        <Source5_1A1Form rows={rows5_1A1} setRows={setRows5_1A1} posteSourceId={posteSourceId} userId={userId} gesResults={ges5_1A1} setGesResults={setGes5_1A1} />
+      </Box>
+    );
 
-    // if (c === "5.1B1") return (
-    //   <Box key={posteSourceId} mt={6}>
-    //     <Source5_1B1Form rows={rows5_1B1} setRows={setRows5_1B1} posteSourceId={posteSourceId} userId={userId} gesResults={ges5_1B1} setGesResults={setGes5_1B1} />
-    //   </Box>
-    // );
+    if (c === "5.1B1") return (
+      <Box key={posteSourceId} mt={6}>
+        <Source5_1B1Form rows={rows5_1B1} setRows={setRows5_1B1} posteSourceId={posteSourceId} userId={userId} gesResults={ges5_1B1} setGesResults={setGes5_1B1} />
+      </Box>
+    );
 
-    // if (c === "5.2A1") return (
-    //   <Box key={posteSourceId} mt={6}>
-    //     <Source5_2A1Form rows={rows5_2A1} setRows={setRows5_2A1} posteSourceId={posteSourceId} userId={userId} gesResults={ges5_2A1} setGesResults={setGes5_2A1} />
-    //   </Box>
-    // );
+    if (c === "5.2A1") return (
+      <Box key={posteSourceId} mt={6}>
+        <Source5_2A1Form rows={rows5_2A1} setRows={setRows5_2A1} posteSourceId={posteSourceId} userId={userId} gesResults={ges5_2A1} setGesResults={setGes5_2A1} />
+      </Box>
+    );
 
-    // if (c === "5.2B1") return (
-    //   <Box key={posteSourceId} mt={6}>
-    //     <Source5_2B1Form rows={rows5_2B1} setRows={setRows5_2B1} posteSourceId={posteSourceId} userId={userId} gesResults={ges5_2B1} setGesResults={setGes5_2B1} />
-    //   </Box>
-    // );
+    if (c === "5.2B1") return (
+      <Box key={posteSourceId} mt={6}>
+        <Source5_2B1Form rows={rows5_2B1} setRows={setRows5_2B1} posteSourceId={posteSourceId} userId={userId} gesResults={ges5_2B1} setGesResults={setGes5_2B1} />
+      </Box>
+    );
 
     /* Placeholder for forms not yet built */
     return (
@@ -234,7 +244,7 @@ export default function Categorie5Main({ activeSubKey, bilanId, onNextSource }: 
         )}
 
         {!loading && userId && (
-          <HStack justify="flex-end" mt={6} spacing={4}>
+          <HStack justify="space-between" mt={6} spacing={4}>
             <Button
               variant="outline"
               borderColor={COL.greenBar}
@@ -242,20 +252,35 @@ export default function Categorie5Main({ activeSubKey, bilanId, onNextSource }: 
               _hover={{ bg: "#e8f0ea" }}
               size="md"
               px={6}
+              isDisabled={!onPrevSource}
+              onClick={onPrevSource}
             >
-              Valider Page
+              ← Source précédente
             </Button>
-            <Button
-              bg={COL.greenBar}
-              color="white"
-              _hover={{ bg: "#2d5c4a" }}
-              size="md"
-              px={6}
-              isDisabled={!onNextSource}
-              onClick={onNextSource}
-            >
-              Prochaine Source →
-            </Button>
+            <HStack spacing={4}>
+              <Button
+                variant="outline"
+                borderColor={COL.greenBar}
+                color={COL.greenBar}
+                _hover={{ bg: "#e8f0ea" }}
+                size="md"
+                px={6}
+                isDisabled
+              >
+                Valider la source
+              </Button>
+              <Button
+                bg={COL.greenBar}
+                color="white"
+                _hover={{ bg: "#2d5c4a" }}
+                size="md"
+                px={6}
+                isDisabled={!onNextSource}
+                onClick={onNextSource}
+              >
+                Prochaine Source →
+              </Button>
+            </HStack>
           </HStack>
         )}
       </Stack>

@@ -96,12 +96,14 @@ export function Source6B1Form({
   posteLabel = "6B1 – Électricité provenant du réseau électrique (Market based)",
   userId: propUserId,
   bilanId,
+  onGesChange,
 }: {
   posteId: string | null;
   posteNum?: number;
   posteLabel?: string;
   userId?: string | null;
   bilanId?: string;
+  onGesChange?: (tco2e: number) => void;
 }) {
   const toast = useToast();
 
@@ -132,6 +134,11 @@ export function Source6B1Form({
   const [submissionId, setSubmissionId] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const total = gesResults.reduce((sum, r) => sum + (parseFloat(String(r?.total_ges_tco2e ?? 0)) || 0), 0);
+    onGesChange?.(total);
+  }, [gesResults, onGesChange]);
   const [expandedGroups, setExpandedGroups] = useState<Record<number, boolean>>({});
 
   // Autosave

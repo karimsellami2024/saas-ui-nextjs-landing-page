@@ -22,11 +22,17 @@ type Props = {
   activeSubKey: SubKey | string;
   bilanId?: string;
   onNextSource?: () => void;
+  onPrevSource?: () => void;
+  onGesChange?: (tco2e: number) => void;
 };
 
-export default function Categorie2EnergiePage({ activeSubKey, bilanId, onNextSource }: Props) {
+export default function Categorie2EnergiePage({ activeSubKey, bilanId, onNextSource, onPrevSource, onGesChange }: Props) {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
+  const [ges6A1, setGes6A1] = useState(0);
+  const [ges6B1, setGes6B1] = useState(0);
+
+  useEffect(() => { onGesChange?.(ges6A1 + ges6B1); }, [ges6A1, ges6B1, onGesChange]);
 
   // ✅ Catégorie 2 = Poste 2 (DB)
   const [posteId, setPosteId] = useState<string | null>(null);
@@ -112,6 +118,7 @@ export default function Categorie2EnergiePage({ activeSubKey, bilanId, onNextSou
             posteLabel="6A1 - Électricité provenant du réseau électrique (Location based)"
             userId={userId}
             bilanId={bilanId}
+            onGesChange={setGes6A1}
           />
         </Box>
       );
@@ -126,6 +133,7 @@ export default function Categorie2EnergiePage({ activeSubKey, bilanId, onNextSou
             posteLabel="6B1 - Électricité provenant du réseau électrique (Market based)"
             userId={userId}
             bilanId={bilanId}
+            onGesChange={setGes6B1}
           />
         </Box>
       );
@@ -171,7 +179,7 @@ export default function Categorie2EnergiePage({ activeSubKey, bilanId, onNextSou
         )}
 
         {!loading && userId && (
-          <HStack justify="flex-end" mt={6} spacing={4}>
+          <HStack justify="space-between" mt={6} spacing={4}>
             <Button
               variant="outline"
               borderColor="#1f3f33"
@@ -179,20 +187,35 @@ export default function Categorie2EnergiePage({ activeSubKey, bilanId, onNextSou
               _hover={{ bg: "#e8f0ea" }}
               size="md"
               px={6}
+              isDisabled={!onPrevSource}
+              onClick={onPrevSource}
             >
-              Valider Page
+              ← Source précédente
             </Button>
-            <Button
-              bg="#1f3f33"
-              color="white"
-              _hover={{ bg: "#2d5c4a" }}
-              size="md"
-              px={6}
-              isDisabled={!onNextSource}
-              onClick={onNextSource}
-            >
-              Prochaine Source →
-            </Button>
+            <HStack spacing={4}>
+              <Button
+                variant="outline"
+                borderColor="#1f3f33"
+                color="#1f3f33"
+                _hover={{ bg: "#e8f0ea" }}
+                size="md"
+                px={6}
+                isDisabled
+              >
+                Valider la source
+              </Button>
+              <Button
+                bg="#1f3f33"
+                color="white"
+                _hover={{ bg: "#2d5c4a" }}
+                size="md"
+                px={6}
+                isDisabled={!onNextSource}
+                onClick={onNextSource}
+              >
+                Prochaine Source →
+              </Button>
+            </HStack>
           </HStack>
         )}
       </Box>

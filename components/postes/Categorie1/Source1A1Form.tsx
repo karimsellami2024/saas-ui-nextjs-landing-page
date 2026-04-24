@@ -577,14 +577,14 @@ export function Source1AForm({
   };
 
   useEffect(() => {
-    if (!userId || !posteSourceId) return;
+    if (!userId || !posteSourceId || prefillLoading || isPristine) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(saveDraft, 900);
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, userId, posteSourceId]);
+  }, [rows, userId, posteSourceId, prefillLoading, isPristine]);
 
   // ---------- submit ----------
   const [submitting, setSubmitting] = useState(false);

@@ -162,6 +162,41 @@ const STEPS: Record<string, StepDef> = {
 /* Progress: main steps only (not sub-steps) */
 const MAIN_STEP_IDS = ['combustion_fixe', 'vehicules', 'refrigerants_fixes', 'propriete', 'electricite', 'renouvelable'];
 
+/* ── Source row — defined outside to keep stable component identity ── */
+function SourceRow({
+  code, label, desc, isOn, onToggle,
+}: { code: string; label: string; desc: string; isOn: boolean; onToggle: () => void }) {
+  return (
+    <Box
+      px={3} py={2.5} borderRadius="lg" border="1.5px solid"
+      borderColor={isOn ? C.accent : C.border}
+      bg={isOn ? '#EEF5EE' : C.white}
+      cursor="pointer"
+      onClick={onToggle}
+      transition="all 0.15s"
+      _hover={{ borderColor: C.accent, bg: '#EEF5EE' }}
+      position="relative"
+    >
+      <HStack align="start" spacing={2.5}>
+        <Checkbox
+          isChecked={isOn}
+          colorScheme="green"
+          onChange={onToggle}
+          mt={0.5}
+          onClick={e => e.stopPropagation()}
+        />
+        <Box flex={1} minW={0}>
+          <HStack spacing={2} flexWrap="wrap">
+            <Text fontSize="xs" fontWeight={700} color={isOn ? C.brand : C.muted}>{label}</Text>
+            <Badge fontSize="9px" colorScheme={isOn ? 'green' : 'gray'} variant="subtle" borderRadius="sm">{code}</Badge>
+          </HStack>
+          <Text fontSize="xs" color={C.muted} mt={0.5} lineHeight="1.4">{desc}</Text>
+        </Box>
+      </HStack>
+    </Box>
+  );
+}
+
 /* ══════════════════════════════════════════════════════════════
    COMPONENT
 ══════════════════════════════════════════════════════════════ */
@@ -326,41 +361,6 @@ export default function SourceSelectionModal({
   const mainIdx    = MAIN_STEP_IDS.indexOf(isRecap ? 'recap' : MAIN_STEP_IDS.find(id => history.includes(id) || id === stepId) || stepId);
   const progressPct = isRecap ? 100 : Math.round(((MAIN_STEP_IDS.indexOf(stepId.startsWith('vehicules') && stepId !== 'vehicules' ? 'vehicules' : stepId) + 1) / (MAIN_STEP_IDS.length + 1)) * 100);
 
-  /* ── Source row (right panel) ── */
-  const SourceRow = ({ code, label, desc }: { code: string; label: string; desc: string }) => {
-    const isOn = selected.has(code);
-    return (
-      <Box
-        px={3} py={2.5} borderRadius="lg" border="1.5px solid"
-        borderColor={isOn ? C.accent : C.border}
-        bg={isOn ? '#EEF5EE' : C.white}
-        cursor={isRecap ? 'pointer' : 'default'}
-        onClick={isRecap ? () => toggleSource(code) : undefined}
-        transition="all 0.15s"
-        _hover={isRecap ? { borderColor: C.accent, bg: '#EEF5EE' } : {}}
-        position="relative"
-      >
-        <HStack align="start" spacing={2.5}>
-          <Checkbox
-            isChecked={isOn}
-            colorScheme="green"
-            onChange={() => toggleSource(code)}
-            mt={0.5}
-            isReadOnly={!isRecap}
-            onClick={e => { if (!isRecap) e.preventDefault(); else e.stopPropagation(); }}
-          />
-          <Box flex={1} minW={0}>
-            <HStack spacing={2} flexWrap="wrap">
-              <Text fontSize="xs" fontWeight={700} color={isOn ? C.brand : C.muted}>{label}</Text>
-              <Badge fontSize="9px" colorScheme={isOn ? 'green' : 'gray'} variant="subtle" borderRadius="sm">{code}</Badge>
-            </HStack>
-            <Text fontSize="xs" color={C.muted} mt={0.5} lineHeight="1.4">{desc}</Text>
-          </Box>
-        </HStack>
-      </Box>
-    );
-  };
-
   return (
     <Modal isOpen={show} onClose={handleSkip} size="6xl" scrollBehavior="inside" isCentered>
       <ModalOverlay bg="rgba(0,0,0,0.60)" backdropFilter="blur(4px)" />
@@ -429,38 +429,38 @@ export default function SourceSelectionModal({
             >
               {isRecap ? (
                 /* ─ Recap panel ─ */
-                <Flex direction="column" flex={1} px={6} py={6} justify="center">
-                  <Text fontSize="2xl" mb={3} textAlign="center">✅</Text>
-                  <Heading size="sm" color={C.brand} textAlign="center" mb={2}>
-                    Récapitulatif de votre sélection
-                  </Heading>
-                  <Text fontSize="sm" color={C.muted} textAlign="center" mb={5} lineHeight="1.6">
-                    Vérifiez les sources identifiées à droite. Vous pouvez cocher ou décocher librement
-                    avant de confirmer. Les sources non sélectionnées seront masquées pour votre entreprise.
+                <Flex direction="column" flex={1} px={5} py={5} overflowY="auto">
+                  <HStack mb={4} spacing={2}>
+                    <Text fontSize="xl">✅</Text>
+                    <Heading size="sm" color={C.brand}>Récapitulatif — cochez / décochez</Heading>
+                  </HStack>
+                  <Text fontSize="xs" color={C.muted} mb={4} lineHeight="1.6">
+                    Activez ou désactivez chaque méthodologie directement ici ou à droite avant de confirmer.
                   </Text>
 
-                  <Box
-                    px={4} py={3} borderRadius="xl"
-                    bg={C.bg} border={`1px solid ${C.border}`}
-                    mb={4}
-                  >
-                    <Text fontSize="xs" fontWeight={700} color={C.brand} mb={2}>Sources retenues :</Text>
-                    {ALL_SOURCES.filter(s => selected.has(s.code)).length === 0 ? (
-                      <Text fontSize="xs" color={C.muted}>Aucune source sélectionnée</Text>
-                    ) : (
-                      <Flex gap={1.5} flexWrap="wrap">
-                        {ALL_SOURCES.filter(s => selected.has(s.code)).map(s => (
-                          <Badge key={s.code} colorScheme="green" fontSize="xs" px={2} py={0.5} borderRadius="md">
-                            {s.code}
-                          </Badge>
-                        ))}
-                      </Flex>
-                    )}
+                  <Box mb={3}>
+                    <HStack mb={2} spacing={2}>
+                      <Box w="3px" h="14px" bg={C.brand} borderRadius="full" />
+                      <Text fontSize="xs" fontWeight={700} color={C.brand} textTransform="uppercase" letterSpacing="0.06em">
+                        Catégorie 1 — Scope 1
+                      </Text>
+                    </HStack>
+                    <VStack spacing={1.5} align="stretch">
+                      {CAT1_SOURCES.map(s => <SourceRow key={s.code} {...s} isOn={selected.has(s.code)} onToggle={() => toggleSource(s.code)} />)}
+                    </VStack>
                   </Box>
 
-                  <Text fontSize="xs" color={C.muted} textAlign="center">
-                    Vous pouvez modifier la sélection depuis l'onglet Entreprise à tout moment.
-                  </Text>
+                  <Box>
+                    <HStack mb={2} spacing={2}>
+                      <Box w="3px" h="14px" bg={C.accent} borderRadius="full" />
+                      <Text fontSize="xs" fontWeight={700} color={C.brand} textTransform="uppercase" letterSpacing="0.06em">
+                        Catégorie 2 — Scope 2
+                      </Text>
+                    </HStack>
+                    <VStack spacing={1.5} align="stretch">
+                      {CAT2_SOURCES.map(s => <SourceRow key={s.code} {...s} isOn={selected.has(s.code)} onToggle={() => toggleSource(s.code)} />)}
+                    </VStack>
+                  </Box>
                 </Flex>
               ) : step ? (
                 /* ─ Question panel ─ */
@@ -611,7 +611,7 @@ export default function SourceSelectionModal({
                   <Badge colorScheme="green" fontSize="9px" variant="subtle">Direct</Badge>
                 </HStack>
                 <VStack spacing={2} align="stretch">
-                  {CAT1_SOURCES.map(s => <SourceRow key={s.code} {...s} />)}
+                  {CAT1_SOURCES.map(s => <SourceRow key={s.code} {...s} isOn={selected.has(s.code)} onToggle={() => toggleSource(s.code)} />)}
                 </VStack>
               </Box>
 
@@ -622,7 +622,7 @@ export default function SourceSelectionModal({
                   <Badge colorScheme="teal" fontSize="9px" variant="subtle">Énergie importée</Badge>
                 </HStack>
                 <VStack spacing={2} align="stretch">
-                  {CAT2_SOURCES.map(s => <SourceRow key={s.code} {...s} />)}
+                  {CAT2_SOURCES.map(s => <SourceRow key={s.code} {...s} isOn={selected.has(s.code)} onToggle={() => toggleSource(s.code)} />)}
                 </VStack>
               </Box>
 
@@ -638,24 +638,21 @@ export default function SourceSelectionModal({
           {/* ── Footer ── */}
           <Flex px={5} py={3.5} borderTop={`1px solid ${C.border}`} bg={C.bg} justify="space-between" align="center">
             <Text fontSize="xs" color={C.muted}>
-              {isRecap
-                ? `${selected.size} source${selected.size !== 1 ? 's' : ''} sélectionnée${selected.size !== 1 ? 's' : ''}`
-                : 'Répondez aux questions pour identifier vos sources'}
+              {`${selected.size} source${selected.size !== 1 ? 's' : ''} sélectionnée${selected.size !== 1 ? 's' : ''}`}
             </Text>
             <HStack spacing={3}>
               <Button variant="ghost" size="sm" color={C.muted} fontWeight={500} onClick={handleSkip}>
                 Configurer plus tard
               </Button>
-              {isRecap && (
-                <Button
-                  size="sm" bg={C.accent} color={C.white} fontWeight={700} px={6}
-                  borderRadius="lg" _hover={{ bg: C.dark }}
-                  isLoading={confirming} loadingText="Sauvegarde…"
-                  onClick={handleConfirm}
-                >
-                  ✓ Confirmer la sélection
-                </Button>
-              )}
+              <Button
+                size="sm" bg={C.accent} color={C.white} fontWeight={700} px={6}
+                borderRadius="lg" _hover={{ bg: C.dark }}
+                isLoading={confirming} loadingText="Sauvegarde…"
+                isDisabled={selected.size === 0}
+                onClick={handleConfirm}
+              >
+                ✓ Sauvegarder
+              </Button>
             </HStack>
           </Flex>
         </ModalBody>

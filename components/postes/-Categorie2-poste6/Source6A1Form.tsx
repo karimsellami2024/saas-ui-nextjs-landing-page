@@ -106,12 +106,14 @@ export function SourceAForm({
   posteLabel = "6A1 - Électricité provenant du réseau électrique (Location based)",
   userId: propUserId,
   bilanId,
+  onGesChange,
 }: {
   posteId: string | null;
   posteNum?: number;
   posteLabel?: string;
   userId?: string | null;
   bilanId?: string;
+  onGesChange?: (tco2e: number) => void;
 }) {
   const toast = useToast();
 
@@ -126,6 +128,12 @@ export function SourceAForm({
   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+
+  useEffect(() => {
+    const total = (compteurs || []).reduce((sum, g) =>
+      sum + (g.details || []).reduce((s, d) => s + calcRowTco2e(g.province, d.consumption), 0), 0);
+    onGesChange?.(total);
+  }, [compteurs, onGesChange]);
   const [expandedGroups, setExpandedGroups] = useState<Record<number, boolean>>({});
 
   // Autosave

@@ -28,29 +28,34 @@ interface PosteDef {
 }
 
 const POSTES: PosteDef[] = [
+  /* ── Catégorie 1 — Scope 1 (direct) ─────────────────────── */
   { num:  1, scope:1, cat:'Catégorie 1', description:"Émissions directes des sources de combustions fixes",                                                       codes:['1A1'],                               fallback:'NA' },
   { num:  2, scope:1, cat:'Catégorie 1', description:"Émissions directes des sources de combustions mobiles",                                                      codes:['2A1','2A3'],                         fallback:'NA' },
   { num:  3, scope:1, cat:'Catégorie 1', description:"Émissions directes provenant des procédés et élevages d'animaux",                                            codes:[],                                    fallback:'NA' },
   { num:  4, scope:1, cat:'Catégorie 1', description:"Émissions fugitives directes (Réfrigérants)",                                                                codes:['4A1','4B1','4B2'],                   fallback:'NA' },
   { num:  5, scope:1, cat:'Catégorie 1', description:"Émissions directes provenant de l'usage des sols (incluant agricoles) et de la foresterie",                  codes:[],                                    fallback:'NA' },
+  /* ── Catégorie 2 — Scope 2 (énergie importée) ───────────── */
   { num:  6, scope:2, cat:'Catégorie 2', description:"Émissions indirectes provenant de la consommation d'électricité",                                            codes:['6A1','6B1'],                         fallback:'NA' },
   { num:  7, scope:2, cat:'Catégorie 2', description:"Émissions indirectes provenant de la consommation d'un réseau d'énergie (exclut l'électricité)",             codes:[],                                    fallback:'NA' },
+  /* ── Catégorie 3 — Scope 3 (transports & déplacements) ─── */
+  { num: 12, scope:3, cat:'Catégorie 3', description:"Transport et distribution en amont",                                                                         codes:[],                                    fallback:'NA' },
+  { num: 13, scope:3, cat:'Catégorie 3', description:"Déplacements d'affaires",                                                                                    codes:['3.5A1'],                             fallback:'NA' },
+  { num: 16, scope:3, cat:'Catégorie 3', description:"Déplacements des clients et des visiteurs (évènements)",                                                     codes:['3.4B1'],                             fallback:'NA' },
+  { num: 17, scope:3, cat:'Catégorie 3', description:"Transport et distribution des produits en aval",                                                             codes:[],                                    fallback:'NA' },
+  { num: 22, scope:3, cat:'Catégorie 3', description:"Navettage des employés",                                                                                     codes:['3A1','3.3A1'],                       fallback:'NON_COMPTE', nonCompteInData:true },
+  /* ── Catégorie 4 — Scope 3 (produits & services achetés) ── */
   { num:  8, scope:3, cat:'Catégorie 4', description:"Autres émissions dues à la production et la distribution d'énergie",                                         codes:[],                                    fallback:'NA' },
   { num:  9, scope:3, cat:'Catégorie 4', description:"Achat de biens et services",                                                                                 codes:['4.1A2'],                             fallback:'AMELIORATION' },
   { num: 10, scope:3, cat:'Catégorie 4', description:"Biens immobiliers",                                                                                          codes:[],                                    fallback:'NA' },
   { num: 11, scope:3, cat:'Catégorie 4', description:"Déchets",                                                                                                    codes:['4.3A1'],                             fallback:'AMELIORATION', nonCompteInData:true },
-  { num: 12, scope:3, cat:'Catégorie 3', description:"Transport et distribution en amont",                                                                         codes:[],                                    fallback:'NA' },
-  { num: 13, scope:3, cat:'Catégorie 3', description:"Déplacements d'affaires",                                                                                    codes:['3.5A1'],                             fallback:'NA' },
   { num: 14, scope:3, cat:'Catégorie 4', description:"Location d'actif en amont (place d'affaires)",                                                               codes:['4.1B1','4.1C1','4.1D1','4.1E1','4.1E2'], fallback:'NA' },
+  /* ── Catégorie 5 — Scope 3 (utilisation & fin de vie produits) */
   { num: 15, scope:3, cat:'Catégorie 5', description:"Investissement",                                                                                             codes:[],                                    fallback:'AMELIORATION', nonCompteInData:true },
-  { num: 16, scope:3, cat:'Catégorie 3', description:"Déplacements des clients et des visiteurs (évènements)",                                                     codes:['3.4B1'],                             fallback:'NA' },
-  { num: 17, scope:3, cat:'Catégorie 3', description:"Transport et distribution des produits en aval",                                                             codes:[],                                    fallback:'NA' },
   { num: 18, scope:3, cat:'Catégorie 5', description:"Utilisation des produits vendus",                                                                            codes:['5.1A1','5.1B1'],                     fallback:'NA' },
   { num: 19, scope:3, cat:'Catégorie 5', description:"Fin de vie des produits",                                                                                    codes:['5.2A1','5.2B1'],                     fallback:'NA' },
   { num: 20, scope:3, cat:'Catégorie 5', description:"Franchises en aval",                                                                                         codes:[],                                    fallback:'NA' },
   { num: 21, scope:3, cat:'Catégorie 5', description:"Location d'actif en aval",                                                                                   codes:[],                                    fallback:'NA' },
-  { num: 22, scope:3, cat:'Catégorie 3', description:"Navettage des employés",                                                                                     codes:['3A1','3.3A1'],                       fallback:'NON_COMPTE', nonCompteInData:true },
-  { num: 23, scope:3, cat:'Catégorie 6', description:"Autres sources d'émissions indirectes",                                                                      codes:[],                                    fallback:'NA' },
+  { num: 23, scope:3, cat:'Catégorie 5', description:"Autres sources d'émissions indirectes",                                                                      codes:[],                                    fallback:'NA' },
 ];
 
 /* ── Span builder ── */

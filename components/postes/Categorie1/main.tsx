@@ -70,9 +70,11 @@ type Props = {
   activeSubKey: SubKey | string;
   bilanId?: string;
   onNextSource?: () => void;
+  onPrevSource?: () => void;
+  onGesChange?: (tco2e: number) => void;
 };
 
-export default function Categorie1Page({ activeSubKey, bilanId, onNextSource }: Props) {
+export default function Categorie1Page({ activeSubKey, bilanId, onNextSource, onPrevSource, onGesChange }: Props) {
   /* ===================== GLOBAL CONFIG ===================== */
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
@@ -85,9 +87,7 @@ export default function Categorie1Page({ activeSubKey, bilanId, onNextSource }: 
   const pageBg = useColorModeValue(COL.bg, '#222e32');
 
   /* ===================== POSTE 1 STATE ===================== */
-  const [rows1A1, setRows1A1] = useState<Source1ARow[]>([
-    { equipment: '', description: '', date: '', site: '', product: '', reference: '', usageAndFuel: '', qty: '', unit: '' },
-  ]);
+  const [rows1A1, setRows1A1] = useState<Source1ARow[]>([]);
   const [ges1A1, setGes1A1] = useState<any[]>([]);
 
   /* ===================== POSTE 2 STATE ===================== */
@@ -103,6 +103,14 @@ export default function Categorie1Page({ activeSubKey, bilanId, onNextSource }: 
   const [ges4A1, setGes4A1] = useState<GesResult[]>([]);
   const [ges4B1, setGes4B1] = useState<GesResult[]>([]);
   const [ges4B2, setGes4B2] = useState<GesResult[]>([]);
+
+  /* ===================== LIVE TOTAL ===================== */
+  const totalTco2e = useMemo(() => {
+    const allGes = [...ges1A1, ...ges2, ...ges4A1, ...ges4B1, ...ges4B2];
+    return allGes.reduce((sum, r) => sum + (parseFloat(String(r?.total_ges_tco2e ?? 0)) || 0), 0);
+  }, [ges1A1, ges2, ges4A1, ges4B1, ges4B2]);
+
+  useEffect(() => { onGesChange?.(totalTco2e); }, [totalTco2e, onGesChange]);
 
   /* ===================== POSTE 2 HELPERS ===================== */
   const updateGroupField = (gIdx: number, key: keyof CarburantGroup, value: string) => {
@@ -460,7 +468,7 @@ export default function Categorie1Page({ activeSubKey, bilanId, onNextSource }: 
         )}
 
         {!loading && userId && (
-          <HStack justify="flex-end" mt={6} spacing={4}>
+          <HStack justify="space-between" mt={6} spacing={4}>
             <Button
               variant="outline"
               borderColor={COL.greenBar}
@@ -468,20 +476,35 @@ export default function Categorie1Page({ activeSubKey, bilanId, onNextSource }: 
               _hover={{ bg: "#e8f0ea" }}
               size="md"
               px={6}
+              isDisabled={!onPrevSource}
+              onClick={onPrevSource}
             >
-              Valider Page
+              ← Source précédente
             </Button>
-            <Button
-              bg={COL.greenBar}
-              color="white"
-              _hover={{ bg: "#2d5c4a" }}
-              size="md"
-              px={6}
-              isDisabled={!onNextSource}
-              onClick={onNextSource}
-            >
-              Prochaine Source →
-            </Button>
+            <HStack spacing={4}>
+              <Button
+                variant="outline"
+                borderColor={COL.greenBar}
+                color={COL.greenBar}
+                _hover={{ bg: "#e8f0ea" }}
+                size="md"
+                px={6}
+                isDisabled
+              >
+                Valider la source
+              </Button>
+              <Button
+                bg={COL.greenBar}
+                color="white"
+                _hover={{ bg: "#2d5c4a" }}
+                size="md"
+                px={6}
+                isDisabled={!onNextSource}
+                onClick={onNextSource}
+              >
+                Prochaine Source →
+              </Button>
+            </HStack>
           </HStack>
         )}
       </Stack>

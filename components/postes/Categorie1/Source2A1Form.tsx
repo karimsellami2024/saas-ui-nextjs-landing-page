@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Heading,
@@ -172,6 +172,7 @@ export function SourceA1Form({
   flattenCarburantGroups,
   posteSourceId,
   userId,
+  bilanId,
   gesResults = [],
   setGesResults,
 }: SourceA1FormProps) {
@@ -181,6 +182,34 @@ export function SourceA1Form({
   const [collapsed, setCollapsed] = useState(false);
   const [savingMsg, setSavingMsg] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+
+  const debounceRef2A1 = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedJSON2A1 = useRef<string>("");
+
+  const autoSave2A1 = async () => {
+    if (!userId || !posteSourceId || !refs) return;
+    const json = JSON.stringify(carburantGroups);
+    if (json === lastSavedJSON2A1.current) return;
+    const results = computeResults(carburantGroups, refs);
+    const payload = {
+      user_id: userId, poste_source_id: posteSourceId,
+      source_code: "2A1", submission_id: bilanId ?? null,
+      data: { groups: carburantGroups.map(g => ({ ...g, rows: g.rows.map(r => ({ ...r, qty: toNum(r.qty, 0) })) })) },
+      results,
+    };
+    try {
+      const res = await fetch("/api/2submit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) { lastSavedJSON2A1.current = json; setGesResults(results); setJustSaved(true); setTimeout(() => setJustSaved(false), 1500); }
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => {
+    if (!userId || !posteSourceId || !refs) return;
+    if (debounceRef2A1.current) clearTimeout(debounceRef2A1.current);
+    debounceRef2A1.current = setTimeout(autoSave2A1, 900);
+    return () => { if (debounceRef2A1.current) clearTimeout(debounceRef2A1.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [carburantGroups, refs, userId, posteSourceId]);
 
   const [fleet, setFleet] = useState<FleetVehicle[]>([]);
   const [loadingFleet, setLoadingFleet] = useState(true);

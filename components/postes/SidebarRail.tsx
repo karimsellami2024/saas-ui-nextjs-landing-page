@@ -79,7 +79,7 @@ export default function SidebarRail({
 
         {/* ── Avatar + date ── */}
         <VStack spacing={1} py={3} borderBottom="1px solid #F2F4F7" w="full" align="center">
-          <Tooltip label="Notifications" placement="right">
+          <Tooltip label="Entreprise" placement="right">
             <Box
               as="button"
               onClick={onNotificationsClick}

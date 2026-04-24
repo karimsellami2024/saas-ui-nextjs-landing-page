@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Grid,
@@ -155,6 +155,7 @@ export function SourceB1Form({
   addB1Row,
   posteSourceId,
   userId,
+  bilanId,
   gesResults = [],
   setGesResults,
 }: SourceB1FormProps) {
@@ -459,6 +460,32 @@ export function SourceB1Form({
     setGesResults?.(computed);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [computed]);
+
+  const debounceRef2B1 = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSavedJSON2B1 = useRef<string>("");
+
+  const autoSave2B1 = async () => {
+    if (!userId || !posteSourceId || !refs) return;
+    const json = JSON.stringify(b1Rows);
+    if (json === lastSavedJSON2B1.current) return;
+    const payload = {
+      user_id: userId, poste_source_id: posteSourceId, poste_num: 2,
+      source_code: "2B1", submission_id: bilanId ?? null,
+      data: { rows: b1Rows }, results: computed,
+    };
+    try {
+      const res = await fetch("/api/2submit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      if (res.ok) { lastSavedJSON2B1.current = json; }
+    } catch { /* silent */ }
+  };
+
+  useEffect(() => {
+    if (!userId || !posteSourceId || !refs) return;
+    if (debounceRef2B1.current) clearTimeout(debounceRef2B1.current);
+    debounceRef2B1.current = setTimeout(autoSave2B1, 900);
+    return () => { if (debounceRef2B1.current) clearTimeout(debounceRef2B1.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [b1Rows, refs, userId, posteSourceId]);
 
   const validateRows = (rows: B1Row[]) => {
     if (!rows.length) return false;

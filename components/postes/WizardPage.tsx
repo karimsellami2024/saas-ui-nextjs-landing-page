@@ -37,15 +37,15 @@ const MOBILE_FUELS = [
   { label: 'Propane', kgco2e: 1.540 },
 ]
 const PROVINCES: Record<string, number> = {
-  "QuÃ©bec": 0.002,
+  "Québec": 0.002,
   "Ontario": 0.056,
   "Colombie-Britannique": 0.013,
   "Alberta": 0.670,
   "Manitoba": 0.004,
   "Saskatchewan": 0.510,
-  "Nouvelle-Ã‰cosse": 0.670,
+  "Nouvelle-Écosse": 0.670,
   "Nouveau-Brunswick": 0.300,
-  "ÃŽle-du-Prince-Ã‰douard": 0.280,
+  "Île-du-Prince-Édouard": 0.280,
   "Terre-Neuve-et-Labrador": 0.019,
   "Nunavut": 0.733,
   "Territoires du Nord-Ouest": 0.279,
@@ -84,7 +84,7 @@ const DEFAULT_FORM: Record<string, Record<string, string>> = {
   '4A1': { refrigerant: 'R-134a', qtyInEquipment: '', leakObserved: '' },
   '4B1': { refrigerant: 'R-134a', qtyInEquipment: '', leakObserved: '', climatisation: 'Oui' },
   '4B2': { refrigerant: 'R-134a', qtyInEquipment: '', leakObserved: '' },
-  '6A1': { province: 'QuÃ©bec', kwh: '' },
+  '6A1': { province: 'Québec', kwh: '' },
   '6B1': { kwh: '', carbonIntensity: '' },
 }
 
@@ -505,15 +505,15 @@ export default function WizardPage({ onFinish }: { onFinish?: () => void }) {
     if (d.province) {
       const rawProvince = String(d.province).trim()
       const provinceMap: Record<string, string> = {
-        QC: 'QuÃ©bec',
+        QC: 'Québec',
         ON: 'Ontario',
         BC: 'Colombie-Britannique',
         AB: 'Alberta',
         MB: 'Manitoba',
         SK: 'Saskatchewan',
-        NS: 'Nouvelle-Ã‰cosse',
+        NS: 'Nouvelle-Écosse',
         NB: 'Nouveau-Brunswick',
-        PE: 'ÃŽle-du-Prince-Ã‰douard',
+        PE: 'Île-du-Prince-Édouard',
         NL: 'Terre-Neuve-et-Labrador',
         NU: 'Nunavut',
         NT: 'Territoires du Nord-Ouest',
@@ -1266,7 +1266,7 @@ function SourceForm({ sourceCode, formData, onChange }: {
         </Select>
       </Box>
       <Box>
-        {label('QuantitÃ© totale (L)')}
+        {label('Quantité totale (L)')}
         <Input {...IS} type="number" placeholder="0" value={formData.estimateQty}
           onChange={e => onChange('estimateQty', e.target.value)} />
       </Box>
@@ -1318,20 +1318,20 @@ function SourceForm({ sourceCode, formData, onChange }: {
   if (sourceCode === '4A1-wizard' || sourceCode === '4B2-wizard') return (
     <VStack spacing={4} align="stretch">
       <Box>
-        {label('Type de rÃ©frigÃ©rant')}
+        {label('Type de réfrigérant')}
         <Select {...IS} value={formData.refrigerant} onChange={e => onChange('refrigerant', e.target.value)}>
           {REFRIGERANTS.map(r => (
-            <option key={r.label} value={r.label}>{r.label} â€” PRG {r.prg.toLocaleString('fr-CA')}</option>
+            <option key={r.label} value={r.label}>{r.label} – PRG {r.prg.toLocaleString('fr-CA')}</option>
           ))}
         </Select>
       </Box>
       <Box>
-        {label(sourceCode === '4A1-wizard' ? 'Charge de rÃ©frigÃ©rant (kg)' : 'Charge de rÃ©frigÃ©rant (lbs)')}
+        {label(sourceCode === '4A1-wizard' ? 'Charge de réfrigérant (kg)' : 'Charge de réfrigérant (lbs)')}
         <Input {...IS} type="number" placeholder="0" value={formData.qtyInEquipment}
           onChange={e => onChange('qtyInEquipment', e.target.value)} />
       </Box>
       <Box>
-        {label(sourceCode === '4A1-wizard' ? 'Fuite observÃ©e (kg)' : 'Fuite observÃ©e (lbs)')}
+        {label(sourceCode === '4A1-wizard' ? 'Fuite observée (kg)' : 'Fuite observée (lbs)')}
         <Input {...IS} type="number" placeholder="0" value={formData.leakObserved}
           onChange={e => onChange('leakObserved', e.target.value)} />
       </Box>
@@ -1341,25 +1341,25 @@ function SourceForm({ sourceCode, formData, onChange }: {
   if (sourceCode === '4B1-wizard') return (
     <VStack spacing={4} align="stretch">
       <Box>
-        {label('Type de rÃ©frigÃ©rant')}
+        {label('Type de réfrigérant')}
         <Select {...IS} value={formData.refrigerant} onChange={e => onChange('refrigerant', e.target.value)}>
           {REFRIGERANTS.map(r => (
-            <option key={r.label} value={r.label}>{r.label} â€” PRG {r.prg.toLocaleString('fr-CA')}</option>
+            <option key={r.label} value={r.label}>{r.label} – PRG {r.prg.toLocaleString('fr-CA')}</option>
           ))}
         </Select>
       </Box>
       <Box>
-        {label('Charge de rÃ©frigÃ©rant (lbs)')}
+        {label('Charge de réfrigérant (lbs)')}
         <Input {...IS} type="number" placeholder="0" value={formData.qtyInEquipment}
           onChange={e => onChange('qtyInEquipment', e.target.value)} />
       </Box>
       <Box>
-        {label('Fuite observÃ©e (lbs)')}
+        {label('Fuite observée (lbs)')}
         <Input {...IS} type="number" placeholder="0" value={formData.leakObserved}
           onChange={e => onChange('leakObserved', e.target.value)} />
       </Box>
       <Box>
-        {label('Climatisation prÃ©sente')}
+        {label('Climatisation présente')}
         <Select {...IS} value={formData.climatisation} onChange={e => onChange('climatisation', e.target.value)}>
           <option value="Oui">Oui</option>
           <option value="Non">Non</option>
@@ -1428,7 +1428,7 @@ function SourceForm({ sourceCode, formData, onChange }: {
           onChange={e => onChange('kwh', e.target.value)} />
       </Box>
       <Box>
-        {label('IntensitÃ© carbone (gCOâ‚‚e/kWh)')}
+        {label('Intensité carbone (gCO₂e/kWh)')}
         <Input {...IS} type="number" placeholder="0" value={formData.carbonIntensity}
           onChange={e => onChange('carbonIntensity', e.target.value)} />
       </Box>

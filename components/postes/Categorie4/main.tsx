@@ -38,6 +38,8 @@ type Props = {
   activeSubKey: SubKey | string;
   bilanId?: string;
   onNextSource?: () => void;
+  onPrevSource?: () => void;
+  onGesChange?: (tco2e: number) => void;
 };
 
 export const SUBKEY_TO_SOURCE_CODES: Record<SubKey, string[]> = {
@@ -59,7 +61,7 @@ const matchesAllowed = (code: string, allowed: string[]) => {
 };
 
 /* ===================== COMPONENT ===================== */
-export default function Categorie4Main({ activeSubKey, bilanId, onNextSource }: Props) {
+export default function Categorie4Main({ activeSubKey, bilanId, onNextSource, onPrevSource, onGesChange }: Props) {
   const pageBg = useColorModeValue(COL.bg, "#222e32");
   const subKey = (activeSubKey as SubKey) || "p41";
   const title = LABEL_BY_SUBKEY[subKey] ?? POSTE_LABEL_FALLBACK;
@@ -93,6 +95,14 @@ export default function Categorie4Main({ activeSubKey, bilanId, onNextSource }: 
 
   const [rows4_3A1, setRows4_3A1] = useState<Source4_3A1Row[]>([]);
   const [ges4_3A1, setGes4_3A1] = useState<any[]>([]);
+
+  /* ===================== LIVE TOTAL ===================== */
+  const totalTco2e = useMemo(() => {
+    const allGes = [...ges4_1A2, ...ges4_1B1, ...ges4_1C1, ...ges4_1D1, ...ges4_1E1, ...ges4_1E2, ...ges4_3A1];
+    return allGes.reduce((sum, r) => sum + (parseFloat(String(r?.total_ges_tco2e ?? 0)) || 0), 0);
+  }, [ges4_1A2, ges4_1B1, ges4_1C1, ges4_1D1, ges4_1E1, ges4_1E2, ges4_3A1]);
+
+  useEffect(() => { onGesChange?.(totalTco2e); }, [totalTco2e, onGesChange]);
 
   /* ===================== LOAD USER + POSTE CONFIG ===================== */
   useEffect(() => {
@@ -271,7 +281,7 @@ export default function Categorie4Main({ activeSubKey, bilanId, onNextSource }: 
         )}
 
         {!loading && userId && (
-          <HStack justify="flex-end" mt={6} spacing={4}>
+          <HStack justify="space-between" mt={6} spacing={4}>
             <Button
               variant="outline"
               borderColor={COL.greenBar}
@@ -279,20 +289,35 @@ export default function Categorie4Main({ activeSubKey, bilanId, onNextSource }: 
               _hover={{ bg: "#e8f0ea" }}
               size="md"
               px={6}
+              isDisabled={!onPrevSource}
+              onClick={onPrevSource}
             >
-              Valider Page
+              ← Source précédente
             </Button>
-            <Button
-              bg={COL.greenBar}
-              color="white"
-              _hover={{ bg: "#2d5c4a" }}
-              size="md"
-              px={6}
-              isDisabled={!onNextSource}
-              onClick={onNextSource}
-            >
-              Prochaine Source →
-            </Button>
+            <HStack spacing={4}>
+              <Button
+                variant="outline"
+                borderColor={COL.greenBar}
+                color={COL.greenBar}
+                _hover={{ bg: "#e8f0ea" }}
+                size="md"
+                px={6}
+                isDisabled
+              >
+                Valider la source
+              </Button>
+              <Button
+                bg={COL.greenBar}
+                color="white"
+                _hover={{ bg: "#2d5c4a" }}
+                size="md"
+                px={6}
+                isDisabled={!onNextSource}
+                onClick={onNextSource}
+              >
+                Prochaine Source →
+              </Button>
+            </HStack>
           </HStack>
         )}
       </Stack>

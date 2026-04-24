@@ -1313,7 +1313,7 @@ export default function ProductionAndProductsPage() {
 
           <Divider mb={4} />
 
-          {/* Per-user source visibility table */}
+          {/* Per-user source visibility table — transposed: rows=methodologies, cols=users */}
           <Text fontWeight="600" fontSize="sm" color={COL.textBody} mb={3}>
             Visibilité des sources par utilisateur
           </Text>
@@ -1324,55 +1324,108 @@ export default function ProductionAndProductsPage() {
             <Text fontSize="sm" color={COL.textMuted}>
               Aucun utilisateur dans votre organisation. Créez des comptes ci-dessus.
             </Text>
-          ) : (
-            <Box overflowX="auto">
-              <Table size="sm" variant="simple">
-                <Thead bg={COL.surfaceMuted}>
-                  <Tr>
-                    <Th minW="180px">Utilisateur</Th>
-                    {adminPostes.map(p =>
-                      (adminSourcesByPoste[p.id] || []).map(s => (
-                        <Th key={p.id + s.source_code} textAlign="center" fontSize="10px" whiteSpace="normal" maxW="90px" px={2}>
-                          <Badge colorScheme="green" fontSize="10px" mb={0.5}>{s.source_code}</Badge>
-                          <br />
-                          <Text as="span" fontWeight="normal" color={COL.textMuted} fontSize="9px">{s.label}</Text>
-                        </Th>
-                      ))
-                    )}
-                  </Tr>
-                </Thead>
-                <Tbody>
-                  {adminUsers.filter(u => u.role === "user").map(user => (
-                    <Tr key={user.id}>
-                      <Td>
-                        <Text fontSize="sm" fontWeight="600" color={COL.textBody}>{user.email}</Text>
-                      </Td>
-                      {adminPostes.map(p =>
-                        (adminSourcesByPoste[p.id] || []).map(s => {
-                          const isHidden = adminVisibilities.find(
-                            v => v.user_id === user.id && v.poste_id === p.id && v.source_code === s.source_code
-                          )?.is_hidden || false;
-                          return (
-                            <Td key={p.id + s.source_code} textAlign="center">
-                              <Switch
-                                isChecked={!isHidden}
-                                colorScheme="green"
-                                size="sm"
-                                onChange={e => handleAdminToggle(user.id, p.id, s.source_code, !e.target.checked)}
-                              />
-                              <Text fontSize="9px" color={isHidden ? "red.400" : "green.500"} mt={0.5}>
-                                {isHidden ? "OFF" : "ON"}
-                              </Text>
-                            </Td>
-                          );
-                        })
-                      )}
-                    </Tr>
-                  ))}
-                </Tbody>
-              </Table>
-            </Box>
-          )}
+          ) : (() => {
+            /* Ordered methodology catalogue with display codes */
+            const METHODOLOGY_ORDER: { displayCode: string; sourceCode: string; description: string }[] = [
+              { displayCode: '1.1A1', sourceCode: '1A1',  description: 'Combustion fixe' },
+              { displayCode: '1.2A1', sourceCode: '2A1',  description: 'Combustion mobile par quantité de carburant' },
+              { displayCode: '1.2A3', sourceCode: '2A3',  description: 'Combustion mobile par coût d\'essence' },
+              { displayCode: '1.2B1', sourceCode: '2B1',  description: 'Combustion mobile par distance parcourue' },
+              { displayCode: '1.4A1', sourceCode: '4A1',  description: 'Réfrigérant — quantité rapportée par le frigoriste' },
+              { displayCode: '1.4B1', sourceCode: '4B1',  description: 'Climatisation des véhicules (moyenne de l\'industrie)' },
+              { displayCode: '1.4B2', sourceCode: '4B2',  description: 'Climatisation des véhicules (données précises)' },
+              { displayCode: '2.6A1', sourceCode: '6A1',  description: 'Électricité — basé sur le réseau' },
+              { displayCode: '2.6B1', sourceCode: '6B1',  description: 'Électricité — basé sur le marché' },
+            ];
+
+            /* Build a flat map: sourceCode → { poste_id } */
+            const srcToPoste: Record<string, string> = {};
+            adminPostes.forEach(p => {
+              (adminSourcesByPoste[p.id] || []).forEach(s => {
+                srcToPoste[s.source_code] = p.id;
+              });
+            });
+
+            const users = adminUsers.filter(u => u.role === "user");
+
+            return (
+              <Box overflowX="auto">
+                <Box as="table" style={{ borderCollapse: 'collapse', width: '100%', fontSize: '12px' }}>
+                  <thead>
+                    <tr>
+                      {/* Fixed left columns */}
+                      <th style={{ padding: '4px 8px', textAlign: 'left', background: COL.surfaceMuted, border: `1px solid ${COL.border}`, minWidth: '80px', fontWeight: 700, color: COL.textBody }}>
+                        Numéro de Métho
+                      </th>
+                      <th style={{ padding: '4px 8px', textAlign: 'left', background: COL.surfaceMuted, border: `1px solid ${COL.border}`, minWidth: '240px', fontWeight: 700, color: COL.textBody }}>
+                        Description
+                      </th>
+                      {/* One column per user — diagonal email */}
+                      {users.map(user => (
+                        <th key={user.id} style={{ padding: '4px', background: COL.surfaceMuted, border: `1px solid ${COL.border}`, width: '52px', minWidth: '52px', height: '130px', verticalAlign: 'bottom', position: 'relative' }}>
+                          <Box
+                            style={{
+                              transformOrigin: 'bottom left',
+                              transform: 'rotate(-45deg) translateX(4px)',
+                              whiteSpace: 'nowrap',
+                              fontSize: '10px',
+                              fontWeight: 600,
+                              color: COL.textBody,
+                              maxWidth: '160px',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              paddingBottom: '4px',
+                            }}
+                            title={user.email}
+                          >
+                            {user.email}
+                          </Box>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {METHODOLOGY_ORDER.map((meth, idx) => {
+                      const posteId = srcToPoste[meth.sourceCode];
+                      const isCat2 = meth.displayCode.startsWith('2.');
+                      return (
+                        <tr key={meth.sourceCode} style={{ background: idx % 2 === 0 ? '#fff' : '#F8FBF8' }}>
+                          <td style={{ padding: '6px 8px', border: `1px solid ${COL.border}`, fontWeight: 700, color: isCat2 ? '#2C7A7B' : COL.accent, whiteSpace: 'nowrap' }}>
+                            {meth.displayCode}
+                          </td>
+                          <td style={{ padding: '6px 8px', border: `1px solid ${COL.border}`, color: COL.textBody }}>
+                            {meth.description}
+                          </td>
+                          {users.map(user => {
+                            if (!posteId) {
+                              return (
+                                <td key={user.id} style={{ padding: '6px', border: `1px solid ${COL.border}`, textAlign: 'center', color: '#ccc', fontSize: '10px' }}>
+                                  —
+                                </td>
+                              );
+                            }
+                            const isHidden = adminVisibilities.find(
+                              v => v.user_id === user.id && v.poste_id === posteId && v.source_code === meth.sourceCode
+                            )?.is_hidden || false;
+                            return (
+                              <td key={user.id} style={{ padding: '6px', border: `1px solid ${COL.border}`, textAlign: 'center' }}>
+                                <input
+                                  type="checkbox"
+                                  checked={!isHidden}
+                                  onChange={e => handleAdminToggle(user.id, posteId, meth.sourceCode, !e.target.checked)}
+                                  style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: COL.accent }}
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </Box>
+              </Box>
+            );
+          })()}
         </Box>
       )}
 
