@@ -7,7 +7,7 @@ import {
 import {
   FiGrid, FiBarChart2, FiBatteryCharging, FiTruck,
   FiPackage, FiRepeat, FiMoreHorizontal, FiPieChart,
-  FiFileText, FiHelpCircle, FiHome, FiCheckSquare,
+  FiFileText, FiHelpCircle, FiHome, FiCheckSquare, FiZap,
 } from "react-icons/fi";
 import { useRouter } from "next/navigation";
 
@@ -23,6 +23,7 @@ export type SidebarRailProps = {
   onGroupChange: (g: GroupKey) => void;
   onTopSelect?: (k: TopKey) => void;
   onNotificationsClick?: () => void;
+  onAutomationClick?: () => void;
 };
 
 /* ── Tokens ── */
@@ -37,6 +38,7 @@ export default function SidebarRail({
   onGroupChange,
   onTopSelect,
   onNotificationsClick,
+  onAutomationClick,
 }: SidebarRailProps) {
   const railW = useBreakpointValue({ base: "72px", md: "150px" });
   const router = useRouter();
@@ -130,6 +132,7 @@ export default function SidebarRail({
           {/* Outputs */}
           <SidebarBlock>
             <SidebarMini icon={FiCheckSquare} label="Saisie guidée" active={activeTop === "wizard"}  onClick={() => onTopSelect?.("wizard")} />
+            <SidebarMini icon={FiZap}         label="Automatisation" active={false} onClick={onAutomationClick} />
             <SidebarMini icon={FiPieChart}    label="Bilan"         active={activeTop === "bilan"}   onClick={() => onTopSelect?.("bilan")} />
             <SidebarMini icon={FiFileText}    label="Rapport"       active={activeTop === "rapport"} onClick={() => onTopSelect?.("rapport")} />
           </SidebarBlock>

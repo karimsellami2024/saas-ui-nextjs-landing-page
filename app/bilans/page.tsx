@@ -53,7 +53,12 @@ export default function BilansPage() {
 
       const res  = await fetch(`/api/bilans?user_id=${user.id}`);
       const json = await res.json();
-      if (res.ok) setBilans(json.bilans ?? []);
+      if (res.ok) {
+        setBilans(json.bilans ?? []);
+      } else {
+        console.error('Failed to load bilans:', json.error);
+        toast({ title: 'Erreur de chargement', description: json.error ?? 'Impossible de charger vos bilans.', status: 'error', duration: 4000, isClosable: true, position: 'top' });
+      }
       setLoading(false);
     })();
   }, [router]);

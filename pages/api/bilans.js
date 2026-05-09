@@ -1,4 +1,4 @@
-import { supabase } from '../../lib/supabaseClient';
+import { supabaseAdmin as supabase } from '../../lib/supabaseAdmin';
 
 export default async function handler(req, res) {
   if (req.method === 'GET') return handleGet(req, res);
@@ -24,7 +24,7 @@ async function handleGet(req, res) {
 
   const { data: bilans, error } = await supabase
     .from('submissions')
-    .select('id, name, period_start, period_end, status, reporting_year, created_at, updated_at, locked')
+    .select('id, name, period_start, period_end, status, reporting_year, created_at, locked')
     .eq('company_id', profile.company_id)
     .order('created_at', { ascending: false });
 

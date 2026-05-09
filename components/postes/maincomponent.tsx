@@ -9,7 +9,15 @@ import {
   Heading,
   Text,
   Spinner,
+  Drawer,
+  DrawerBody,
+  DrawerCloseButton,
+  DrawerContent,
+  DrawerHeader,
+  DrawerOverlay,
+  useDisclosure,
 } from "@chakra-ui/react";
+import AutomationPage from "../../app/automation/page";
 import { FiHelpCircle as HelpCircle } from "react-icons/fi";
 import { supabase } from "../../lib/supabaseClient";
 
@@ -230,6 +238,8 @@ const POSTE_META: Record<string, { groupTitle: string; posteTitle: string; descr
 };
 
 export default function Section({ bilanId }: { bilanId?: string }) {
+  const { isOpen: isAutomationOpen, onOpen: onAutomationOpen, onClose: onAutomationClose } = useDisclosure();
+
   const [userId, setUserId] = useState<string | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);
   const [showSourcesPopup, setShowSourcesPopup] = useState(false);
@@ -524,6 +534,7 @@ export default function Section({ bilanId }: { bilanId?: string }) {
       <SidebarRail
         activeGroup={isBilan ? null : activeGroup}
         activeTop={activeTop}
+        onAutomationClick={onAutomationOpen}
         onGroupChange={(g) => {
           setActiveTop("dashboard");
           setActiveGroup(g);
@@ -731,6 +742,20 @@ export default function Section({ bilanId }: { bilanId?: string }) {
           </Stack>
         )}
       </Box>
+
+      {/* ── Automation drawer ── */}
+      <Drawer isOpen={isAutomationOpen} onClose={onAutomationClose} placement="right" size="full">
+        <DrawerOverlay />
+        <DrawerContent bg="#F5F6F4" overflowY="auto">
+          <DrawerHeader borderBottomWidth="1px" bg="white" fontSize="md" fontWeight={700} fontFamily="Inter" color="#1B2E25">
+            Automatisation — Analyse des factures
+            <DrawerCloseButton />
+          </DrawerHeader>
+          <DrawerBody p={0}>
+            <AutomationPage />
+          </DrawerBody>
+        </DrawerContent>
+      </Drawer>
     </Box>
   );
 }

@@ -3,12 +3,13 @@
 
 import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import {
-  Box, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Text, Spinner,
+  Box, Flex, Icon, Table, Thead, Tbody, Tr, Th, Td, Input, Button, Text, Spinner,
   IconButton, HStack, useToast, Select, Tag, TagLabel, TagCloseButton, Wrap, WrapItem,
   useColorModeValue, Switch, NumberInput, NumberInputField, NumberInputStepper,
   NumberIncrementStepper, NumberDecrementStepper, VStack, Heading, Divider, Badge
 } from "@chakra-ui/react";
 import { CloseIcon } from "@chakra-ui/icons";
+import { FiImage, FiMail } from "react-icons/fi";
 import { supabase } from "../../lib/supabaseClient";
 import VehicleSelect from "#components/vehicleselect/VehicleSelect";
 import SourceSelectionModal from "../SourceSelectionModal";
@@ -106,6 +107,14 @@ export default function ProductionAndProductsPage() {
   const [fleetImporting, setFleetImporting] = useState(false);
   const fleetFileRef = useRef<HTMLInputElement>(null);
 
+  // Account info state
+  const [companyName, setCompanyName] = useState('');
+  const [userEmail, setUserEmail] = useState('');
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [logoUploading, setLogoUploading] = useState(false);
+  const [logoDropActive, setLogoDropActive] = useState(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
   // Admin panel state
   const [userRole, setUserRole] = useState<string | null>(null);
   const [adminLoading, setAdminLoading] = useState(false);
@@ -201,6 +210,7 @@ export default function ProductionAndProductsPage() {
           setCompanyLoading(false);
           return;
         }
+        setUserEmail(user.email ?? user.user_metadata?.email ?? user.identities?.[0]?.identity_data?.email ?? '');
 
         const { data: profile, error: profErr } = await supabase
           .from("user_profiles").select("company_id, role").eq("id", user.id).single();
@@ -215,12 +225,14 @@ export default function ProductionAndProductsPage() {
 
         const { data: companyData, error: compErr } = await supabase
           .from("companies")
-          .select("production_sites, products, services, vehicle_fleet, company_references")
+          .select("name, production_sites, products, services, vehicle_fleet, company_references")
           .eq("id", profile.company_id)
           .single();
         if (compErr) throw compErr;
 
         initialLoadDoneRef.current = false;
+        setCompanyName(companyData?.name ?? '');
+        setLogoUrl(companyData?.logo_url ?? null);
         setLieux(Array.isArray(companyData?.production_sites) && companyData.production_sites.length > 0 ? companyData.production_sites as Lieu[] : [{ ...emptyLieu }]);
         setProducts(Array.isArray(companyData?.products) && companyData.products.length > 0 ? companyData.products as ProductItem[] : [{ ...emptyProduct }]);
         setServices(Array.isArray(companyData?.services) && companyData.services.length > 0 ? companyData.services as ServiceItem[] : [{ ...emptyService }]);
@@ -500,6 +512,29 @@ export default function ProductionAndProductsPage() {
     }
   };
 
+  // --- Logo upload handler ---
+  const handleLogoUpload = async (file: File) => {
+    if (!companyId) return;
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? 'png';
+    const path = `${companyId}/logo.${ext}`;
+    setLogoUploading(true);
+    try {
+      const { error: upErr } = await supabase.storage
+        .from('company-logos')
+        .upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: urlData } = supabase.storage.from('company-logos').getPublicUrl(path);
+      const url = urlData.publicUrl;
+      await supabase.from('companies').update({ logo_url: url }).eq('id', companyId);
+      setLogoUrl(url);
+      toast({ status: 'success', title: 'Logo mis à jour', duration: 2000 });
+    } catch (err: any) {
+      toast({ status: 'error', title: 'Erreur upload logo', description: err.message, duration: 4000 });
+    } finally {
+      setLogoUploading(false);
+    }
+  };
+
   // --- Save handler ---
   const handleSave = async () => {
     if (!companyId) {
@@ -599,6 +634,92 @@ export default function ProductionAndProductsPage() {
 
   return (
     <VStack align="stretch" spacing={6}>
+
+      {/* Account info */}
+      <Box bg={COL.surface} p={{ base: 4, md: 5 }} rounded="2xl" border="1px solid" borderColor={COL.border} boxShadow={cardShadow}>
+        <HStack spacing={6} align="center">
+
+          {/* Logo drop zone */}
+          <Box
+            position="relative"
+            w="100px"
+            h="100px"
+            flexShrink={0}
+            border="2px dashed"
+            borderColor={logoDropActive ? COL.accent : COL.border}
+            rounded="xl"
+            overflow="hidden"
+            cursor="pointer"
+            onClick={() => logoInputRef.current?.click()}
+            onDrop={(e) => {
+              e.preventDefault(); e.stopPropagation(); setLogoDropActive(false);
+              const file = e.dataTransfer?.files?.[0];
+              if (file && file.type.startsWith('image/')) handleLogoUpload(file);
+            }}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setLogoDropActive(true); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setLogoDropActive(false); }}
+            bg={logoDropActive ? COL.surfaceMuted : '#FAFAFA'}
+            transition="all 0.15s"
+          >
+            {logoUploading ? (
+              <Flex w="full" h="full" align="center" justify="center">
+                <Spinner size="sm" color={COL.accent} />
+              </Flex>
+            ) : logoUrl ? (
+              <>
+                <img src={logoUrl} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                <Flex
+                  position="absolute" inset={0}
+                  bg="blackAlpha.600"
+                  opacity={0}
+                  _hover={{ opacity: 1 } as any}
+                  transition="opacity 0.15s"
+                  align="center"
+                  justify="center"
+                >
+                  <Text color="white" fontSize="10px" fontWeight={700} textAlign="center">Changer</Text>
+                </Flex>
+              </>
+            ) : (
+              <Flex w="full" h="full" direction="column" align="center" justify="center" gap={1.5}>
+                <Icon as={FiImage} boxSize={6} color={COL.textMuted} />
+                <Text fontSize="9px" color={COL.textMuted} textAlign="center" lineHeight="1.3">Glisser logo<br/>ou cliquer</Text>
+              </Flex>
+            )}
+          </Box>
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/*"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) handleLogoUpload(file);
+              e.target.value = '';
+            }}
+          />
+
+          {/* Name + email */}
+          <VStack align="flex-start" spacing={4} flex={1}>
+            <Box>
+              <Text fontSize="10px" color={COL.textMuted} fontWeight={700} mb={1} textTransform="uppercase" letterSpacing="wider">
+                Nom de l'entreprise
+              </Text>
+              <Text fontSize="md" fontWeight={700} color={COL.textBody}>{companyName || '—'}</Text>
+            </Box>
+            <Box>
+              <Text fontSize="10px" color={COL.textMuted} fontWeight={700} mb={1} textTransform="uppercase" letterSpacing="wider">
+                Compte
+              </Text>
+              <HStack spacing={2}>
+                <Icon as={FiMail} boxSize={3.5} color={COL.textMuted} />
+                <Text fontSize="sm" color={COL.textBody}>{userEmail || '—'}</Text>
+              </HStack>
+            </Box>
+          </VStack>
+        </HStack>
+      </Box>
+
       {/* Références fichiers */}
       <Box
         bg={COL.surface}
