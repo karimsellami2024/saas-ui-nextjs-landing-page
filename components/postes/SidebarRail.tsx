@@ -50,6 +50,7 @@ export default function SidebarRail({
       top={0}
       h="100vh"
       w={railW}
+      zIndex={50}
       boxShadow="0px 4px 6px 4px rgba(0,0,0,0.25)"
       bg="#FFFFFF"
       overflow="hidden"

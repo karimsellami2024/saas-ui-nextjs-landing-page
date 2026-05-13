@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  readAutomationPrefill,
+  clearAutomationPrefill,
+  mapElectricityToGroups,
+} from "../../../lib/automationPrefill";
+import { AutomationImportBanner } from "../../AutomationImportBanner";
+import {
   Box,
   Heading,
   Text,
@@ -128,6 +134,9 @@ export function SourceAForm({
   const [userId, setUserId] = useState<string | null>(propUserId ?? null);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [prefillBanner, setPrefillBanner] = useState(false);
+  const [prefillCount, setPrefillCount]   = useState(0);
+  const prefillFiredRef = useRef(false);
 
   useEffect(() => {
     const total = (compteurs || []).reduce((sum, g) =>
@@ -427,6 +436,28 @@ export function SourceAForm({
       setLoading(false);
     })();
   }, [propUserId, initialPosteId, posteNum]);
+
+  // Automation prefill — runs once after DB load settles
+  useEffect(() => {
+    if (loading) return;
+    if (prefillFiredRef.current) return;
+    prefillFiredRef.current = true;
+
+    const store = readAutomationPrefill();
+    if (!store?.electricity?.length) return;
+
+    const mapped = mapElectricityToGroups(store.electricity);
+    if (!mapped.length) return;
+
+    if (isDefaultEmptyForm(compteurs)) {
+      setCompteurs(mapped as any);
+      scheduleAutosave();
+    } else {
+      setPrefillBanner(true);
+      setPrefillCount(store.electricity.length);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const addCompteur = () => {
     setCompteurs((prev) => [
@@ -755,6 +786,30 @@ export function SourceAForm({
 
   return (
     <Box bg={FIGMA.bg} p={{ base: 4, md: 6 }} rounded="2xl" animation={`${fadeInUp} 0.6s ease-out`}>
+      {/* Automation import banner */}
+      {prefillBanner && (
+        <AutomationImportBanner
+          count={prefillCount}
+          onImport={() => {
+            const store = readAutomationPrefill();
+            if (store) {
+              setCompteurs(mapElectricityToGroups(store.electricity) as any);
+              scheduleAutosave();
+            }
+            clearAutomationPrefill();
+            setPrefillBanner(false);
+          }}
+          onDismiss={() => {
+            clearAutomationPrefill();
+            setPrefillBanner(false);
+          }}
+        />
+      )}
+      {prefillCount > 0 && !prefillBanner && (
+        <Badge colorScheme="green" fontSize="11px" mb={4} px={3} py={1} rounded="full" display="block" w="fit-content">
+          {prefillCount} facture{prefillCount > 1 ? 's' : ''} importée{prefillCount > 1 ? 's' : ''} depuis l'automatisation
+        </Badge>
+      )}
       {/* Header */}
       <Box
         bg="white"

@@ -5,7 +5,21 @@
       "Bash(Select-Object Name, FullName)",
       "Bash(Get-ChildItem -Path . -Directory)",
       "Bash(Select-Object Name)",
-      "Bash(xargs ls -lh)"
+      "Bash(xargs ls -lh)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\USER\\\\Desktop\\\\Carbone Quebec Website\\\\website\\\\saas-ui-nextjs-landing-page\" -Recurse -Directory)",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(grep -E \"\\\\.\\(js|ts\\)$\")",
+      "Bash(xargs grep -l \"Cloud.*Run\\\\|webhook\")",
+      "WebFetch(domain:api.anthropic.com)",
+      "Bash(python -c ' *)",
+      "Bash(node)",
+      "Bash(node \"C:\\\\Users\\\\USER\\\\Desktop\\\\fix_encoding.js\")",
+      "Bash(Remove-Item \"C:\\\\Users\\\\USER\\\\Desktop\\\\fix_encoding.js\" -Force)",
+      "Bash(Get-ChildItem -Recurse -Directory)",
+      "Bash(Select-Object -First 20)",
+      "Bash(Get-ChildItem -Path \"components/postes\" -Directory)",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\USER\\\\Desktop\\\\Carbone Quebec Website\\\\website\\\\saas-ui-nextjs-landing-page\" -Recurse -Filter \"*.js\" -o Name)",
+      "Bash(Select-String \"process-bill\")"
     ]
   }
 }

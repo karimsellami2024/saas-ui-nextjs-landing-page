@@ -81,6 +81,9 @@ export interface SourceA1FormProps {
 
   gesResults?: GesResult[];
   setGesResults: (results: GesResult[]) => void;
+
+  onMountedEmpty?: () => void;
+  onMountedNotEmpty?: () => void;
 }
 
 /* ---------------- helpers ---------------- */
@@ -175,6 +178,8 @@ export function SourceA1Form({
   bilanId,
   gesResults = [],
   setGesResults,
+  onMountedEmpty,
+  onMountedNotEmpty,
 }: SourceA1FormProps) {
   const [loading, setLoading] = useState(false);
   const [refs, setRefs] = useState<Refs | null>(null);
@@ -185,9 +190,11 @@ export function SourceA1Form({
 
   const debounceRef2A1 = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSavedJSON2A1 = useRef<string>("");
+  const prefillDoneRef = useRef(false);
+  const mountCallbackFiredRef = useRef(false);
 
   const autoSave2A1 = async () => {
-    if (!userId || !posteSourceId || !refs) return;
+    if (!userId || !posteSourceId || !refs || !prefillDoneRef.current) return;
     const json = JSON.stringify(carburantGroups);
     if (json === lastSavedJSON2A1.current) return;
     const results = computeResults(carburantGroups, refs);
@@ -359,10 +366,20 @@ export function SourceA1Form({
   };
 
   useEffect(() => {
+    prefillDoneRef.current = true;
     const groups = Array.isArray((prefillData as any)?.groups) ? (prefillData as any).groups : [];
     if (groups.length) {
       if (typeof setCarburantGroups === "function") setCarburantGroups(groups);
       else applyGroupsToParent(groups);
+      if (!mountCallbackFiredRef.current) {
+        mountCallbackFiredRef.current = true;
+        onMountedNotEmpty?.();
+      }
+    } else {
+      if (!mountCallbackFiredRef.current) {
+        mountCallbackFiredRef.current = true;
+        onMountedEmpty?.();
+      }
     }
 
     if (prefillResults) {

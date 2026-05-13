@@ -1,9 +1,13 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Box, Flex, Text } from "@chakra-ui/react";
 import JSZip from "jszip";
 import { createClient } from "@supabase/supabase-js";
+import {
+  saveAutomationPrefill,
+  type AutomationBillRecord,
+} from "../../lib/automationPrefill";
 
 import UploadZones, { UploadedFiles } from "../../components/automation/UploadZones";
 import PipelineProgress, { CategoryProgress, BillItem } from "../../components/automation/PipelineProgress";
@@ -61,7 +65,7 @@ async function extractFromZip(
 async function processBillApi(
   sessionId: string, name: string, buffer: ArrayBuffer, mime: string,
   billType: string, province: string, fuelType = "diesel", companyName = ""
-): Promise<number | null> {
+): Promise<AutomationBillRecord | null> {
   const msg = billType === "refrigerant"
     ? `Voici une photo de plaque signalétique de climatiseur. Extrais le type de frigorigène (ex: R-410A) et la charge en kg, puis calcule immédiatement les émissions GES sans poser de questions.`
     : `Voici une facture à traiter automatiquement. Type: ${billType}, Province: ${province}` +
@@ -80,7 +84,28 @@ async function processBillApi(
   });
   if (!res.ok) return null;
   const data = await res.json();
-  return data?.results?.total_ges_tco2e ?? null;
+  const r = data?.results;
+  if (!r) return null;
+  return {
+    total_ges_tco2e:         r.total_ges_tco2e         ?? null,
+    total_co2_gco2e:         r.total_co2_gco2e         ?? null,
+    energie_equivalente_kwh: r.energie_equivalente_kwh ?? null,
+    consumption_value:       r.consumption_value       ?? null,
+    consumption_unit:        r.consumption_unit        ?? null,
+    bill_date:               r.bill_date               ?? null,
+    provider:                r.provider                ?? null,
+    province:                r.province                ?? null,
+    bill_type:               r.bill_type               ?? null,
+    meter_number:            r.meter_number            ?? null,
+    address:                 r.address                 ?? null,
+    equipment_name:          r.equipment_name          ?? null,
+    site_name:               r.site_name               ?? null,
+    fuel_sub_type:           r.fuel_sub_type           ?? null,
+    billing_period:          r.billing_period          ?? null,
+    refrigerant_type:        r.refrigerant_type        ?? null,
+    charge_kg:               r.charge_kg               ?? null,
+    gwp:                     r.gwp                     ?? null,
+  };
 }
 
 // ── Fetch already-saved GHG total from existing form submissions ───────────────
@@ -140,6 +165,11 @@ export default function AutomationPage() {
   const [userId,       setUserId]        = useState<string | null>(null);
   const [companyId,    setCompanyId]     = useState<string | null>(null);
   const [companyName,  setCompanyName]   = useState<string | null>(null);
+
+  // Accumulates full bill records per category for localStorage prefill
+  const accumulatedBillsRef = useRef<Record<string, AutomationBillRecord[]>>({
+    natural_gas: [], electricity: [], refrigerant: [], fuel: [],
+  });
 
   // Fetch current user + company on mount
   useEffect(() => {
@@ -209,13 +239,20 @@ export default function AutomationPage() {
         patchBill(catKey, file.name, { status: "processing" });
 
         try {
-          const tco2e = await processBillApi(
+          const record = await processBillApi(
             sessionId, file.name, file.buffer, file.mime,
             catKey, province, "diesel", companyName
           );
-          const value = tco2e ?? 0;
+          const value = record?.total_ges_tco2e ?? 0;
           patchBill(catKey, file.name, { status: "done", tco2e: value });
           incrementGes(catKey, value);
+          // Accumulate full record for localStorage prefill (skip fleet)
+          if (record && ["natural_gas", "electricity", "refrigerant", "fuel"].includes(catKey)) {
+            accumulatedBillsRef.current[catKey] = [
+              ...(accumulatedBillsRef.current[catKey] ?? []),
+              record,
+            ];
+          }
         } catch {
           patchBill(catKey, file.name, { status: "error", error: "Erreur API" });
           setCategories(prev => prev.map(c =>
@@ -286,7 +323,17 @@ export default function AutomationPage() {
   // ── Auto-advance to complete when all done ─────────────────────────────────
   useEffect(() => {
     if (stage === "processing" && allDone) {
-      const t = setTimeout(() => setStage("complete"), 800);
+      const t = setTimeout(() => {
+        setStage("complete");
+        // Persist full bill records to localStorage so source forms can prefill
+        saveAutomationPrefill({
+          savedAt:     new Date().toISOString(),
+          natural_gas: accumulatedBillsRef.current.natural_gas ?? [],
+          electricity: accumulatedBillsRef.current.electricity ?? [],
+          refrigerant: accumulatedBillsRef.current.refrigerant ?? [],
+          fuel:        accumulatedBillsRef.current.fuel        ?? [],
+        });
+      }, 800);
       return () => clearTimeout(t);
     }
   }, [stage, allDone]);
@@ -295,6 +342,7 @@ export default function AutomationPage() {
     setStage("upload");
     setCategories(INIT_CATEGORIES());
     setUploadedFiles({ electricity: null, fuel: null, natural_gas: null, refrigerant: null, province: "Québec", company_name: "" });
+    accumulatedBillsRef.current = { natural_gas: [], electricity: [], refrigerant: [], fuel: [] };
   };
 
   // ── Stage label ────────────────────────────────────────────────────────────

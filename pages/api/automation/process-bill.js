@@ -173,6 +173,48 @@ function parseResultsFromMessage(message) {
     parseDateStr((message.match(/\d{4}[-/]\d{2}[-/]\d{2}/) || [])[0]) ||
     null;
 
+  // ── Extended metadata (for form prefill) ──────────────────────────────────
+  const meter_number =
+    field('Meter Number') ||
+    field('Num[eé]ro de compteur') ||
+    field('Compteur') ||
+    field('Account Number') ||
+    field('Account') ||
+    null;
+
+  const address =
+    field('Service Address') ||
+    field('Address') ||
+    field('Adresse de service') ||
+    field('Adresse') ||
+    null;
+
+  const equipment_name =
+    field('Equipment') ||
+    field('[ÉE]quipement') ||
+    field('Appliance') ||
+    field('System') ||
+    null;
+
+  const site_name =
+    field('Site') ||
+    field('Location') ||
+    field('Emplacement') ||
+    field('Lieu') ||
+    null;
+
+  const fuel_sub_type =
+    field('Fuel Type') ||
+    field('Type de carburant') ||
+    field('Type de combustible') ||
+    null;
+
+  const billing_period =
+    field('Billing Period') ||
+    field('[Pp][eé]riode de facturation') ||
+    field('[Pp][eé]riode') ||
+    null;
+
   // ── Refrigerant fields ─────────────────────────────────────────────────────
   // For pipe format (**Type:** R-22), use a specific pattern that requires
   // Type to appear at the start of the string or after a | separator,
@@ -211,6 +253,12 @@ function parseResultsFromMessage(message) {
     bill_type,
     provider,
     bill_date,
+    meter_number,
+    address,
+    equipment_name,
+    site_name,
+    fuel_sub_type,
+    billing_period,
     refrigerant_type,
     charge_kg,
     gwp,
@@ -327,7 +375,9 @@ async function buildResult(session_id, result) {
   const LLM_FIELDS = [
     'total_ges_tco2e','total_co2_gco2e','energie_equivalente_kwh',
     'consumption_value','consumption_unit','bill_type','province',
-    'provider','bill_date','refrigerant_type','charge_kg','gwp','status',
+    'provider','bill_date',
+    'meter_number','address','equipment_name','site_name','fuel_sub_type','billing_period',
+    'refrigerant_type','charge_kg','gwp','status',
   ];
   const fromLLM = {};
   LLM_FIELDS.forEach(k => {

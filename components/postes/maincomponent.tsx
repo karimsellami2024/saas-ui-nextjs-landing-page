@@ -519,6 +519,7 @@ export default function Section({ bilanId }: { bilanId?: string }) {
 
   const isBilan = selectedMenu === "bilan" || activeTop === "bilan";
   const isDashboard = selectedMenu === "dashboard";
+  const isCat1 = ["combustion_fixes","combustion_mobiles","refrigerants","procedes","sols"].includes(String(selectedMenu));
 
   return (
     <Box display="flex" bg={pageBg} minH="100vh">
@@ -559,8 +560,8 @@ export default function Section({ bilanId }: { bilanId?: string }) {
       <Box
         flex={1}
         bg={pageBg}
-        px={isDashboard ? 0 : { base: 4, md: 8 }}
-        py={isDashboard ? 0 : { base: 6, md: 10 }}
+        px={isDashboard || isCat1 ? 0 : { base: 4, md: 8 }}
+        py={isDashboard || isCat1 ? 0 : { base: 6, md: 10 }}
         color={COL.textBody}
       >
         {isDashboard ? (
@@ -583,16 +584,25 @@ export default function Section({ bilanId }: { bilanId?: string }) {
               setSelectedMenu(defaultMenuForCategory[iso]);
             }}
           />
+        ) : isCat1 ? (
+          <Categorie1Page
+            activeSubKey={String(selectedMenu)}
+            bilanId={bilanId}
+            onNextSource={nextVisibleSource ? () => goToSource(nextVisibleSource) : undefined}
+            onPrevSource={prevVisibleSource ? () => goToSource(prevVisibleSource) : undefined}
+            onGesChange={(t) => setCatTotals(prev => ({ ...prev, cat1: t }))}
+            onSubKeyChange={(key) => setSelectedMenu(key)}
+          />
         ) : (
           <Stack maxW="1200px" mx="auto" spacing={6}>
-            {!isBilan && typeof selectedMenu === "string" && isPosteKey(selectedMenu) && (
+            {!isBilan && !isCat1 && typeof selectedMenu === "string" && isPosteKey(selectedMenu) && (
               <HStack justify="space-between" align="center">
                 <Heading as="h1" size="lg">{groupTitle}</Heading>
                 <HelpCircle size={18} />
               </HStack>
             )}
 
-            {!isBilan && selectedMenu !== "notifications" && currentPills.length > 0 && (
+            {!isBilan && !isCat1 && selectedMenu !== "notifications" && currentPills.length > 0 && (
               <HStack mt={2} spacing={4} wrap="wrap">
                 {currentPills.map((tab) => {
                   const active = selectedMenu === tab.key;
@@ -625,7 +635,7 @@ export default function Section({ bilanId }: { bilanId?: string }) {
               </HStack>
             )}
 
-            {!isBilan && typeof selectedMenu === "string" && isPosteKey(selectedMenu) && (
+            {!isBilan && !isCat1 && typeof selectedMenu === "string" && isPosteKey(selectedMenu) && (
               <HStack align="stretch" spacing={6}>
                 <Box
                   flex="1"
@@ -667,20 +677,6 @@ export default function Section({ bilanId }: { bilanId?: string }) {
             {selectedMenu === "wizard" && (
               <WizardPage onFinish={() => { setActiveTop("bilan"); setSelectedMenu("bilan"); }} />
             )}
-
-            {/* ✅ Cat 1 */}
-            {["combustion_fixes","combustion_mobiles","refrigerants","procedes","sols"].includes(String(selectedMenu)) &&
-              renderOrPlaceholder(
-                String(selectedMenu),
-                <Categorie1Page
-                  activeSubKey={String(selectedMenu)}
-                  bilanId={bilanId}
-                  onNextSource={nextVisibleSource ? () => goToSource(nextVisibleSource) : undefined}
-                  onPrevSource={prevVisibleSource ? () => goToSource(prevVisibleSource) : undefined}
-                  onGesChange={(t) => setCatTotals(prev => ({ ...prev, cat1: t }))}
-                />
-              )
-            }
 
             {/* ✅ Cat 2 */}
             {["products","autre_energie"].includes(String(selectedMenu)) &&

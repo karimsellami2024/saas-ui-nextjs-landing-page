@@ -79,6 +79,7 @@ export function Source4B2Form({
   tableBg = "#f3f6ef",
   posteSourceId,
   userId,
+  bilanId,
   gesResults = [],
   setGesResults,
 }: Source4B2FormProps) {

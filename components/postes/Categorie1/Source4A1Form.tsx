@@ -67,6 +67,10 @@ export interface Source4A1FormProps {
   bilanId?: string;
   gesResults?: GesResult[];
   setGesResults: (results: GesResult[]) => void;
+  /** Called once after all loads complete when the form has no saved data */
+  onMountedEmpty?: () => void;
+  /** Called once after all loads complete when the form has existing saved data */
+  onMountedNotEmpty?: () => void;
 }
 
 const REFRIGERATION_TYPE_OPTIONS = [
@@ -98,8 +102,11 @@ export function Source4A1Form({
   updateRow,
   posteSourceId,
   userId: propUserId,
+  bilanId,
   gesResults = [],
   setGesResults,
+  onMountedEmpty,
+  onMountedNotEmpty,
 }: Source4A1FormProps) {
   // FIGMA tokens (copy/paste from your SourceAForm)
   const FIGMA = {
@@ -256,6 +263,20 @@ export function Source4A1Form({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, prefillLoading, prefillData, prefillResults, isPristine]);
+
+  // Automation prefill callbacks — fires once after all loads complete
+  const mountCallbackFiredRef = useRef(false);
+  useEffect(() => {
+    if (loading || prefillLoading) return;
+    if (mountCallbackFiredRef.current) return;
+    mountCallbackFiredRef.current = true;
+    if (isPristine) {
+      onMountedEmpty?.();
+    } else {
+      onMountedNotEmpty?.();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, prefillLoading, isPristine]);
 
   // ---- Validation (used for manual submit) ----
   const validateData = (rs: Source4A1Row[]) =>

@@ -103,6 +103,7 @@ export function Source4B1Form({
   updateRow,
   posteSourceId,
   userId,
+  bilanId,
   gesResults = [],
   setGesResults,
 }: Source4B1FormProps) {
